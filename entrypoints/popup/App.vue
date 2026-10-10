@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
+import SettingsLink from '@/components/SettingsLink.vue';
 
 const projectName = ref('—');
 const sessionTitle = ref('—');
@@ -12,6 +13,7 @@ const sentCount = ref(0);
   <main class="popup">
     <header>
       <h1>opencode Browsertalk</h1>
+      <SettingsLink />
     </header>
 
     <ConnectionPanel />

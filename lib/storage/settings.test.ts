@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { DEFAULT_BACKEND_ID, DEFAULT_SERVER_URL, getSettings, setSettings } from './settings';
+import type { AgentBackendId } from '@/lib/agent-backend/interface';
+import type { SessionStrategyId } from '@/lib/session-strategy/interface';
+import {
+  DEFAULT_BACKEND_ID,
+  DEFAULT_SERVER_URL,
+  getSettings,
+  setSessionStrategyOverride,
+  setSettings,
+} from './settings';
 
 describe('settings storage', () => {
   beforeEach(() => {
@@ -67,5 +75,38 @@ describe('settings storage', () => {
     await setSettings({ sessionStrategy: { fake: 'per-day' } });
 
     expect((await getSettings()).sessionStrategy).toEqual({ fake: 'per-day' });
+  });
+
+  it('merges a per-backend override without clobbering the others', async () => {
+    await setSessionStrategyOverride('opencode', 'sticky');
+    await setSessionStrategyOverride('fake', 'per-day');
+
+    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky', fake: 'per-day' });
+  });
+
+  it('clears one backend override and keeps the others', async () => {
+    await setSessionStrategyOverride('opencode', 'sticky');
+    await setSessionStrategyOverride('fake', 'per-day');
+    await setSessionStrategyOverride('fake', null);
+
+    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky' });
+  });
+
+  it('rejects an unknown strategy id and leaves storage untouched', async () => {
+    await setSessionStrategyOverride('opencode', 'sticky');
+
+    await expect(
+      setSessionStrategyOverride('opencode', 'nope' as SessionStrategyId),
+    ).rejects.toThrow('Unknown session strategy "nope"');
+
+    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky' });
+  });
+
+  it('rejects an unknown backend id and leaves storage untouched', async () => {
+    await expect(
+      setSessionStrategyOverride('nope' as AgentBackendId, 'sticky'),
+    ).rejects.toThrow('Unknown agent backend "nope"');
+
+    expect((await getSettings()).sessionStrategy).toEqual({});
   });
 });

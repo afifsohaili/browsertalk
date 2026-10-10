@@ -47,3 +47,22 @@ export function readSessionStrategyOverrides(value: unknown): SessionStrategyOve
   );
   return Object.fromEntries(entries);
 }
+
+export async function setSessionStrategyOverride(
+  backendId: AgentBackendId,
+  strategyId: SessionStrategyId | null,
+): Promise<void> {
+  if (!isAgentBackendId(backendId)) throw new Error(`Unknown agent backend "${backendId}"`);
+  if (strategyId !== null && !isSessionStrategyId(strategyId)) {
+    throw new Error(`Unknown session strategy "${strategyId}"`);
+  }
+
+  const { sessionStrategy } = await getSettings();
+  const next: SessionStrategyOverrides = { ...sessionStrategy };
+  if (strategyId === null) {
+    delete next[backendId];
+  } else {
+    next[backendId] = strategyId;
+  }
+  await setSettings({ sessionStrategy: next });
+}

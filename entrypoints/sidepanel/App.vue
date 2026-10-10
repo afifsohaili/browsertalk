@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
+import SettingsLink from '@/components/SettingsLink.vue';
 
 const projectName = ref('—');
 const sessionTitle = ref('—');
@@ -10,6 +11,7 @@ const sessionTitle = ref('—');
   <main class="panel">
     <header>
       <h1>Browsertalk</h1>
+      <SettingsLink />
     </header>
 
     <ConnectionPanel />

@@ -3,6 +3,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
+import { setSessionStrategyOverride, setSettings } from '@/lib/storage/settings';
 import { registerBuiltinSessionStrategies } from './builtins';
 import { pickSessionStrategyId, resolveActiveSessionStrategy } from './selection';
 
@@ -51,5 +52,20 @@ describe('session strategy selection', () => {
     const active = await resolveActiveSessionStrategy();
 
     expect(active.strategy.id).toBe('per-day');
+  });
+
+  it('applies settings changes on the next resolve without a reload', async () => {
+    await browser.storage.local.set({ 'settings.backendId': 'fake' });
+    expect((await resolveActiveSessionStrategy()).backend.id).toBe('fake');
+
+    await setSettings({ backendId: 'opencode' });
+    expect((await resolveActiveSessionStrategy()).backend.id).toBe('opencode');
+
+    await setSettings({ backendId: 'fake' });
+    await setSessionStrategyOverride('fake', 'sticky');
+    expect((await resolveActiveSessionStrategy()).strategy.id).toBe('sticky');
+
+    await setSessionStrategyOverride('fake', null);
+    expect((await resolveActiveSessionStrategy()).strategy.id).toBe('per-day');
   });
 });
