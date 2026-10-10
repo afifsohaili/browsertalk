@@ -4,7 +4,7 @@
 
 **Blocked by:** 006 — Send.
 
-**Status:** done
+**Status:** done · 75a50ce
 
 - [x] Header shows the bound project and current session title; updates when either changes
 - [x] Outbox list with retry / discard per item; sent list capped, showing time + target
