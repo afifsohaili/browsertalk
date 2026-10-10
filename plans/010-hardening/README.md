@@ -10,7 +10,7 @@ Source: pre-009 review (general + `openai/gpt-6.1-sol`, 2026-10-10; report at `/
 | 010-04 | `ticket-04-capture-quota-consent.md` | shipped · df64ba9 | 010-03 |
 | 010-05 | `ticket-05-conformance.md` | shipped · 5bdea01 | 010-04 |
 | 010-06 | `ticket-06-admission-integrity.md` | shipped · c9430aa | 010-05 |
-| 010-07 | `ticket-07-byte-budgets-serialization.md` | ready | 010-06 |
+| 010-07 | `ticket-07-byte-budgets-serialization.md` | shipped · 18e21b2 | 010-06 |
 | 010-08 | `ticket-08-migration-selection.md` | ready | 010-07 |
 
 Findings map: 1→010-02, 2→010-01, 3→010-02, 4→010-01, 5→010-04, 6→010-03, 7→010-03, 8→010-04, 9→010-04, 10→010-03, 11→010-02, 12→010-04. Coverage gaps: 1→010-05, 2–4→010-03/010-04 (TDD) + 010-05, 5→010-04.
