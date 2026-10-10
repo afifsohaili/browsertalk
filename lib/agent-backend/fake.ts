@@ -30,9 +30,11 @@ export class FakeAgentBackend implements AgentBackend {
   readonly defaultSessionStrategy = 'per-day';
 
   readonly sent: FeedbackSendInput[] = [];
+  readonly feedbackCalls: FeedbackSendInput[] = [];
   readonly sessions: SessionRef[] = [];
   readonly createInputs: SessionCreateInput[] = [];
 
+  private readonly admissions = new Map<string, SendResult>();
   private nextID = 1;
 
   constructor(options: FakeAgentBackendOptions = {}) {
@@ -56,7 +58,14 @@ export class FakeAgentBackend implements AgentBackend {
   }
 
   async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    this.feedbackCalls.push(input);
+
+    const admitted = this.admissions.get(input.requestID);
+    if (admitted !== undefined) return admitted;
+
+    const result: SendResult = { admitted: true, messageID: `msg_fake_${this.nextID++}` };
+    this.admissions.set(input.requestID, result);
     this.sent.push(input);
-    return { messageID: `msg_fake_${this.nextID++}` };
+    return result;
   }
 }

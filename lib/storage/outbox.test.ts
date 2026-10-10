@@ -1,16 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { PickerFeedback } from '@/lib/picker/facts';
-import {
-  appendToOutbox,
-  countOutbox,
-  isOutboxItem,
-  readOutbox,
-  removeFromOutbox,
-  setOutboxDestination,
-  setOutboxItemError,
-  type OutboxItem,
-} from './outbox';
+import { countOutbox, isOutboxItem, readOutbox, type OutboxItem } from './outbox';
+import { appendToOutbox, removeFromOutbox, setOutboxDestination, setOutboxItemError } from './writer';
 
 const DESTINATION = {
   backendId: 'opencode',
@@ -176,6 +168,30 @@ describe('outbox item guard', () => {
     expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, endpoint: '' } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, directory: 7 } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), destination: 'nonsense' })).toBe(false);
+  });
+
+  it('accepts an item with an attempt and an admission, and rejects broken ones', () => {
+    const attempt = { requestID: 'req_1', sentAt: '2026-10-10T09:00:00.000Z' };
+    const admission = {
+      requestID: 'req_1',
+      messageID: 'msg_1',
+      sessionID: 'ses_1',
+      sessionTitle: 'Browsertalk · example · 2026-10-10',
+      admittedAt: '2026-10-10T09:00:01.000Z',
+    };
+
+    expect(isOutboxItem({ ...pageItem('hi'), attempt })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt, admission })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt, admission: { ...admission, messageID: null } })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt: { requestID: '', sentAt: attempt.sentAt } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt: { requestID: 'req_1' } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt: 'nonsense' })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), admission })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), admission: { ...admission, messageID: 7 } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), admission: { ...admission, sessionID: '' } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), admission: { ...admission, sessionTitle: 7 } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), admission: { ...admission, admittedAt: '' } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), admission: 'nonsense' })).toBe(false);
   });
 });
 

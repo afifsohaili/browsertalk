@@ -140,9 +140,11 @@ describe('OpenCodeApi transport security', () => {
     });
     const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
 
-    await expect(
-      api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' }),
-    ).rejects.toThrow(`Cannot reach the opencode server at ${BASE}`);
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
     expect(requested).toEqual([`${BASE}/api/session/ses_x/prompt`]);
   });
 
@@ -349,9 +351,10 @@ describe('OpenCodeApi.sendPrompt', () => {
         sessionID: 'ses_x',
         text: 'hello',
         delivery: 'queue',
+        requestID: 'req_1',
         files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
       }),
-    ).resolves.toEqual({ messageID: 'msg_1' });
+    ).resolves.toEqual({ admitted: true, messageID: 'msg_1' });
 
     const call = fetchFn.mock.calls[0];
     expect(call?.[0]).toBe(`${BASE}/api/session/ses_x/prompt`);
@@ -361,6 +364,7 @@ describe('OpenCodeApi.sendPrompt', () => {
       'Content-Type': 'application/json',
     });
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      id: 'msg_req_1',
       text: 'hello',
       delivery: 'queue',
       files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
@@ -371,9 +375,10 @@ describe('OpenCodeApi.sendPrompt', () => {
     const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'msg_1' } }));
     const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
 
-    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' });
+    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' });
 
     expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body))).toEqual({
+      id: 'msg_req_1',
       text: 'hello',
       delivery: 'queue',
     });
@@ -383,7 +388,7 @@ describe('OpenCodeApi.sendPrompt', () => {
     const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'msg_1' } }));
     const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
 
-    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'steer' });
+    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'steer', requestID: 'req_1' });
 
     expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body)).delivery).toBe('steer');
   });
@@ -397,21 +402,76 @@ describe('OpenCodeApi.sendPrompt', () => {
       ),
     });
 
-    await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })).rejects.toThrow(
+    await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })).rejects.toThrow(
       'The session does not exist on the opencode server',
     );
   });
 
-  it('returns a null message id when the server omits one', async () => {
+  it('rejects a 2xx without a message id as an ambiguous admission', async () => {
     const api = new OpenCodeApi({
       baseUrl: BASE,
       token: 'tok_live',
       fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: {} })),
     });
 
-    await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })).resolves.toEqual({
-      messageID: null,
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
+    expect((error as Error).message).toBe(
+      'The opencode server did not confirm the admission; the request may have been received',
+    );
+  });
+
+  it('rejects unrelated JSON without a data envelope as an ambiguous admission', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ ok: true })),
     });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
+  });
+
+  it('treats a network failure after sending as an ambiguous admission', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
+  });
+
+  it('aborts a stalled request at its deadline and reports an ambiguous admission', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      timeoutMs: 20,
+      fetchFn: vi.fn<FetchLike>(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+      ),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
   });
 });
 
@@ -450,7 +510,7 @@ describe('OpenCodeApi error codes', () => {
     });
 
     const error = await api
-      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
       .catch((cause: unknown) => cause);
 
     expect(backendErrorCode(error)).toBe('missing-session');
@@ -465,7 +525,7 @@ describe('OpenCodeApi error codes', () => {
     });
 
     const error = await api
-      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
       .catch((cause: unknown) => cause);
 
     expect(backendErrorCode(error)).toBe('busy');
@@ -480,7 +540,7 @@ describe('OpenCodeApi error codes', () => {
     });
 
     const error = await api
-      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
       .catch((cause: unknown) => cause);
 
     expect(backendErrorCode(error)).toBe('ambiguous-admission');

@@ -6,7 +6,8 @@ import type { PickerFeedback } from '@/lib/picker/facts';
 import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
 import { bindProject } from '@/lib/storage/projects';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
-import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { appendToOutbox } from '@/lib/storage/writer';
 import {
   broadcastOutboxChanged,
   onOutboxChanged,

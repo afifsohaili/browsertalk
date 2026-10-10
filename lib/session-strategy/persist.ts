@@ -1,5 +1,6 @@
 import type { AgentBackend, SessionRef } from '@/lib/agent-backend/interface';
-import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
+import { getStoredSession } from '@/lib/storage/sessions';
+import { writeStoredSession } from '@/lib/storage/writer';
 import type { SessionStrategyId } from './interface';
 
 export interface PersistSessionInput {
@@ -38,7 +39,7 @@ async function refreshStoredSession(
   const current = await getSession.call(input.backend, session.id);
   if (current === null) return createStoredSession(input, generation + 1);
   if (current.title !== session.title) {
-    await setStoredSession(input.connectionKey, input.strategyId, input.strategyKey, {
+    await writeStoredSession(input.connectionKey, input.strategyId, input.strategyKey, {
       sessionID: current.id,
       title: current.title,
       generation,
@@ -53,7 +54,7 @@ async function createStoredSession(input: PersistSessionInput, generation: numbe
     title: input.title,
     intent: { strategyId: input.strategyId, strategyKey: input.strategyKey, generation },
   });
-  await setStoredSession(input.connectionKey, input.strategyId, input.strategyKey, {
+  await writeStoredSession(input.connectionKey, input.strategyId, input.strategyKey, {
     sessionID: session.id,
     title: session.title,
     generation,

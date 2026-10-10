@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
-import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
+import { getStoredSession } from '@/lib/storage/sessions';
+import { writeStoredSession } from '@/lib/storage/writer';
 import { stickyTitle, StickySessionStrategy } from './sticky';
 
 const CONNECTION = 'fake@http://127.0.0.1:15001';
@@ -127,7 +128,7 @@ describe('StickySessionStrategy', () => {
       directory: DIRECTORY,
       now: at(10),
     });
-    await setStoredSession(CONNECTION, 'sticky', DIRECTORY, {
+    await writeStoredSession(CONNECTION, 'sticky', DIRECTORY, {
       sessionID: created.id,
       title: 'My review thread',
       generation: 0,

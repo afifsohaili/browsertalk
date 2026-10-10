@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope } from 'vue';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { appendToOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import type { OutboxItem } from '@/lib/storage/outbox';
+import { appendToOutbox } from '@/lib/storage/writer';
 import { broadcastOutboxChanged, registerComposerHandler } from './messages';
 import { useOutboxCount } from './use-outbox';
 

@@ -34,7 +34,7 @@ class StubBackend implements AgentBackend {
   }
 
   async sendFeedback(): Promise<SendResult> {
-    return { messageID: null };
+    return { admitted: true, messageID: null };
   }
 }
 

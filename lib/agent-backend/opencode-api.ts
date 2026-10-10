@@ -9,7 +9,10 @@ const UNEXPECTED_RESPONSE = 'The opencode server sent an unexpected response';
 const SESSION_NOT_FOUND = 'The session does not exist on the opencode server';
 const REDIRECT_REJECTED = 'The opencode server redirected the request; refusing to follow it';
 const BUSY = 'The session is busy';
-const AMBIGUOUS_ADMISSION = 'The server accepted the request, but its response could not be read';
+const AMBIGUOUS_ADMISSION = 'The opencode server did not confirm the admission; the request may have been received';
+const TIMED_OUT = 'The opencode server did not answer in time';
+
+export const REQUEST_TIMEOUT_MS = 15_000;
 
 export class OpenCodeError extends Error {
   readonly status: number | null;
@@ -43,6 +46,7 @@ export interface OpenCodeApiConfig {
   baseUrl: string;
   token: string;
   fetchFn?: FetchLike;
+  timeoutMs?: number;
 }
 
 export interface PairingRedeemInput {
@@ -93,14 +97,20 @@ export class OpenCodeApi {
   }
 
   async sendPrompt(input: SendPromptInput): Promise<SendResult> {
-    const payload: Record<string, unknown> = { text: input.text, delivery: input.delivery };
+    const payload: Record<string, unknown> = {
+      id: `msg_${input.requestID}`,
+      text: input.text,
+      delivery: input.delivery,
+    };
     if (input.files !== undefined && input.files.length > 0) payload.files = input.files;
 
     const body = await this.post(`/api/session/${encodeURIComponent(input.sessionID)}/prompt`, payload, {
       notFoundMessage: SESSION_NOT_FOUND,
       ambiguousAdmission: true,
     });
-    return { messageID: readString(readRecord(body, 'data'), 'id') };
+    const messageID = readString(readRecord(body, 'data'), 'id');
+    if (messageID === null) throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION);
+    return { admitted: true, messageID };
   }
 
   private get(path: string): Promise<unknown> {
@@ -110,6 +120,7 @@ export class OpenCodeApi {
       path,
       headers: { Authorization: openCodeAuthHeader(this.config.token) },
       fetchFn: this.config.fetchFn,
+      timeoutMs: this.config.timeoutMs,
       unauthorizedMessage: 'Pairing token rejected',
     });
   }
@@ -129,6 +140,7 @@ export class OpenCodeApi {
       },
       body: payload,
       fetchFn: this.config.fetchFn,
+      timeoutMs: this.config.timeoutMs,
       unauthorizedMessage: 'Pairing token rejected',
       notFoundMessage: options.notFoundMessage,
       ambiguousAdmission: options.ambiguousAdmission,
@@ -140,6 +152,7 @@ export interface SendPromptInput {
   sessionID: string;
   text: string;
   delivery: 'queue' | 'steer';
+  requestID: string;
   files?: FeedbackAttachment[];
 }
 
@@ -167,6 +180,7 @@ interface JsonRequest {
   headers: Record<string, string>;
   body?: Record<string, unknown>;
   fetchFn?: FetchLike;
+  timeoutMs?: number;
   unauthorizedMessage: string;
   notFoundMessage?: string;
   ambiguousAdmission?: boolean;
@@ -179,14 +193,32 @@ async function requestJson(input: JsonRequest): Promise<unknown> {
   const fetchFn = input.fetchFn ?? fetchImpl ?? defaultFetch;
   const url = `${parsed.endpoint}${input.path}`;
 
-  const init: RequestInit = { method: input.method, headers: input.headers, redirect: 'error' };
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, input.timeoutMs ?? REQUEST_TIMEOUT_MS);
+
+  const init: RequestInit = {
+    method: input.method,
+    headers: input.headers,
+    redirect: 'error',
+    signal: controller.signal,
+  };
   if (input.body !== undefined) init.body = JSON.stringify(input.body);
 
   let response: Response;
   try {
     response = await fetchFn(url, init);
   } catch (cause) {
+    if (input.ambiguousAdmission === true) {
+      throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+    }
+    if (timedOut) throw new OpenCodeError(TIMED_OUT, { cause });
     throw new OpenCodeError(`Cannot reach the opencode server at ${parsed.endpoint}`, { cause });
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.redirected) {

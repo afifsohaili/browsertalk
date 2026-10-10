@@ -1,12 +1,17 @@
 import { browser } from 'wxt/browser';
+import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
 import { sendQueuedItem } from '@/lib/send/send';
+import { sessionLockKey, withSessionLock } from '@/lib/session-strategy/lock';
 import { resolveActiveSessionStrategy } from '@/lib/session-strategy/selection';
 import { getBoundProject } from '@/lib/storage/projects';
+import { removeFromOutbox } from '@/lib/storage/writer';
 import {
+  isPanelDiscardResult,
   isPanelRequest,
   isPanelRetryResult,
   isSessionRolloverResult,
   isTargetReadResult,
+  type PanelDiscardResult,
   type PanelRequest,
   type PanelRetryResult,
   type SessionRolloverResult,
@@ -16,7 +21,7 @@ import {
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_PROJECT_BINDING = 'This site has no project binding';
 
-export type PanelResponse = TargetReadResult | PanelRetryResult | SessionRolloverResult;
+export type PanelResponse = TargetReadResult | PanelRetryResult | PanelDiscardResult | SessionRolloverResult;
 
 export async function respondToPanelRequest(request: PanelRequest): Promise<PanelResponse> {
   switch (request.type) {
@@ -24,6 +29,8 @@ export async function respondToPanelRequest(request: PanelRequest): Promise<Pane
       return readTarget(request.origin);
     case 'outbox/retry':
       return retryOutboxItem(request.itemId);
+    case 'outbox/discard':
+      return discardOutboxItem(request.itemId);
     case 'session/rollover':
       return rolloverSession(request.origin);
   }
@@ -48,6 +55,11 @@ export async function requestTargetRead(origin: string): Promise<TargetReadResul
 export async function requestOutboxRetry(itemId: string): Promise<PanelRetryResult> {
   const response = await sendSafely({ type: 'outbox/retry', itemId });
   return isPanelRetryResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestOutboxDiscard(itemId: string): Promise<PanelDiscardResult> {
+  const response = await sendSafely({ type: 'outbox/discard', itemId });
+  return isPanelDiscardResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
 export async function requestSessionRollover(origin: string): Promise<SessionRolloverResult> {
@@ -77,13 +89,25 @@ async function retryOutboxItem(itemId: string): Promise<PanelRetryResult> {
   }
 }
 
+async function discardOutboxItem(itemId: string): Promise<PanelDiscardResult> {
+  try {
+    await removeFromOutbox(itemId);
+    broadcastOutboxChanged();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: describeError(error) };
+  }
+}
+
 async function rolloverSession(origin: string): Promise<SessionRolloverResult> {
   try {
     const { backend, strategy, connectionKey } = await resolveActiveSessionStrategy();
     const project = await getBoundProject(connectionKey, origin);
     if (project === null) return { ok: false, error: NO_PROJECT_BINDING };
 
-    const session = await strategy.rolloverSession({ backend, connectionKey, directory: project });
+    const session = await withSessionLock(sessionLockKey(connectionKey, project), () =>
+      strategy.rolloverSession({ backend, connectionKey, directory: project }),
+    );
     return { ok: true, session };
   } catch (error) {
     return { ok: false, error: describeError(error) };

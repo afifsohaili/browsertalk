@@ -3,7 +3,8 @@ import { captureQueuedDestination } from '@/lib/connection/destinations';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { requestSend } from '@/lib/send/trigger';
 import { clearPendingFeedback, getPendingFeedback } from '@/lib/storage/pending';
-import { appendToOutbox, countOutbox } from '@/lib/storage/outbox';
+import { countOutbox } from '@/lib/storage/outbox';
+import { appendToOutbox } from '@/lib/storage/writer';
 import { buildElementOutboxItem, buildPageOutboxItem } from './assemble';
 import { broadcastOutboxChanged } from './broadcast';
 import {

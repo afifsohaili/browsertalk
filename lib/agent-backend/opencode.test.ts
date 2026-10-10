@@ -255,13 +255,15 @@ describe('OpenCodeBackend.sendFeedback', () => {
         sessionID: 'ses_abc',
         text: '## Browser feedback — example',
         delivery: 'queue',
+        requestID: 'req_1',
         files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
       }),
-    ).resolves.toEqual({ messageID: 'msg_1' });
+    ).resolves.toEqual({ admitted: true, messageID: 'msg_1' });
 
     const call = fetchFn.mock.calls[0];
     expect(call?.[0]).toBe(`${BASE}/api/session/ses_abc/prompt`);
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      id: 'msg_req_1',
       text: '## Browser feedback — example',
       delivery: 'queue',
       files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
@@ -273,7 +275,7 @@ describe('OpenCodeBackend.sendFeedback', () => {
     setOpenCodeFetch(fetchFn);
 
     await expect(
-      new OpenCodeBackend().sendFeedback({ sessionID: 'ses_abc', text: 'x', delivery: 'queue' }),
+      new OpenCodeBackend().sendFeedback({ sessionID: 'ses_abc', text: 'x', delivery: 'queue', requestID: 'req_1' }),
     ).rejects.toThrow('Not paired');
     expect(fetchFn).not.toHaveBeenCalled();
   });
@@ -284,7 +286,7 @@ describe('OpenCodeBackend.sendFeedback', () => {
     setOpenCodeFetch(fetchFn);
 
     await expect(
-      new OpenCodeBackend().sendFeedback({ sessionID: 'ses_abc', text: 'x', delivery: 'queue' }),
+      new OpenCodeBackend().sendFeedback({ sessionID: 'ses_abc', text: 'x', delivery: 'queue', requestID: 'req_1' }),
     ).rejects.toThrow('The server must be on this machine');
     expect(fetchFn).not.toHaveBeenCalled();
   });

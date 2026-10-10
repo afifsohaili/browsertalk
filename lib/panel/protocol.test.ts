@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isPanelDiscardResult,
   isPanelRequest,
   isPanelRetryResult,
   isSessionRolloverResult,
@@ -7,9 +8,10 @@ import {
 } from './protocol';
 
 describe('panel request guard', () => {
-  it('accepts the three request shapes', () => {
+  it('accepts the four request shapes', () => {
     expect(isPanelRequest({ type: 'target/read', origin: 'https://example.com' })).toBe(true);
     expect(isPanelRequest({ type: 'outbox/retry', itemId: 'ob_1' })).toBe(true);
+    expect(isPanelRequest({ type: 'outbox/discard', itemId: 'ob_1' })).toBe(true);
     expect(isPanelRequest({ type: 'session/rollover', origin: 'https://example.com' })).toBe(true);
   });
 
@@ -18,6 +20,8 @@ describe('panel request guard', () => {
     expect(isPanelRequest({ type: 'target/read', origin: 7 })).toBe(false);
     expect(isPanelRequest({ type: 'outbox/retry' })).toBe(false);
     expect(isPanelRequest({ type: 'outbox/retry', itemId: 7 })).toBe(false);
+    expect(isPanelRequest({ type: 'outbox/discard' })).toBe(false);
+    expect(isPanelRequest({ type: 'outbox/discard', itemId: '' })).toBe(false);
     expect(isPanelRequest({ type: 'session/rollover' })).toBe(false);
   });
 
@@ -55,6 +59,13 @@ describe('panel result guards', () => {
     expect(isPanelRetryResult({ ok: false, error: 'Not paired' })).toBe(true);
     expect(isPanelRetryResult({ ok: true, error: 'Not paired' })).toBe(false);
     expect(isPanelRetryResult({ ok: false })).toBe(false);
+  });
+
+  it('accepts both discard result shapes', () => {
+    expect(isPanelDiscardResult({ ok: true })).toBe(true);
+    expect(isPanelDiscardResult({ ok: false, error: 'Quota exceeded' })).toBe(true);
+    expect(isPanelDiscardResult({ ok: true, error: 'Quota exceeded' })).toBe(false);
+    expect(isPanelDiscardResult({ ok: false })).toBe(false);
   });
 
   it('accepts both rollover result shapes', () => {

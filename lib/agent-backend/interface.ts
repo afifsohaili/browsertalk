@@ -96,10 +96,15 @@ export interface FeedbackSendInput {
   sessionID: string;
   text: string;
   delivery: DeliveryMode;
+  /** Stable client request id: retries reuse it so an admitting backend can deduplicate. */
+  requestID: string;
   files?: FeedbackAttachment[];
 }
 
 export interface SendResult {
+  /** True when the backend confirmed durable admission; sendFeedback only resolves on admission. */
+  admitted: true;
+  /** Backend-assigned message id, when the backend exposes one. */
   messageID: string | null;
 }
 
@@ -131,6 +136,7 @@ export interface AgentBackend {
   ping(): Promise<BackendStatus>;
   listProjects(): Promise<Project[]>;
   createSession(input: SessionCreateInput): Promise<SessionRef>;
+  /** Resolves when the backend durably admitted the feedback; never waits for the agent turn to finish. */
   sendFeedback(input: FeedbackSendInput): Promise<SendResult>;
   /** Optional: read one session's current server-side state; null when it no longer exists. */
   getSession?(sessionID: string): Promise<SessionRef | null>;

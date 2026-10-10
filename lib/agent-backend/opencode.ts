@@ -16,6 +16,7 @@ export interface OpenCodeBackendConfig {
   baseUrl?: string;
   token?: string | null;
   fetchFn?: FetchLike;
+  timeoutMs?: number;
 }
 
 export const NOT_PAIRED = 'Not paired';
@@ -79,7 +80,12 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   private api(baseUrl: string, token: string): OpenCodeApi {
-    return new OpenCodeApi({ baseUrl, token, fetchFn: this.config.fetchFn });
+    return new OpenCodeApi({
+      baseUrl,
+      token,
+      fetchFn: this.config.fetchFn,
+      timeoutMs: this.config.timeoutMs,
+    });
   }
 
   private async resolve(): Promise<{ baseUrl: string; token: string }> {

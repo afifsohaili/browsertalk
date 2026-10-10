@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { getStoredSession, setStoredSession } from './sessions';
+import { getStoredSession } from './sessions';
+import { writeStoredSession as setStoredSession } from './writer';
 
 const KEY_A = 'opencode@http://127.0.0.1:15001';
 const KEY_B = 'opencode@http://127.0.0.1:4096';

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { appendToSent, countSent, isSentItem, readSent, SENT_LIMIT, type SentItem } from './sent';
+import { countSent, isSentItem, readSent, SENT_LIMIT, type SentItem } from './sent';
+import { appendToSent } from './writer';
 
 function sentItem(n: number): SentItem {
   return {

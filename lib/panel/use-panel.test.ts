@@ -11,9 +11,11 @@ import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject, getBoundProject } from '@/lib/storage/projects';
-import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
+import { getStoredSession } from '@/lib/storage/sessions';
+import { writeStoredSession } from '@/lib/storage/writer';
 import { setSettings } from '@/lib/storage/settings';
-import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { appendToOutbox } from '@/lib/storage/writer';
 import { registerPanelHandler } from './messages';
 import { formatTimestamp, targetState, usePanel, type Panel } from './use-panel';
 
@@ -122,7 +124,7 @@ describe('panel logic', () => {
   it('loads the bound target and the lists on start', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread', generation: 0 });
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread', generation: 0 });
     await appendToOutbox(item());
 
     const { panel, stop } = await loadedPanel();
@@ -178,7 +180,7 @@ describe('panel logic', () => {
     const { panel, stop } = await loadedPanel();
     expect(targetState(panel.target.value)).toBe('no-session');
 
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread', generation: 0 });
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread', generation: 0 });
 
     await vi.waitFor(() => {
       expect(panel.target.value?.session).toEqual({ id: 'ses_later', title: 'Later thread' });
@@ -273,7 +275,7 @@ describe('panel logic', () => {
   it('rolls the header to the fresh session and continues on it', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
 
     const { panel, stop } = await loadedPanel();
     expect(panel.target.value?.session?.id).toBe('ses_old');

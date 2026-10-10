@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import type { AgentBackend, SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
-import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
+import { getStoredSession } from '@/lib/storage/sessions';
+import { writeStoredSession } from '@/lib/storage/writer';
 import { peekStoredSession, resolveStoredSession, rolloverStoredSession, type PersistSessionInput } from './persist';
 
 const CONNECTION = 'fake@http://127.0.0.1:15001';
@@ -187,7 +188,7 @@ describe('session persistence', () => {
     const input = persistInput(backend);
 
     const created = await resolveStoredSession(input);
-    await setStoredSession(CONNECTION, 'per-day', KEY, {
+    await writeStoredSession(CONNECTION, 'per-day', KEY, {
       sessionID: created.id,
       title: 'My review thread',
       generation: 0,

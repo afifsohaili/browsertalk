@@ -1,12 +1,12 @@
 import { getCurrentScope, onScopeDispose, ref, type Ref } from 'vue';
 import { browser } from 'wxt/browser';
 import type { Project, SessionRef } from '@/lib/agent-backend/interface';
-import { broadcastOutboxChanged, onOutboxChanged } from '@/lib/composer/messages';
+import { onOutboxChanged } from '@/lib/composer/messages';
 import { requestBind, requestProjects } from '@/lib/connection/messages';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
-import { readOutbox, removeFromOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent, type SentItem } from '@/lib/storage/sent';
-import { requestOutboxRetry, requestSessionRollover, requestTargetRead } from './messages';
+import { requestOutboxDiscard, requestOutboxRetry, requestSessionRollover, requestTargetRead } from './messages';
 
 const NO_PAGE_TO_TARGET = 'No page to target';
 
@@ -129,9 +129,9 @@ export function usePanel(): Panel {
 
   async function discard(itemId: string): Promise<void> {
     await run(async () => {
-      await removeFromOutbox(itemId);
-      broadcastOutboxChanged();
+      const result = await requestOutboxDiscard(itemId);
       await refreshLists();
+      if (!result.ok) error.value = result.error;
     });
   }
 

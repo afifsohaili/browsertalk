@@ -31,11 +31,6 @@ export async function readSent(): Promise<SentItem[]> {
   return Array.isArray(value) ? value.filter(isSentItem) : [];
 }
 
-export async function appendToSent(item: SentItem): Promise<void> {
-  const items = await readSent();
-  await browser.storage.local.set({ [STORAGE_KEYS.sent]: [item, ...items].slice(0, SENT_LIMIT) });
-}
-
 export async function countSent(): Promise<number> {
   return (await readSent()).length;
 }

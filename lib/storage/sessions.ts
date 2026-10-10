@@ -16,23 +16,6 @@ export async function getStoredSession(
   return readSession(stored[STORAGE_KEYS.sessions], connectionKey, strategyId, key);
 }
 
-export async function setStoredSession(
-  connectionKey: string,
-  strategyId: string,
-  key: string,
-  session: StoredSession,
-): Promise<void> {
-  const stored = await browser.storage.local.get(STORAGE_KEYS.sessions);
-  const byConnection = asRecord(stored[STORAGE_KEYS.sessions]);
-  const byStrategy = asRecord(byConnection[connectionKey]);
-  await browser.storage.local.set({
-    [STORAGE_KEYS.sessions]: {
-      ...byConnection,
-      [connectionKey]: { ...byStrategy, [strategyId]: { ...asRecord(byStrategy[strategyId]), [key]: session } },
-    },
-  });
-}
-
 export function readSession(
   store: unknown,
   connectionKey: string,

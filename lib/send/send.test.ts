@@ -2,11 +2,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
+import { BackendError } from '@/lib/agent-backend/interface';
 import type {
   AgentBackend,
   AgentBackendId,
   BackendCapabilities,
   BackendStatus,
+  FeedbackSendInput,
   Project,
   SendResult,
   SessionCreateInput,
@@ -20,8 +22,9 @@ import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { setSettings } from '@/lib/storage/settings';
-import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
-import { appendToSent, readSent, SENT_LIMIT, type SentItem } from '@/lib/storage/sent';
+import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { appendToOutbox, appendToSent } from '@/lib/storage/writer';
+import { readSent, SENT_LIMIT, type SentItem } from '@/lib/storage/sent';
 import { onOutboxChanged } from '@/lib/composer/messages';
 import { sendQueuedItem } from './send';
 
@@ -90,17 +93,26 @@ class RejectingBackend implements AgentBackend {
 const rejectingBackend = new RejectingBackend();
 
 let fakeBackend: FakeAgentBackend = new FakeAgentBackend();
+let openCodeTimeoutMs: number | undefined;
 
 beforeAll(() => {
   registerAgentBackend('fake', () => fakeBackend);
   registerAgentBackend('pi', () => rejectingBackend);
-  registerAgentBackend('opencode', (config) => new OpenCodeBackend(config));
+  registerAgentBackend(
+    'opencode',
+    (config) =>
+      new OpenCodeBackend({
+        ...config,
+        ...(openCodeTimeoutMs === undefined ? {} : { timeoutMs: openCodeTimeoutMs }),
+      }),
+  );
   registerBuiltinSessionStrategies();
 });
 
 beforeEach(() => {
   fakeBrowser.reset();
   fakeBackend = new FakeAgentBackend();
+  openCodeTimeoutMs = undefined;
   setSettings({ backendId: 'fake' });
   bindProject(FAKE_KEY, BOUND_ORIGIN, DIRECTORY);
   setOpenCodeFetch(noNetworkFetch);
@@ -278,13 +290,14 @@ describe('send pipeline', () => {
       error: 'The server rejected the prompt',
     });
 
-    expect(await readOutbox()).toEqual([
-      {
-        ...item,
-        destination: { backendId: 'pi', endpoint: ENDPOINT_A, directory: DIRECTORY },
-        error: 'The server rejected the prompt',
-      },
-    ]);
+    const stored = (await readOutbox())[0];
+    expect(stored).toMatchObject({
+      ...item,
+      destination: { backendId: 'pi', endpoint: ENDPOINT_A, directory: DIRECTORY },
+      error: 'The server rejected the prompt',
+      attempt: { sentAt: SENT_AT },
+    });
+    expect(stored?.attempt?.requestID).toEqual(expect.any(String));
     expect(await readSent()).toEqual([]);
   });
 
@@ -493,5 +506,265 @@ describe('send pipeline', () => {
 
     expect(await readSent()).toEqual([]);
     expect(fakeBackend.sent).toEqual([]);
+  });
+});
+
+const AMBIGUOUS_ERROR =
+  'The server did not confirm the feedback was admitted; retrying is safe and will not send it twice';
+
+class LostResponseBackend extends FakeAgentBackend {
+  private lost = false;
+
+  override async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    const result = await super.sendFeedback(input);
+    if (!this.lost) {
+      this.lost = true;
+      throw new BackendError('ambiguous-admission', 'response lost');
+    }
+    return result;
+  }
+}
+
+interface JsonBody {
+  id?: string;
+  text?: string;
+}
+
+describe('admission reliability', () => {
+  it('reuses the same request id and text when a definite failure retries', async () => {
+    await setSettings({ backendId: 'opencode' });
+    await setToken(OPENCODE_KEY_A, 'tok_a');
+    const item = elementItem({
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
+    });
+    await appendToOutbox(item);
+
+    const bodies: JsonBody[] = [];
+    setOpenCodeFetch(async (url, init) => {
+      if (String(url).endsWith('/prompt')) {
+        bodies.push(JSON.parse(String(init?.body)) as JsonBody);
+        return bodies.length === 1 ? jsonResponse({ _tag: 'InternalError' }, 500) : jsonResponse({ data: { id: 'msg_1' } });
+      }
+      return jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } });
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: false,
+      error: 'The opencode server returned HTTP 500',
+    });
+    const failed = (await readOutbox())[0];
+    expect(failed?.error).toBe('The opencode server returned HTTP 500');
+    expect(failed?.attempt?.requestID).toEqual(expect.any(String));
+    expect(failed?.attempt?.sentAt).toBe(SENT_AT);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]?.id).toBe(`msg_${failed?.attempt?.requestID}`);
+    expect(bodies[1]?.id).toBe(bodies[0]?.id);
+    expect(bodies[1]?.text).toBe(bodies[0]?.text);
+    expect(await readOutbox()).toEqual([]);
+    expect((await readSent())[0]?.sentAt).toBe(SENT_AT);
+  });
+
+  it('does not duplicate feedback admitted before the response was lost', async () => {
+    fakeBackend = new LostResponseBackend();
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: AMBIGUOUS_ERROR });
+    const failed = (await readOutbox())[0];
+    expect(failed?.admission).toBeUndefined();
+    expect(failed?.attempt?.requestID).toEqual(expect.any(String));
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls.map((call) => call.requestID)).toEqual([
+      failed?.attempt?.requestID,
+      failed?.attempt?.requestID,
+    ]);
+    expect(fakeBackend.sent).toHaveLength(1);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
+  });
+
+  it('keeps a 2xx admission without a receipt retryable', async () => {
+    await setSettings({ backendId: 'opencode' });
+    await setToken(OPENCODE_KEY_A, 'tok_a');
+    const item = elementItem({
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
+    });
+    await appendToOutbox(item);
+
+    const bodies: JsonBody[] = [];
+    setOpenCodeFetch(async (url, init) => {
+      if (String(url).endsWith('/prompt')) {
+        bodies.push(JSON.parse(String(init?.body)) as JsonBody);
+        return bodies.length === 1 ? jsonResponse({ data: {} }) : jsonResponse({ data: { id: 'msg_1' } });
+      }
+      return jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } });
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: AMBIGUOUS_ERROR });
+    const failed = (await readOutbox())[0];
+    expect(failed?.error).toBe(AMBIGUOUS_ERROR);
+    expect(failed?.attempt?.requestID).toEqual(expect.any(String));
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+    expect(bodies[1]?.id).toBe(`msg_${failed?.attempt?.requestID}`);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
+  });
+
+  it('marks a deadline expiry ambiguous and keeps the request id for the retry', async () => {
+    await setSettings({ backendId: 'opencode' });
+    await setToken(OPENCODE_KEY_A, 'tok_a');
+    openCodeTimeoutMs = 25;
+    const item = elementItem({
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
+    });
+    await appendToOutbox(item);
+
+    setOpenCodeFetch((url, init) => {
+      if (String(url).endsWith('/prompt')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+      return Promise.resolve(jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } }));
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: AMBIGUOUS_ERROR });
+    const failed = (await readOutbox())[0];
+    expect(failed?.error).toBe(AMBIGUOUS_ERROR);
+    expect(failed?.attempt?.requestID).toEqual(expect.any(String));
+
+    const captured: { body: JsonBody | null } = { body: null };
+    setOpenCodeFetch(async (url, init) => {
+      if (String(url).endsWith('/prompt')) {
+        captured.body = JSON.parse(String(init?.body)) as JsonBody;
+        return jsonResponse({ data: { id: 'msg_1' } });
+      }
+      return jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } });
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+    expect(captured.body?.id).toBe(`msg_${failed?.attempt?.requestID}`);
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('resumes an admitted receipt after a worker restart without calling the backend', async () => {
+    const item = elementItem({
+      attempt: { requestID: 'req_seed', sentAt: '2026-10-10T08:00:00.000Z' },
+      admission: {
+        requestID: 'req_seed',
+        messageID: 'msg_seed',
+        sessionID: 'ses_seed',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        admittedAt: '2026-10-10T08:00:01.000Z',
+      },
+    });
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls).toEqual([]);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toEqual([
+      {
+        id: item.id,
+        comment: 'Checkout button is broken',
+        sentAt: '2026-10-10T08:00:00.000Z',
+        session: { id: 'ses_seed', title: 'Browsertalk · example · 2026-10-10' },
+        page: { title: 'Cart', url: 'https://example.com/cart?step=2' },
+      },
+    ]);
+  });
+
+  it('commits the outbox removal and the sent append in one storage write', async () => {
+    const item = elementItem();
+    await appendToOutbox(item);
+    const setSpy = vi.spyOn(browser.storage.local, 'set');
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const commits = setSpy.mock.calls.filter(([keys]) => {
+      const record = keys as Record<string, unknown>;
+      return 'outbox' in record && 'sent' in record;
+    });
+    expect(commits).toHaveLength(1);
+    setSpy.mockRestore();
+  });
+
+  it('keeps the admission receipt when the cleanup write rejects, and resumes without resending', async () => {
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    const originalSet = browser.storage.local.set.bind(browser.storage.local);
+    const setSpy = vi.spyOn(browser.storage.local, 'set').mockImplementation(async (keys) => {
+      const record = keys as Record<string, unknown>;
+      if ('outbox' in record && 'sent' in record) throw new Error('quota exceeded');
+      return originalSet(keys);
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: 'quota exceeded' });
+
+    const failed = (await readOutbox())[0];
+    expect(failed?.admission).toMatchObject({ requestID: expect.any(String), messageID: expect.any(String) });
+    expect(failed?.error).toBe('quota exceeded');
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+
+    setSpy.mockRestore();
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
+  });
+});
+
+describe('connection queues', () => {
+  it('does not let a stalled connection block another connection', async () => {
+    await setSettings({ backendId: 'opencode' });
+    await setToken(OPENCODE_KEY_A, 'tok_a');
+    openCodeTimeoutMs = 1000;
+
+    const stalled = elementItem({
+      id: 'ob_stalled',
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
+    });
+    const other = elementItem({
+      id: 'ob_other',
+      destination: { backendId: 'fake', endpoint: ENDPOINT_A, directory: DIRECTORY },
+    });
+    await appendToOutbox(stalled);
+    await appendToOutbox(other);
+
+    setOpenCodeFetch((url, init) => {
+      if (String(url).endsWith('/prompt')) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+      }
+      return Promise.resolve(jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } }));
+    });
+
+    let stalledSettled = false;
+    const stalledOutcome = sendQueuedItem(stalled.id, { now: NOW }).then((outcome) => {
+      stalledSettled = true;
+      return outcome;
+    });
+
+    const otherOutcome = await sendQueuedItem(other.id, { now: NOW });
+
+    expect(otherOutcome).toMatchObject({ ok: true });
+    expect(stalledSettled).toBe(false);
+
+    await expect(stalledOutcome).resolves.toEqual({ ok: false, error: AMBIGUOUS_ERROR });
+    const sent = await readSent();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.id).toBe(other.id);
   });
 });
