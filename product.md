@@ -1,6 +1,6 @@
 # opencode Browsertalk — product definition
 
-Status: phase 001 (scaffold). Decisions locked 2026-10-10.
+Status: 001 shipped. Decisions locked 2026-10-10. Phase tracking lives in `plans/` — one folder and ticket per phase.
 
 ## What it is
 
@@ -15,12 +15,12 @@ Today the loop is manual. You read the element out of DevTools, copy the page UR
 | Identify element | eyeball + DevTools | hover, click |
 | Capture facts | copy by hand | automatic |
 | Choose project | remember it yourself | bound per origin |
-| Choose session | create one yourself | reused per day |
+| Choose session | create one yourself | reused per session strategy |
 | Paste into opencode | manual | one click |
 
 ## User
 
-Afif — solo developer. Bilingual products (en + my). Tests features personally in the browser during the HITL phase. Uses the opencode TUI and desktop app. Personal tool first; store publishing is not a goal.
+Afif — solo developer. Bilingual products (en + my). Tests features personally in the browser during the HITL phase. Uses the opencode TUI and desktop app. Personal tool first; Chrome Web Store publishing and open source are goals (set 2026-10-10).
 
 ## Decisions (locked 2026-10-10)
 
@@ -28,11 +28,13 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 |---|---|---|
 | Boilerplate | WXT | Actively maintained, Vite-based, side-panel entrypoint built in |
 | UI framework | Vue 3 + TypeScript | Matches the existing Nuxt stack and conventions |
-| Session strategy | Per-day, per-project | A review pass shares context; rolls over daily; findable in TUI |
+| Session strategy | Seam: per-day + sticky, per-backend default + settings override | opencode favors per-day (findable in TUI); one-long-thread backends favor sticky. Settings UI ships with the seam (phase 003) |
 | Project routing | Origin memory + project list | Pick once per origin, remembered; `GET /api/project` feeds the list |
 | Auth | Pairing codes | No secret copied into the extension; token is revocable |
 | Delivery default | `queue` | Never interrupts a running agent turn |
 | Name | opencode Browsertalk | Explicit about the opencode connection |
+| Distribution | Chrome Web Store (public) + open source | Goal set 2026-10-10; first release is public |
+| License | MIT | Shortest permissive; matches agent-webbridge |
 
 ## Surfaces
 
@@ -42,6 +44,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 | Toolbar popup | Quick actions, connection status, open panel |
 | In-page overlay | Picker highlight + inline composer |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
+| Options page | Settings: backend, server URL, session-strategy override (phase 003) |
 
 ## Workflow
 
@@ -49,7 +52,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 2. Arm the picker — panel button, popup, `Alt+Shift+F`, or right-click.
 3. Hover: elements highlight with a tag/class label.
 4. Click the element. The composer opens next to it.
-5. Type the comment. Send. The feedback lands in the opencode session for (project, day).
+5. Type the comment. Send. The feedback lands in the session picked by the active session strategy.
 
 ## What gets captured
 
@@ -65,7 +68,7 @@ Core facts, always:
 | Key attributes: href, src, role, aria-label, data-testid, placeholder | element attributes |
 | Bounding box, viewport, scroll | `getBoundingClientRect` |
 
-Extras (agreed; land in phase 003):
+Extras (agreed; land in phase 004):
 
 | Extra | Source | Caveat |
 |---|---|---|
@@ -97,24 +100,39 @@ A screenshot, when captured, is attached as an image file. Component name and st
 
 ## Session model
 
-- Key: (`project directory`, local date `YYYY-MM-DD`).
-- Title: `Browsertalk · <project> · <YYYY-MM-DD>` so the session stands out in the TUI list.
-- First feedback of a day creates the session. Later feedback reuses it.
-- "+ new session" in the panel replaces the day's session with a fresh one and continues on it.
+The mapping from feedback to sessions is a seam, `lib/session-strategy/` (interface + registry + one file per strategy), mirroring the AgentBackend seam. Each backend declares its default strategy; settings override per backend.
+
+Strategies that ship:
+
+| Strategy | Rule | Why |
+|---|---|---|
+| Per-day, per-project | One session per (project directory, local date `YYYY-MM-DD`); title `Browsertalk · <project> · <YYYY-MM-DD>` | A review pass shares context; stands out in the TUI list |
+| Sticky, per-project | One long-lived session per project; every feedback appends until "+ new session" rolls over | The style one-long-thread backends live in (Claude Code) |
+
+Defaults: opencode → per-day. The seam must abstract the six axes found in research — identity/addressing, named creation, reuse mechanics, listing, busy/delivery, channel lifetime. Per-backend constraints: `plans/003-session-strategy/research-agent-sessions.md`.
+
+- First feedback creates or reuses the session per the active strategy.
+- "+ new session" in the panel replaces the current session with a fresh one and continues on it.
 - Delivery is `queue`: the prompt waits until the agent is idle. `steer` stays reachable later; no decision yet.
 
 ## Architecture
 
 ```
-┌ Chrome ───────────────────────────────────────────────────┐
-│ popup · side panel (Vue 3)     UI, outbox, settings        │
-│ picker.content.ts              element picking + facts     │
-│ background                     router · registry · auth    │
-└────────────────────────┬───────────────────────────────────┘
-                         │ AgentBackend (strategy + registry)
-                         ├── opencode.ts ── HTTP ── 127.0.0.1:15001
-                         ├── pi.ts ── (later) JSONL RPC via local bridge
-                         └── fake.ts ── in-memory (tests)
+┌ Chrome ──────────────────────────────────────────────────────────┐
+│ popup · side panel (Vue 3)      UI, outbox, sent                │
+│ options page                    backend · server · strategy     │
+│ picker.content.ts               element picking + facts         │
+│ background                      router · registries · auth      │
+└────────────────────────────┬───────────────────────────────────┘
+                             │ feedback
+                             ▼
+              SessionStrategy (per-day · sticky) ── lib/session-strategy
+                             │ session ref
+                             ▼
+              AgentBackend (registry) ──────────── lib/agent-backend
+                             ├── opencode.ts ── HTTP ── 127.0.0.1:15001
+                             ├── pi.ts ── (later) JSONL RPC via local bridge
+                             └── fake.ts ── in-memory (tests)
 ```
 
 The seam lives in `lib/agent-backend/`:
@@ -127,7 +145,9 @@ The seam lives in `lib/agent-backend/`:
 | `fake.ts` | In-memory test double |
 | `builtins.ts` | Registers built-ins at boot |
 
-Adding pi later = one adapter file + one registration line. No call site changes. Backend selection comes from settings (phase 007).
+Adding pi later = one adapter file + one registration line. No call site changes. Backend and session-strategy selection come from settings (phase 003).
+
+The session-strategy seam lives in `lib/session-strategy/`: `interface.ts` (contract), `registry.ts` (`registerSessionStrategy` / `getSessionStrategy` / `listSessionStrategies`), one file per strategy (`per-day.ts`, `sticky.ts`). Each backend declares a default; settings override per backend. The six axes the seam must abstract, and per-backend constraints: `plans/003-session-strategy/research-agent-sessions.md`.
 
 Why pi needs more than a URL: pi integrates as JSONL RPC over a subprocess (`pi --mode rpc`). A Chrome extension cannot spawn processes, so a pi adapter needs a small local bridge that wraps pi and exposes this contract. The seam keeps the UI and routing logic unaware.
 
@@ -138,6 +158,7 @@ opencode endpoints the adapter will use (verified against a live 2.0.24 server):
 | Pair | `POST /api/pair` → code; `GET /auth/connect/{code}` with `Accept: application/json` → token |
 | Projects | `GET /api/project` |
 | Session | `POST /api/session` with `{ title, location: { directory } }` |
+| Sessions | `GET /api/session` — list; filters `directory`, `search`, `parentID`, `cursor` |
 | Prompt | `POST /api/session/{id}/prompt` with `{ text, delivery }` |
 | Events (later) | `GET /api/event` |
 
@@ -151,9 +172,10 @@ Pairing code creation requires an authenticated client, so the user runs one com
 |---|---|
 | `settings.backendId` | `opencode` \| `pi` \| `fake` |
 | `settings.serverUrl` | Base URL of the server |
+| `settings.sessionStrategy` | Per-backend strategy override (`{ [backendId]: strategyId }`) |
 | `auth.token` | Pairing token |
 | `projects.byOrigin` | `origin → project directory` |
-| `sessions.byDay` | `<directory>::<date> → { sessionID, title }` |
+| `sessions` | Session refs per strategy: per-day `<directory>::<date>`, sticky `<directory>` → `{ sessionID, title }` |
 | `outbox` | Unsent feedback items |
 | `sent` | Recent sent summaries, capped |
 
@@ -176,26 +198,10 @@ Pairing code creation requires an authenticated client, so the user runs one com
 
 ## Non-goals (MVP)
 
-- Store publishing. Personal unpacked extension first.
 - Firefox / Safari builds. WXT supports them; untested here.
 - Remote servers (tailscale, SSH). Loopback only.
 - Attachments beyond the element screenshot.
 - Multi-user, shared sessions.
-
-## Roadmap
-
-One phase = one commit. Backend tests use `fake.ts`; no live LLM spend in tests.
-
-| Phase | Scope |
-|---|---|
-| 001 | Scaffold: WXT + Vue, entrypoint stubs, AgentBackend seam, product.md + CONTEXT.md ← this session |
-| 002 | Connection: pairing flow, token storage, `ping` status, `GET /api/project` list |
-| 003 | Picker: arm, hover highlight, click select, facts collector (core + extras) |
-| 004 | Composer: inline feedback box, outbox persistence, comment-on-page, URL-only send |
-| 005 | Send: per-day session strategy, prompt template, queue delivery, sent log |
-| 006 | Panel: outbox and sent lists, project/session header, "+ new session" |
-| 007 | Settings: options page (server URL, backend id), context menu + shortcut wiring |
-| 008 | Pi adapter: local bridge around `pi --mode rpc`, registered and selectable |
 
 ## Open questions
 
@@ -205,6 +211,8 @@ One phase = one commit. Backend tests use `fake.ts`; no live LLM spend in tests.
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.
 - Pairing code UX: exact flow for `opencode api post /api/pair` from the TUI.
+- Ship phase: in-product consent wording for User Data FAQ #10; enforcement scope unconfirmed.
+- Ship phase: host access strategy — keep `<all_urls>` vs `activeTab` + optional host grants; review-time tradeoff.
 
 ## Rejected options
 
@@ -214,7 +222,7 @@ One phase = one commit. Backend tests use `fake.ts`; no live LLM spend in tests.
 | CRXJS boilerplate | Breaks on Vite majors; smaller maintenance surface |
 | Extension.js boilerplate | Newer, less ecosystem proof |
 | New session per feedback | Session-list clutter; related comments lose context |
-| Single sticky session per project | Context bloat, drift, mixed topics |
+| Sticky-only, no rollover | Context bloat, drift, mixed topics; sticky still ships as a strategy, with "+ new session" as the reset |
 | Manual password paste auth | Secret handling worse than a revocable pairing token |
 | Ask-each-send delivery | No default; queue is the safe one |
-| Configurable-only session strategy | A default is needed anyway; per-day per-project chosen |
+| Configurable-only session strategy | Defaults are needed anyway; each backend declares its natural default |

@@ -15,9 +15,11 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Composer | The inline box next to the selected element where the comment is typed |
 | Outbox | Feedback that has not been sent yet |
 | Sent | Feedback already delivered to a session, shown as a summary line |
-| Session | An opencode conversation. A Browsertalk session is the session for one project and one day |
-| Session strategy | The rule mapping feedback to sessions. Currently: per-day, per-project |
-| Session title | `Browsertalk · <project> · <YYYY-MM-DD>` — the findable name in the TUI |
+| Session | An agent conversation. A Browsertalk session is the feedback target: per project, per the active strategy |
+| Session strategy | The rule mapping feedback to sessions. A seam in `lib/session-strategy/`; ships per-day and sticky |
+| Sticky | Strategy: one long-lived session per project until "+ new session" |
+| Per-day | Strategy: one session per (project, local date) |
+| Session title | Per-day strategy: `Browsertalk · <project> · <YYYY-MM-DD>`. Sticky keeps the human's title |
 | Project | A codebase directory opencode knows (`location.directory`) |
 | Project binding | The remembered mapping origin → project |
 | Origin | Scheme + host + port of the page. The key for a project binding |
@@ -31,7 +33,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Token | The credential stored after pairing; used as the auth header |
 | Server URL | Base URL of the opencode server. Default `http://127.0.0.1:15001` |
 | Delivery | How a feedback enters a busy session: `queue` (wait for idle) or `steer` (interrupt). Default `queue` |
-| Surfaces | The UI entry points: side panel, popup, overlay, context menu, shortcut |
+| Surfaces | The UI entry points: side panel, popup, overlay, context menu, shortcut, options page |
 
 ## Code names
 
@@ -41,9 +43,11 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | `registerAgentBackend`, `getAgentBackend`, `listAgentBackends` | `lib/agent-backend/registry.ts` |
 | `OpenCodeBackend`, `FakeAgentBackend` | `lib/agent-backend/opencode.ts`, `fake.ts` |
 | `registerBuiltinBackends` | `lib/agent-backend/builtins.ts`, called from `entrypoints/background.ts` |
+| `SessionStrategy`, `SessionStrategyId` | `lib/session-strategy/interface.ts` |
+| `registerSessionStrategy`, `getSessionStrategy`, `listSessionStrategies` | `lib/session-strategy/registry.ts` |
 | `picker.content.ts` | The content script entrypoint |
 
-File naming follows the seam convention: `interface.ts` (contract), `registry.ts`, one file per adapter, `fake.ts`, `builtins.ts`.
+File naming follows the seam convention: `interface.ts` (contract), `registry.ts`, one file per adapter, `fake.ts`, `builtins.ts`. The session-strategy seam reuses the shape: one file per strategy (`per-day.ts`, `sticky.ts`).
 
 ## Words we do not use
 
@@ -55,3 +59,4 @@ File naming follows the seam convention: `interface.ts` (contract), `registry.ts
 | Verify, confirm, validate | Check | Global convention |
 | Configuration, settings (in prose) | Config | Global convention. "Settings page" is fine as a UI surface name |
 | Session per comment | Session strategy names | Name the rule, not the anecdote |
+| Thread (as our unit) | Session | One word per idea; thread is other agents' vocabulary |
