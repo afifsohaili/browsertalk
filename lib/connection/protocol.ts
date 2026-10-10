@@ -1,4 +1,4 @@
-import type { BackendStatus, Project } from '@/lib/agent-backend/interface';
+import { isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
 
 export type ConnectionRequest =
   | { type: 'connection/pair'; code: string }
@@ -31,14 +31,24 @@ export type ProjectsResult =
 
 export function isConnectionRequest(value: unknown): value is ConnectionRequest {
   if (typeof value !== 'object' || value === null) return false;
-  const type = (value as { type?: unknown }).type;
-  return (
-    type === 'connection/pair' ||
-    type === 'connection/status' ||
-    type === 'connection/onboarding' ||
-    type === 'connection/projects' ||
-    type === 'connection/bind'
-  );
+  const candidate = value as { type?: unknown; code?: unknown; origin?: unknown; projectDirectory?: unknown };
+  switch (candidate.type) {
+    case 'connection/pair':
+      return typeof candidate.code === 'string' && candidate.code.length > 0;
+    case 'connection/bind':
+      return (
+        typeof candidate.origin === 'string' &&
+        candidate.origin.length > 0 &&
+        typeof candidate.projectDirectory === 'string' &&
+        candidate.projectDirectory.length > 0
+      );
+    case 'connection/status':
+    case 'connection/onboarding':
+    case 'connection/projects':
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function isConnectionChanged(value: unknown): value is ConnectionChangedEvent {
@@ -70,7 +80,10 @@ export function isProjectsResult(value: unknown): value is ProjectsResult {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as { ok?: unknown; supported?: unknown; projects?: unknown; error?: unknown };
   return (
-    (candidate.ok === true && typeof candidate.supported === 'boolean' && Array.isArray(candidate.projects)) ||
+    (candidate.ok === true &&
+      typeof candidate.supported === 'boolean' &&
+      Array.isArray(candidate.projects) &&
+      candidate.projects.every(isProject)) ||
     (candidate.ok === false && typeof candidate.error === 'string')
   );
 }

@@ -1,7 +1,7 @@
 import type { PickerBoxFacts, PickerFeedback, PickerScreenshotFacts, PickerSizeFacts } from './facts';
+import { MAX_SCREENSHOT_BYTES } from './limits';
 
 export const MIN_CAPTURE_INTERVAL_MS = 500;
-export const MAX_SCREENSHOT_BYTES = 1_500_000;
 
 export interface CropRect {
   x: number;
@@ -15,8 +15,13 @@ export interface ImageSize {
   height: number;
 }
 
+export interface ScreenshotRequest {
+  windowId: number | undefined;
+  isVisible: () => Promise<boolean>;
+}
+
 export interface ElementScreenshotter {
-  captureFor(feedback: PickerFeedback, windowId: number | undefined): Promise<PickerScreenshotFacts | null>;
+  captureFor(feedback: PickerFeedback, request: ScreenshotRequest): Promise<PickerScreenshotFacts | null>;
 }
 
 export interface ScreenshotDeps {
@@ -44,7 +49,7 @@ export function computeCropRect(box: PickerBoxFacts, viewport: PickerSizeFacts, 
 export function createElementScreenshotter(deps: ScreenshotDeps): ElementScreenshotter {
   let lastCaptureAt: number | null = null;
   return {
-    async captureFor(feedback, windowId) {
+    async captureFor(feedback, request) {
       const { box, viewport } = feedback.element;
       if (box.width <= 0 || box.height <= 0) return null;
       if (lastCaptureAt !== null) {
@@ -53,7 +58,8 @@ export function createElementScreenshotter(deps: ScreenshotDeps): ElementScreens
       }
       lastCaptureAt = deps.now();
       try {
-        const dataUrl = await deps.captureTab(windowId);
+        if (!(await request.isVisible())) return null;
+        const dataUrl = await deps.captureTab(request.windowId);
         return await deps.crop(dataUrl, box, viewport);
       } catch {
         return null;

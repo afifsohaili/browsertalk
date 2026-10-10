@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { MAX_OUTBOX_BYTES, outboxSize, OutboxFullError } from './budgets';
 import { getStoredSession, type StoredSession } from './sessions';
 import { readOutbox, type OutboxItem } from './outbox';
 import { readSent, type SentItem } from './sent';
@@ -98,6 +99,16 @@ describe('serialized storage writer', () => {
     await appendToOutbox(pageItem('after'));
 
     expect((await readOutbox()).map((item) => item.comment)).toEqual(['after']);
+  });
+
+  it('rejects an append that would push the outbox past its byte budget', async () => {
+    const seed = pageItem('seed');
+    const overhead = outboxSize([{ ...seed, comment: '' }]);
+    seed.comment = 'x'.repeat(MAX_OUTBOX_BYTES - overhead - 10);
+    await appendToOutbox(seed);
+
+    await expect(appendToOutbox(pageItem('overflow'))).rejects.toBeInstanceOf(OutboxFullError);
+    expect((await readOutbox()).map((item) => item.comment)).toEqual([seed.comment]);
   });
 
   it('keeps every session ref when session writes interleave', async () => {

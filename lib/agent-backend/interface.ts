@@ -61,6 +61,18 @@ export interface Project {
   directory: string;
 }
 
+export function isProject(value: unknown): value is Project {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { id?: unknown; name?: unknown; directory?: unknown };
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.directory === 'string' &&
+    candidate.directory.length > 0
+  );
+}
+
 export interface SessionCreationIntent {
   /** Strategy that owns this session slot, e.g. "per-day". */
   strategyId: SessionStrategyId;

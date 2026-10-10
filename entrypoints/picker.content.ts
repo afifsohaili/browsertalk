@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { createElementSubmission } from '@/lib/composer/element-submission';
 import { requestQueueComment } from '@/lib/composer/messages';
 import { isComposerRequest } from '@/lib/composer/protocol';
 import { createComposerSession } from '@/lib/composer/session';
@@ -9,19 +10,21 @@ import { createPickerSession } from '@/lib/picker/session';
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
-    let captured: Promise<unknown> = Promise.resolve();
+    const submission = createElementSubmission({
+      notify: notifyCaptured,
+      send: ({ comment, page, captureID }) => requestQueueComment(comment, 'element', page, captureID),
+    });
 
     const composer = createComposerSession({
       queue: async (comment, mode) => {
-        if (mode === 'element') await captured;
-        return requestQueueComment(comment, mode, { url: window.location.href, title: document.title });
+        const page = { url: window.location.href, title: document.title };
+        if (mode === 'element') return submission.submit(comment, page);
+        return requestQueueComment(comment, mode, page);
       },
     });
 
     const session = createPickerSession((feedback, element) => {
-      captured = notifyCaptured(feedback).then((result) => {
-        if (!result.ok) console.warn(`Browsertalk: ${result.error}`);
-      });
+      submission.track(feedback);
       composer.openElement(element);
     });
 

@@ -3,7 +3,9 @@ import { sendQueuedItem } from './send';
 export type SendDispatcher = (itemId: string) => void;
 
 function defaultDispatcher(itemId: string): void {
-  void sendQueuedItem(itemId).catch(() => {});
+  void sendQueuedItem(itemId).catch((error: unknown) => {
+    console.error('Browsertalk: the background send failed', error);
+  });
 }
 
 let dispatcher: SendDispatcher = defaultDispatcher;

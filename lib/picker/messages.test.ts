@@ -13,6 +13,7 @@ import {
   respondToPickerRequest,
   setElementScreenshotter,
 } from './messages';
+import type { ElementScreenshotter } from './screenshot';
 
 type Tab = Browser.tabs.Tab;
 
@@ -39,6 +40,10 @@ function stubSendMessage(result: unknown): ReturnType<typeof vi.fn> {
   return mock;
 }
 
+function triggerEvent(event: unknown, ...args: unknown[]): Promise<unknown> {
+  return (event as { trigger: (...a: unknown[]) => Promise<unknown> }).trigger(...args);
+}
+
 function sampleFeedback(): PickerFeedback {
   return {
     id: 'fb_1',
@@ -63,11 +68,19 @@ function sampleFeedback(): PickerFeedback {
   };
 }
 
+function captured(feedback: PickerFeedback, tabId: number, windowId?: number): ReturnType<typeof respondToPickerRequest> {
+  return respondToPickerRequest(
+    { type: 'picker/captured', feedback },
+    windowId === undefined ? { tabId } : { tabId, windowId },
+  );
+}
+
 describe('picker messaging', () => {
   beforeEach(async () => {
     fakeBrowser.reset();
     await acceptConsent();
     registerPickerMessageHandler();
+    stubQuery([tab(1)]);
     setElementScreenshotter({ captureFor: vi.fn(async () => null) });
   });
 
@@ -122,11 +135,35 @@ describe('picker messaging', () => {
     await expect(requestArmPicker()).resolves.toEqual({ ok: false, error: 'Background unavailable' });
   });
 
-  it('holds captured feedback as the pending feedback', async () => {
+  it('holds captured feedback as the pending feedback for the sender tab', async () => {
     const item = sampleFeedback();
 
-    await expect(notifyCaptured(item)).resolves.toEqual({ ok: true });
-    expect(await getPendingFeedback()).toEqual(item);
+    await expect(captured(item, 1)).resolves.toEqual({ ok: true });
+    expect(await getPendingFeedback(1)).toEqual(item);
+    expect(await getPendingFeedback(2)).toBeNull();
+  });
+
+  it('holds each tab capture separately', async () => {
+    const first = sampleFeedback();
+    const second: PickerFeedback = {
+      ...sampleFeedback(),
+      id: 'fb_2',
+      page: { url: 'https://other.example.org/', path: '/', query: [], title: 'Other' },
+    };
+
+    await captured(first, 1);
+    await captured(second, 2);
+
+    expect((await getPendingFeedback(1))?.id).toBe('fb_1');
+    expect((await getPendingFeedback(2))?.id).toBe('fb_2');
+  });
+
+  it('rejects a capture that does not name the sender tab', async () => {
+    await expect(respondToPickerRequest({ type: 'picker/captured', feedback: sampleFeedback() })).resolves.toEqual({
+      ok: false,
+      error: 'No page sent this capture',
+    });
+    expect(await getPendingFeedback(1)).toBeNull();
   });
 
   it('rejects malformed captured feedback', async () => {
@@ -136,15 +173,15 @@ describe('picker messaging', () => {
     });
 
     expect(response).toEqual({ ok: false, error: 'The captured feedback was invalid' });
-    expect(await getPendingFeedback()).toBeNull();
+    expect(await getPendingFeedback(1)).toBeNull();
   });
 
   it('attaches a screenshot crop to the pending feedback', async () => {
     const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
     setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
 
-    await expect(notifyCaptured(sampleFeedback())).resolves.toEqual({ ok: true });
-    expect((await getPendingFeedback())?.extras?.screenshot).toEqual(shot);
+    await expect(captured(sampleFeedback(), 1)).resolves.toEqual({ ok: true });
+    expect((await getPendingFeedback(1))?.extras?.screenshot).toEqual(shot);
   });
 
   it('keeps the content-script extras when the screenshot lands', async () => {
@@ -155,8 +192,8 @@ describe('picker messaging', () => {
       extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
     };
 
-    await expect(notifyCaptured(item)).resolves.toEqual({ ok: true });
-    expect((await getPendingFeedback())?.extras).toEqual({
+    await expect(captured(item, 1)).resolves.toEqual({ ok: true });
+    expect((await getPendingFeedback(1))?.extras).toEqual({
       component: 'CheckoutButton',
       aria: { role: 'button', name: 'Checkout' },
       screenshot: shot,
@@ -167,8 +204,8 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor: vi.fn(async () => null) });
     const item = sampleFeedback();
 
-    await expect(notifyCaptured(item)).resolves.toEqual({ ok: true });
-    expect(await getPendingFeedback()).toEqual(item);
+    await expect(captured(item, 1)).resolves.toEqual({ ok: true });
+    expect(await getPendingFeedback(1)).toEqual(item);
   });
 
   it('passes the sender window to the screenshotter', async () => {
@@ -176,10 +213,50 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor });
     const item = sampleFeedback();
 
-    await expect(respondToPickerRequest({ type: 'picker/captured', feedback: item }, { windowId: 7 })).resolves.toEqual({
-      ok: true,
+    await expect(captured(item, 1, 7)).resolves.toEqual({ ok: true });
+    expect(captureFor).toHaveBeenCalledWith(item, {
+      windowId: 7,
+      isVisible: expect.any(Function),
     });
-    expect(captureFor).toHaveBeenCalledWith(item, 7);
+  });
+
+  it('checks the sender tab against the visible tab before capturing', async () => {
+    const captureFor = vi.fn<ElementScreenshotter['captureFor']>(async () => null);
+    setElementScreenshotter({ captureFor });
+    stubQuery([tab(9)]);
+
+    await captured(sampleFeedback(), 1, 7);
+
+    const request = captureFor.mock.calls[0]?.[1];
+    expect(request).toBeDefined();
+    await expect(request?.isVisible()).resolves.toBe(false);
+
+    stubQuery([tab(1)]);
+    await expect(request?.isVisible()).resolves.toBe(true);
+  });
+
+  it('rejects the capture when consent is revoked while the screenshot is taken', async () => {
+    const captureFor = vi.fn(async () => {
+      await declineConsent();
+      return { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    });
+    setElementScreenshotter({ captureFor });
+
+    await expect(captured(sampleFeedback(), 1)).resolves.toEqual({
+      ok: false,
+      error: CONSENT_REQUIRED_ERROR,
+    });
+    expect(captureFor).toHaveBeenCalled();
+    expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('clears the pending capture when its tab closes', async () => {
+    await captured(sampleFeedback(), 1);
+    expect(await getPendingFeedback(1)).not.toBeNull();
+
+    await triggerEvent(browser.tabs.onRemoved, 1, { isWindowClosing: false, windowId: 0 });
+
+    expect(await getPendingFeedback(1)).toBeNull();
   });
 
   it('leaves messages for other modules alone', async () => {
@@ -228,7 +305,7 @@ describe('picker messaging', () => {
         ok: false,
         error: CONSENT_REQUIRED_ERROR,
       });
-      expect(await getPendingFeedback()).toBeNull();
+      expect(await getPendingFeedback(1)).toBeNull();
       expect(captureFor).not.toHaveBeenCalled();
     });
   });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isPickerFeedback, type PickerExtras, type PickerFeedback } from './facts';
+import { MAX_SCREENSHOT_DATA_URL_CHARS } from './limits';
 import { isArmPickerResult, isCaptureResult, isPickerMessage } from './protocol';
 
 export function sampleExtras(): PickerExtras {
@@ -121,6 +122,15 @@ describe('extras validation', () => {
 
     expect(isPickerFeedback({ ...sampleFeedback(), extras: missingDataUrl })).toBe(false);
     expect(isPickerFeedback({ ...sampleFeedback(), extras: badWidth })).toBe(false);
+  });
+
+  it('rejects a data URL that is not a bounded base64 image', () => {
+    const extrasWith = (dataUrl: string) => ({ screenshot: { dataUrl, width: 10, height: 10 } });
+    const overBudget = `data:image/png;base64,${'A'.repeat(MAX_SCREENSHOT_DATA_URL_CHARS + 1)}`;
+
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith('data:text/plain;base64,AAAA') })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith('data:image/png,AAAA') })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith(overBudget) })).toBe(false);
   });
 
   it('rejects non-string style values', () => {

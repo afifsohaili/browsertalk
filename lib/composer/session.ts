@@ -1,10 +1,11 @@
-import { createComposerController, type ComposerQueueResult } from './controller';
-import type { ComposerMode } from './protocol';
+import { createComposerController, type ComposerQueueResult as ControllerQueueResult } from './controller';
+import type { ComposerMode, ComposerQueueResult } from './protocol';
 
 export const COMPOSER_HOST_ID = 'browsertalk-composer';
 
 const CONFIRMATION_MS = 900;
 const HINT_TEXT = 'Enter queues · Esc dismisses';
+const SCREENSHOT_DROPPED_NOTICE = 'Queued without the screenshot — storage is full';
 
 export interface ComposerSessionOptions {
   queue: (comment: string, mode: ComposerMode) => Promise<ComposerQueueResult>;
@@ -25,9 +26,14 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   let anchor: Element | null = null;
   let mode: ComposerMode = 'page';
   let confirmationTimer: number | null = null;
+  let notice: string | null = null;
 
   const controller = createComposerController({
-    queue: (comment) => options.queue(comment, mode),
+    queue: async (comment): Promise<ControllerQueueResult> => {
+      const result = await options.queue(comment, mode);
+      notice = result.ok && result.screenshotDropped === true ? SCREENSHOT_DROPPED_NOTICE : null;
+      return result;
+    },
     onTransition: render,
   });
 
@@ -87,7 +93,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   function showConfirmation(): void {
     if (host === null) return;
     const current = host;
-    current.textContent = 'Queued';
+    current.textContent = notice ?? 'Queued';
     current.style.textAlign = 'center';
     current.style.fontWeight = '600';
     current.style.color = '#4f46e5';

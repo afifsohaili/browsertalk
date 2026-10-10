@@ -5,6 +5,7 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import type { SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
+import { acceptConsent } from '@/lib/consent/consent';
 import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { bindProject } from '@/lib/storage/projects';
@@ -71,6 +72,7 @@ describe('panel messaging', () => {
     fakeBrowser.reset();
     registerPanelHandler();
     gatedBackend = new GatedCreateBackend();
+    await acceptConsent();
     await setSettings({ backendId: 'fake', sessionStrategy: { fake: 'sticky' } });
     await bindProject(KEY, ORIGIN, DIRECTORY);
   });

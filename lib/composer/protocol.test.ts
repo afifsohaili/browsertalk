@@ -16,6 +16,7 @@ describe('composer request guard', () => {
         mode: 'element',
         comment: 'Looks off',
         page: { url: 'https://example.com/', title: 'Example' },
+        captureID: 'fb_1',
       }),
     ).toBe(true);
     expect(
@@ -32,7 +33,9 @@ describe('composer request guard', () => {
 
   it('rejects malformed queue requests', () => {
     const page = { url: 'https://example.com/', title: 'Example' };
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 7, page })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 7, page, captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 'x', page, captureID: '' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 'x', page })).toBe(false);
     expect(isComposerRequest({ type: 'composer/queue', mode: 'bogus', comment: 'x', page })).toBe(false);
     expect(isComposerRequest({ type: 'composer/queue', mode: 'page', comment: 'x', page: { url: 1 } })).toBe(false);
     expect(isComposerRequest({ type: 'composer/queue', mode: 'page', comment: 'x' })).toBe(false);
@@ -69,6 +72,7 @@ describe('composer result guards', () => {
 
   it('accepts both queue result shapes', () => {
     expect(isComposerQueueResult({ ok: true, outboxCount: 2 })).toBe(true);
+    expect(isComposerQueueResult({ ok: true, outboxCount: 2, screenshotDropped: true })).toBe(true);
     expect(isComposerQueueResult({ ok: false, error: 'nope' })).toBe(true);
   });
 
@@ -76,6 +80,7 @@ describe('composer result guards', () => {
     expect(isComposerQueueResult({ ok: true })).toBe(false);
     expect(isComposerQueueResult({ ok: true, outboxCount: '2' })).toBe(false);
     expect(isComposerQueueResult({ ok: true, outboxCount: Number.NaN })).toBe(false);
+    expect(isComposerQueueResult({ ok: true, outboxCount: 1, screenshotDropped: 'yes' })).toBe(false);
     expect(isComposerQueueResult(null)).toBe(false);
   });
 

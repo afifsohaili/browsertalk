@@ -1,4 +1,4 @@
-import type { BackendStatus, Project } from '@/lib/agent-backend/interface';
+import { isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
 import { connectionKey } from '@/lib/connection/identity';
 import { connectionBackend, resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { setToken } from '@/lib/storage/auth';
@@ -65,6 +65,9 @@ export async function listServerProjects(): Promise<ProjectsResult> {
     if (!backend.capabilities.projects) return { ok: true, supported: false, projects: [] };
 
     const projects: Project[] = await backend.listProjects();
+    if (!projects.every(isProject)) {
+      return { ok: false, error: 'The server sent a project list we could not read' };
+    }
     return { ok: true, supported: true, projects };
   } catch (error) {
     return { ok: false, error: describeError(error) };

@@ -73,6 +73,8 @@ export function usePanel(): Panel {
   const projectsError = ref<string | null>(null);
   const binding = ref(false);
   let projectsOrigin: string | null = null;
+  let targetGeneration = 0;
+  let projectsGeneration = 0;
 
   async function run(action: () => Promise<void>): Promise<void> {
     error.value = null;
@@ -84,7 +86,10 @@ export function usePanel(): Panel {
   }
 
   async function refreshTarget(): Promise<void> {
+    const generation = ++targetGeneration;
     const origin = await activeOrigin();
+    if (generation !== targetGeneration) return;
+
     if (origin === null) {
       closeProjects();
       target.value = { origin: null, project: null, session: null };
@@ -93,6 +98,8 @@ export function usePanel(): Panel {
     if (projectsOpen.value && projectsOrigin !== origin) closeProjects();
 
     const result = await requestTargetRead(origin);
+    if (generation !== targetGeneration) return;
+
     if (!result.ok) {
       target.value = null;
       throw new Error(result.error);
@@ -150,6 +157,7 @@ export function usePanel(): Panel {
         error.value = result.error;
         return;
       }
+      if (target.value?.origin !== origin) return;
       target.value = { origin, project, session: result.session };
     });
     rollingOver.value = false;
@@ -158,7 +166,9 @@ export function usePanel(): Panel {
   function closeProjects(): void {
     projectsOpen.value = false;
     projectsOrigin = null;
+    projectsLoading.value = false;
     projectsError.value = null;
+    projectsGeneration += 1;
   }
 
   async function openProjects(): Promise<void> {
@@ -167,13 +177,17 @@ export function usePanel(): Panel {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
+    const origin = current.origin;
+    projectsOrigin = origin;
+    const generation = ++projectsGeneration;
 
-    projectsOrigin = current.origin;
     projectsOpen.value = true;
     projectsLoading.value = true;
     projectsError.value = null;
 
     const result = await requestProjects();
+    if (generation !== projectsGeneration || projectsOrigin !== origin) return;
+
     projectsLoading.value = false;
     if (!result.ok) {
       projects.value = [];
@@ -185,14 +199,14 @@ export function usePanel(): Panel {
   }
 
   async function chooseProject(directory: string): Promise<void> {
-    const current = target.value;
-    if (current === null || current.origin === null) {
+    const origin = projectsOrigin;
+    if (origin === null) {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
 
     binding.value = true;
-    const result = await requestBind(current.origin, directory);
+    const result = await requestBind(origin, directory);
     binding.value = false;
     if (!result.ok) {
       projectsError.value = result.error;
@@ -217,6 +231,7 @@ export function usePanel(): Panel {
       keys.includes(STORAGE_KEYS.sessions) ||
       keys.includes(STORAGE_KEYS.projects.byOrigin) ||
       keys.includes(STORAGE_KEYS.settings.backendId) ||
+      keys.includes(STORAGE_KEYS.settings.serverUrl) ||
       keys.includes(STORAGE_KEYS.settings.sessionStrategy)
     ) {
       reloadTarget();

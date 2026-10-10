@@ -12,6 +12,7 @@ export interface ComposerQueueRequest {
   mode: ComposerMode;
   comment: string;
   page: ComposerPageRequest;
+  captureID?: string;
 }
 
 export type ComposerRequest =
@@ -28,7 +29,9 @@ export type ComposerMessage = ComposerRequest | OutboxChangedEvent;
 
 export type ComposerOpenResult = { ok: true } | { ok: false; error: string };
 
-export type ComposerQueueResult = { ok: true; outboxCount: number } | { ok: false; error: string };
+export type ComposerQueueResult =
+  | { ok: true; outboxCount: number; screenshotDropped?: boolean }
+  | { ok: false; error: string };
 
 export type OutboxCountResult = { ok: true; count: number } | { ok: false; error: string };
 
@@ -40,7 +43,11 @@ export function isComposerRequest(value: unknown): value is ComposerRequest {
     case 'outbox/count':
       return true;
     case 'composer/queue':
-      return isComposerMode(value.mode) && typeof value.comment === 'string' && isComposerPageRequest(value.page);
+      if (!isComposerMode(value.mode) || typeof value.comment !== 'string' || !isComposerPageRequest(value.page)) {
+        return false;
+      }
+      if (value.mode === 'element') return isCaptureID(value.captureID);
+      return value.captureID === undefined || isCaptureID(value.captureID);
     default:
       return false;
   }
@@ -58,7 +65,10 @@ export function isComposerOpenResult(value: unknown): value is ComposerOpenResul
 
 export function isComposerQueueResult(value: unknown): value is ComposerQueueResult {
   if (!isRecord(value)) return false;
-  if (value.ok === true) return isFiniteNumber(value.outboxCount);
+  if (value.ok === true) {
+    if (!isFiniteNumber(value.outboxCount)) return false;
+    return value.screenshotDropped === undefined || typeof value.screenshotDropped === 'boolean';
+  }
   return value.ok === false && typeof value.error === 'string';
 }
 
@@ -70,6 +80,10 @@ export function isOutboxCountResult(value: unknown): value is OutboxCountResult 
 
 function isComposerMode(value: unknown): value is ComposerMode {
   return value === 'element' || value === 'page';
+}
+
+function isCaptureID(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function isComposerPageRequest(value: unknown): value is ComposerPageRequest {

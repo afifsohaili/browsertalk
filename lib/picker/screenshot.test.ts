@@ -6,10 +6,15 @@ import {
   dataUrlToBlob,
   MIN_CAPTURE_INTERVAL_MS,
   type ScreenshotDeps,
+  type ScreenshotRequest,
 } from './screenshot';
 
 const VIEWPORT: PickerSizeFacts = { width: 1280, height: 800 };
 const BOX: PickerBoxFacts = { x: 10, y: 20, width: 120, height: 32 };
+
+function request(windowId: number | undefined, isVisible: () => Promise<boolean> = async () => true): ScreenshotRequest {
+  return { windowId, isVisible };
+}
 
 function feedback(box: PickerBoxFacts = BOX): PickerFeedback {
   return {
@@ -118,11 +123,23 @@ describe('element screenshotter', () => {
   it('captures, crops, and returns the shot', async () => {
     const stub = deps();
 
-    const shot = await createElementScreenshotter(stub).captureFor(feedback(), 7);
+    const shot = await createElementScreenshotter(stub).captureFor(feedback(), request(7));
 
     expect(shot).toEqual({ dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 });
     expect(stub.captureTab).toHaveBeenCalledWith(7);
     expect(stub.crop).toHaveBeenCalledWith('data:image/png;base64,AAAA', BOX, VIEWPORT);
+  });
+
+  it('skips silently when the sender tab is not the visible tab', async () => {
+    const stub = deps();
+
+    const shot = await createElementScreenshotter(stub).captureFor(
+      feedback(),
+      request(7, async () => false),
+    );
+
+    expect(shot).toBeNull();
+    expect(stub.captureTab).not.toHaveBeenCalled();
   });
 
   it('skips silently when the tab cannot be captured', async () => {
@@ -132,7 +149,7 @@ describe('element screenshotter', () => {
       }),
     });
 
-    expect(await createElementScreenshotter(stub).captureFor(feedback(), undefined)).toBeNull();
+    expect(await createElementScreenshotter(stub).captureFor(feedback(), request(undefined))).toBeNull();
     expect(stub.crop).not.toHaveBeenCalled();
   });
 
@@ -143,13 +160,15 @@ describe('element screenshotter', () => {
       }),
     });
 
-    expect(await createElementScreenshotter(stub).captureFor(feedback(), undefined)).toBeNull();
+    expect(await createElementScreenshotter(stub).captureFor(feedback(), request(undefined))).toBeNull();
   });
 
   it('skips empty boxes without spending a capture', async () => {
     const stub = deps();
 
-    expect(await createElementScreenshotter(stub).captureFor(feedback({ x: 0, y: 0, width: 0, height: 0 }), 7)).toBeNull();
+    expect(
+      await createElementScreenshotter(stub).captureFor(feedback({ x: 0, y: 0, width: 0, height: 0 }), request(7)),
+    ).toBeNull();
     expect(stub.captureTab).not.toHaveBeenCalled();
   });
 
@@ -165,8 +184,8 @@ describe('element screenshotter', () => {
     });
     const screenshotter = createElementScreenshotter(stub);
 
-    await screenshotter.captureFor(feedback(), undefined);
-    await screenshotter.captureFor(feedback(), undefined);
+    await screenshotter.captureFor(feedback(), request(undefined));
+    await screenshotter.captureFor(feedback(), request(undefined));
 
     expect(sleeps).toEqual([MIN_CAPTURE_INTERVAL_MS]);
     expect(stub.captureTab).toHaveBeenCalledTimes(2);
@@ -184,9 +203,9 @@ describe('element screenshotter', () => {
     });
     const screenshotter = createElementScreenshotter(stub);
 
-    await screenshotter.captureFor(feedback(), undefined);
+    await screenshotter.captureFor(feedback(), request(undefined));
     clock = MIN_CAPTURE_INTERVAL_MS;
-    await screenshotter.captureFor(feedback(), undefined);
+    await screenshotter.captureFor(feedback(), request(undefined));
 
     expect(sleeps).toEqual([]);
   });
@@ -208,8 +227,8 @@ describe('element screenshotter', () => {
     });
     const screenshotter = createElementScreenshotter(stub);
 
-    expect(await screenshotter.captureFor(feedback(), undefined)).toBeNull();
-    await screenshotter.captureFor(feedback(), undefined);
+    expect(await screenshotter.captureFor(feedback(), request(undefined))).toBeNull();
+    await screenshotter.captureFor(feedback(), request(undefined));
 
     expect(sleeps).toEqual([MIN_CAPTURE_INTERVAL_MS]);
   });

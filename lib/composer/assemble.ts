@@ -37,3 +37,12 @@ export function buildPageOutboxItem(raw: RawPageCapture, comment: string, meta: 
     ...(meta.destination === undefined ? {} : { destination: meta.destination }),
   };
 }
+
+export function withoutScreenshot(item: OutboxItem): OutboxItem {
+  const extras = item.facts.extras;
+  if (extras?.screenshot === undefined) return item;
+
+  const { screenshot: _screenshot, ...rest } = extras;
+  const { extras: _extras, ...facts } = item.facts;
+  return { ...item, facts: Object.keys(rest).length === 0 ? facts : { ...facts, extras: rest } };
+}

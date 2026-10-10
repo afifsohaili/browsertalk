@@ -1,5 +1,7 @@
 import { getCurrentScope, onScopeDispose, ref, type Ref } from 'vue';
+import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
+import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { onConnectionChanged, requestConnectionStatus, requestOnboarding, requestPair } from './messages';
 import type { OnboardingView } from './protocol';
 
@@ -17,9 +19,12 @@ export function useConnection(): Connection {
   const onboarding = ref<OnboardingView | null>(null);
   const pairing = ref(false);
   const pairError = ref<string | null>(null);
+  let generation = 0;
 
   async function refresh(): Promise<void> {
+    const current = ++generation;
     const [nextStatus, nextOnboarding] = await Promise.all([requestConnectionStatus(), requestOnboarding()]);
+    if (current !== generation) return;
     status.value = nextStatus;
     onboarding.value = nextOnboarding;
   }
@@ -39,10 +44,23 @@ export function useConnection(): Connection {
     }
   }
 
+  function onStorageChanged(changes: Record<string, unknown>): void {
+    const keys = Object.keys(changes);
+    if (keys.includes(STORAGE_KEYS.settings.backendId) || keys.includes(STORAGE_KEYS.settings.serverUrl)) {
+      void refresh();
+    }
+  }
+
   const stop = onConnectionChanged(() => {
     void refresh();
   });
-  if (getCurrentScope()) onScopeDispose(stop);
+  browser.storage.local.onChanged.addListener(onStorageChanged);
+
+  function dispose(): void {
+    stop();
+    browser.storage.local.onChanged.removeListener(onStorageChanged);
+  }
+  if (getCurrentScope()) onScopeDispose(dispose);
 
   void refresh();
 

@@ -1,3 +1,5 @@
+import { isImageDataUrl } from './limits';
+
 export const KEY_ATTRIBUTE_NAMES = [
   'href',
   'src',
@@ -149,7 +151,7 @@ export function isElementFacts(value: unknown): value is PickerElementFacts {
 function isScreenshotFacts(value: unknown): value is PickerScreenshotFacts {
   return (
     isRecord(value) &&
-    isString(value.dataUrl) &&
+    isImageDataUrl(value.dataUrl) &&
     isFiniteNumber(value.width) &&
     isFiniteNumber(value.height)
   );

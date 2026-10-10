@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
-import { setPendingFeedback } from '@/lib/storage/pending';
+import { clearPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
   isArmPickerResult,
@@ -15,6 +15,7 @@ import { createElementScreenshotter, cropScreenshot, type ElementScreenshotter }
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_ACTIVE_PAGE = 'No active page to arm the picker on';
 const NO_CONTENT_SCRIPT = "Can't arm the picker on this page";
+const NO_SENDER_TAB = 'No page sent this capture';
 const INVALID_CAPTURE = 'The captured feedback was invalid';
 const CONTEXT_MENU_ID = 'arm-picker';
 
@@ -35,6 +36,7 @@ export function setElementScreenshotter(next: ElementScreenshotter | null): void
 }
 
 export interface PickerRequestContext {
+  tabId?: number;
   windowId?: number;
 }
 
@@ -48,10 +50,29 @@ export async function respondToPickerRequest(
     case 'picker/captured': {
       if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
       if (!isPickerFeedback(request.feedback)) return { ok: false, error: INVALID_CAPTURE };
-      const screenshot = await activeScreenshotter.captureFor(request.feedback, context.windowId);
-      await setPendingFeedback(withScreenshot(request.feedback, screenshot));
+
+      const tabId = context.tabId;
+      if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
+
+      const screenshot = await activeScreenshotter.captureFor(request.feedback, {
+        windowId: context.windowId,
+        isVisible: () => isSenderTabVisible(tabId, context.windowId),
+      });
+      if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
+
+      await setPendingFeedback(tabId, withScreenshot(request.feedback, screenshot));
       return { ok: true };
     }
+  }
+}
+
+async function isSenderTabVisible(tabId: number, windowId: number | undefined): Promise<boolean> {
+  try {
+    const query = windowId === undefined ? { active: true, currentWindow: true } : { active: true, windowId };
+    const tabs = await browser.tabs.query(query);
+    return tabs[0]?.id === tabId;
+  } catch {
+    return false;
   }
 }
 
@@ -64,10 +85,14 @@ export function registerPickerMessageHandler(): void {
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (!isPickerMessage(message)) return undefined;
 
-    respondToPickerRequest(message, { windowId: sender.tab?.windowId }).then(sendResponse, () => {
+    respondToPickerRequest(message, { tabId: sender.tab?.id, windowId: sender.tab?.windowId }).then(sendResponse, () => {
       sendResponse({ ok: false, error: 'Something went wrong' } satisfies CaptureResult);
     });
     return true;
+  });
+
+  browser.tabs.onRemoved.addListener((tabId) => {
+    void clearPendingFeedback(tabId);
   });
 }
 

@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import type { Project } from '@/lib/agent-backend/interface';
+import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
 import { getToken, setToken } from '@/lib/storage/auth';
+import { setSettings } from '@/lib/storage/settings';
 import {
   onConnectionChanged,
   registerConnectionHandler,
@@ -111,6 +115,33 @@ describe('connection messaging', () => {
     setOpenCodeFetch(vi.fn<FetchLike>());
 
     await expect(requestProjects()).resolves.toEqual({ ok: false, error: 'Not paired' });
+  });
+
+  it('reports a malformed project list honestly', async () => {
+    class JunkProjectsBackend extends FakeAgentBackend {
+      override async listProjects(): Promise<Project[]> {
+        return [{ id: 'p1', name: 'x' } as unknown as Project];
+      }
+    }
+    registerAgentBackend('junk', () => new JunkProjectsBackend());
+    await setSettings({ backendId: 'junk' });
+
+    await expect(requestProjects()).resolves.toEqual({
+      ok: false,
+      error: 'The server sent a project list we could not read',
+    });
+  });
+
+  it('leaves a malformed request for other modules', async () => {
+    browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+      if (typeof message === 'object' && message !== null && (message as { type?: unknown }).type === 'connection/pair') {
+        sendResponse('other module');
+        return true;
+      }
+      return undefined;
+    });
+
+    await expect(browser.runtime.sendMessage({ type: 'connection/pair' })).resolves.toBe('other module');
   });
 
   it('binds an origin through the background under the active connection', async () => {

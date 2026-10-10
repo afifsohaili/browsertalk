@@ -17,6 +17,7 @@ import type {
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
+import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
@@ -116,10 +117,12 @@ beforeEach(() => {
   setSettings({ backendId: 'fake' });
   bindProject(FAKE_KEY, BOUND_ORIGIN, DIRECTORY);
   setOpenCodeFetch(noNetworkFetch);
+  return acceptConsent();
 });
 
 afterEach(() => {
   resetOpenCodeFetch();
+  vi.restoreAllMocks();
 });
 
 function elementItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
@@ -722,6 +725,166 @@ describe('admission reliability', () => {
     expect(fakeBackend.feedbackCalls).toHaveLength(1);
     expect(await readOutbox()).toEqual([]);
     expect(await readSent()).toHaveLength(1);
+  });
+});
+
+describe('error recording', () => {
+  it('surfaces a failure to record the send error without losing the outcome', async () => {
+    await setSettings({ backendId: 'pi' });
+    await bindProject(`pi@${ENDPOINT_A}`, BOUND_ORIGIN, DIRECTORY);
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    const originalSet = browser.storage.local.set.bind(browser.storage.local);
+    const setSpy = vi.spyOn(browser.storage.local, 'set').mockImplementation(async (keys) => {
+      const record = keys as Record<string, unknown>;
+      const items = record.outbox;
+      if (Array.isArray(items) && items.some((entry) => (entry as OutboxItem).error !== undefined)) {
+        throw new Error('QUOTA_BYTES quota exceeded');
+      }
+      return originalSet(keys);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: false,
+      error: 'The server rejected the prompt',
+    });
+
+    expect(errorSpy).toHaveBeenCalled();
+    expect((await readOutbox())[0]?.error).toBeUndefined();
+
+    setSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+});
+
+class GatedSendBackend extends FakeAgentBackend {
+  readonly started: FeedbackSendInput[] = [];
+  private releases: Array<() => void> = [];
+
+  override async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    this.started.push(input);
+    await new Promise<void>((resolve) => this.releases.push(resolve));
+    return super.sendFeedback(input);
+  }
+
+  release(): void {
+    this.releases.shift()?.();
+  }
+}
+
+class GatedCreateBackend extends FakeAgentBackend {
+  readonly startedCreates: SessionCreateInput[] = [];
+  private releases: Array<() => void> = [];
+
+  override async createSession(input: SessionCreateInput): Promise<SessionRef> {
+    this.startedCreates.push(input);
+    await new Promise<void>((resolve) => this.releases.push(resolve));
+    return super.createSession(input);
+  }
+
+  release(): void {
+    this.releases.shift()?.();
+  }
+}
+
+describe('consent at delivery time', () => {
+  it('keeps a queued item with a consent error when consent is not accepted', async () => {
+    const item = elementItem();
+    await appendToOutbox(item);
+    await declineConsent();
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: false,
+      error: CONSENT_REQUIRED_ERROR,
+    });
+
+    const stored = (await readOutbox())[0];
+    expect(stored?.error).toBe(CONSENT_REQUIRED_ERROR);
+    expect(fakeBackend.sent).toEqual([]);
+    expect(fakeBackend.feedbackCalls).toEqual([]);
+    expect(fakeBackend.createInputs).toEqual([]);
+  });
+
+  it('commits an already-admitted item even when consent is revoked', async () => {
+    const item = elementItem({
+      attempt: { requestID: 'req_seed', sentAt: '2026-10-10T08:00:00.000Z' },
+      admission: {
+        requestID: 'req_seed',
+        messageID: 'msg_seed',
+        sessionID: 'ses_seed',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        admittedAt: '2026-10-10T08:00:01.000Z',
+      },
+    });
+    await appendToOutbox(item);
+    await declineConsent();
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(await readOutbox()).toEqual([]);
+    expect(fakeBackend.feedbackCalls).toEqual([]);
+  });
+
+  it('blocks a send whose turn comes after consent is revoked mid-queue', async () => {
+    const gated = new GatedSendBackend();
+    fakeBackend = gated;
+    const first = elementItem({ id: 'ob_1' });
+    const second = elementItem({ id: 'ob_2', comment: 'Second thought' });
+    await appendToOutbox(first);
+    await appendToOutbox(second);
+
+    const firstSend = sendQueuedItem(first.id, { now: NOW });
+    await vi.waitFor(() => {
+      expect(gated.started).toHaveLength(1);
+    });
+
+    const secondSend = sendQueuedItem(second.id, { now: NOW });
+    await declineConsent();
+    gated.release();
+
+    await expect(firstSend).resolves.toMatchObject({ ok: true });
+    await expect(secondSend).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+
+    expect(gated.started).toHaveLength(1);
+    const stored = (await readOutbox()).find((item) => item.id === 'ob_2');
+    expect(stored?.error).toBe(CONSENT_REQUIRED_ERROR);
+    expect(stored?.admission).toBeUndefined();
+    expect(await readSent()).toHaveLength(1);
+  });
+
+  it('blocks admission when consent is revoked while the session resolves', async () => {
+    const gated = new GatedCreateBackend();
+    fakeBackend = gated;
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    const send = sendQueuedItem(item.id, { now: NOW });
+    await vi.waitFor(() => {
+      expect(gated.startedCreates).toHaveLength(1);
+    });
+
+    await declineConsent();
+    gated.release();
+
+    await expect(send).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+    expect(gated.feedbackCalls).toEqual([]);
+    expect((await readOutbox())[0]?.error).toBe(CONSENT_REQUIRED_ERROR);
+  });
+
+  it('sends again after consent is accepted before the retry', async () => {
+    const item = elementItem();
+    await appendToOutbox(item);
+    await declineConsent();
+    await sendQueuedItem(item.id, { now: NOW });
+    expect(fakeBackend.feedbackCalls).toEqual([]);
+
+    await acceptConsent();
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+    expect(await readOutbox()).toEqual([]);
   });
 });
 

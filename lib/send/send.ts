@@ -1,6 +1,7 @@
 import { BackendError, backendErrorCode, type AgentBackend, type SessionRef } from '@/lib/agent-backend/interface';
 import { getAgentBackend } from '@/lib/agent-backend/registry';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
+import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { parseLoopbackUrl } from '@/lib/connection/endpoint';
 import { connectionKey } from '@/lib/connection/identity';
 import { resolveConfiguredConnection } from '@/lib/connection/resolve';
@@ -86,6 +87,7 @@ async function deliver(
 ): Promise<SendOutcome> {
   const item = await findOutboxItem(itemId);
   if (item === null) return { ok: false, error: NO_LONGER_IN_OUTBOX };
+  if (item.admission === undefined && !(await hasConsent())) return recordError(itemId, CONSENT_REQUIRED_ERROR);
 
   try {
     const session = await withSessionLock(
@@ -121,6 +123,8 @@ async function admit(item: OutboxItem, destination: OutboxDestination, options: 
 
   const text = renderPrompt({ projectName: projectName(destination.directory), item, sentAt: attempt.sentAt });
   const attachment = backend.capabilities.images ? elementAttachment(item.facts.extras) : null;
+
+  if (!(await hasConsent())) throw new Error(CONSENT_REQUIRED_ERROR);
 
   const result = await backend.sendFeedback({
     sessionID: session.id,
@@ -203,7 +207,11 @@ function connectionKeyOf(destination: OutboxDestination): string {
 }
 
 async function recordError(itemId: string, error: string): Promise<SendOutcome> {
-  await setOutboxItemError(itemId, error);
+  try {
+    await setOutboxItemError(itemId, error);
+  } catch (recordingError) {
+    console.error('Browsertalk: could not record the send error', recordingError);
+  }
   return { ok: false, error };
 }
 

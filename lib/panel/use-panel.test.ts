@@ -6,6 +6,7 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import type { Project } from '@/lib/agent-backend/interface';
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
+import { acceptConsent } from '@/lib/consent/consent';
 import { registerConnectionHandler } from '@/lib/connection/messages';
 import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
@@ -55,6 +56,21 @@ class NoProjectsFakeBackend extends FakeAgentBackend {
 
   override async listProjects(): Promise<never> {
     throw new Error('listProjects must not be called');
+  }
+}
+
+class GatedProjectsBackend extends PanelFakeBackend {
+  readonly startedLists: number[] = [];
+  private releases: Array<() => void> = [];
+
+  override async listProjects(): Promise<Project[]> {
+    this.startedLists.push(1);
+    await new Promise<void>((resolve) => this.releases.push(resolve));
+    return DEFAULT_PROJECTS;
+  }
+
+  releaseList(): void {
+    this.releases.shift()?.();
   }
 }
 
@@ -113,6 +129,7 @@ describe('panel logic', () => {
     fakeProjects = DEFAULT_PROJECTS;
     registerPanelHandler();
     registerConnectionHandler();
+    await acceptConsent();
     await setSettings({ backendId: 'fake', sessionStrategy: { fake: 'sticky' } });
   });
 
@@ -217,6 +234,47 @@ describe('panel logic', () => {
       expect(panel.target.value?.origin).toBe('https://unbound.example.org');
     });
     expect(panel.target.value?.project).toBeNull();
+    stop();
+  });
+
+  it('discards a stale target read when the tab changed again meanwhile', async () => {
+    stubQuery([tab(1, PAGE_URL)]);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
+    const { panel, stop } = await loadedPanel();
+    expect(panel.target.value?.origin).toBe(ORIGIN);
+
+    let release: () => void = () => {};
+    let gate: Promise<void> | null = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const waiting = gate;
+      if (waiting !== null) {
+        gate = null;
+        await waiting;
+      }
+      return originalGet(keys);
+    }) as unknown as typeof browser.storage.local.get);
+
+    stubQuery([tab(2, 'https://other.example.org/page')]);
+    await triggerEvent(browser.tabs.onActivated, { tabId: 2, windowId: 0 });
+    await vi.waitFor(() => {
+      expect(gate).toBeNull();
+    });
+
+    stubQuery([tab(1, PAGE_URL)]);
+    await triggerEvent(browser.tabs.onActivated, { tabId: 1, windowId: 0 });
+    await vi.waitFor(() => {
+      expect(panel.target.value?.origin).toBe(ORIGIN);
+    });
+
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(panel.target.value?.origin).toBe(ORIGIN);
+    getSpy.mockRestore();
     stop();
   });
 
@@ -475,6 +533,47 @@ describe('panel logic', () => {
       await vi.waitFor(() => {
         expect(panel.projectsOpen.value).toBe(false);
       });
+      stop();
+    });
+
+    it('discards a delayed project list when the origin changed meanwhile', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const gated = new GatedProjectsBackend();
+      fakeBackend = gated;
+      const { panel, stop } = await loadedPanel();
+
+      const opening = panel.openProjects();
+      await vi.waitFor(() => {
+        expect(gated.startedLists).toHaveLength(1);
+      });
+
+      stubQuery([tab(2, 'https://other.example.org/page')]);
+      await triggerEvent(browser.tabs.onActivated, { tabId: 2, windowId: 0 });
+      await vi.waitFor(() => {
+        expect(panel.projectsOpen.value).toBe(false);
+      });
+
+      gated.releaseList();
+      await opening;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.projects.value).toEqual([]);
+      stop();
+    });
+
+    it('binds the origin captured when the project list opened', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      await panel.openProjects();
+      expect(panel.projectsOpen.value).toBe(true);
+
+      panel.target.value = { origin: 'https://moved.example.org', project: null, session: null };
+
+      await panel.chooseProject('/tmp/fake-project');
+
+      expect(await getBoundProject(KEY, ORIGIN)).toBe('/tmp/fake-project');
+      expect(await getBoundProject(KEY, 'https://moved.example.org')).toBeNull();
       stop();
     });
 
