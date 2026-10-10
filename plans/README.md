@@ -15,8 +15,8 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 007 | `007-panel/` | `ticket.md` | shipped · 75a50ce | 006 |
 | 007b | `007-panel/` | `ticket-03-binding.md` | shipped · 342d0d7 | 007 |
 | 008 | `008-ship/` | `ticket.md` | shipped · bcaa003 | 007 |
-| 010 | `010-hardening/` | `ticket-01..05` | shipped · 5bdea01 | 008 |
-| 009 | `009-pi-adapter/` | `ticket.md` | ready · unblocked (010-05 shipped; conformance gate exists) | — |
+| 010 | `010-hardening/` | `ticket-01..08` | round 2 in progress | 008 |
+| 009 | `009-pi-adapter/` | `ticket.md` | ready | 010-08 |
 
 Policy:
 
