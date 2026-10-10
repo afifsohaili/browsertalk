@@ -10,7 +10,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 003b | `003-session-strategy/` | `ticket-02-settings.md` | shipped · 85368ed | 003a |
 | 004a | `004-picker/` | `ticket-01-core.md` | shipped · 67d42ed | 003b |
 | 004b | `004-picker/` | `ticket-02-extras.md` | shipped · 5ca2514 | 004a |
-| 005 | `005-composer/` | `ticket.md` | ready | 004b |
+| 005 | `005-composer/` | `ticket.md` | shipped · a78df0e | 004b |
 | 006 | `006-send/` | `ticket.md` | ready | 005 |
 | 007 | `007-panel/` | `ticket.md` | ready | 006 |
 | 008 | `008-ship/` | `ticket.md` | ready | 007 |
