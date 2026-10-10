@@ -1,4 +1,5 @@
 export const MAX_OUTBOX_BYTES = 5_000_000;
+export const MAX_SENT_BYTES = 1_000_000;
 
 export class OutboxFullError extends Error {
   constructor() {
@@ -7,8 +8,18 @@ export class OutboxFullError extends Error {
   }
 }
 
+const encoder = new TextEncoder();
+
+export function utf8ByteLength(value: string): number {
+  return encoder.encode(value).length;
+}
+
+export function jsonByteSize(value: unknown): number {
+  return utf8ByteLength(JSON.stringify(value));
+}
+
 export function outboxSize(items: readonly unknown[]): number {
-  return JSON.stringify(items).length;
+  return jsonByteSize(items);
 }
 
 export function isQuotaExceeded(error: unknown): boolean {

@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { MAX_OUTBOX_BYTES, outboxSize, OutboxFullError } from './budgets';
+import { jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES, outboxSize, OutboxFullError } from './budgets';
 import { STORAGE_KEYS } from './keys';
 import {
   readOutbox,
@@ -68,7 +68,7 @@ export function commitDeliveredItem(input: DeliveredCommit): Promise<void> {
     const [items, history] = await Promise.all([readOutbox(), readSent()]);
     await browser.storage.local.set({
       [STORAGE_KEYS.outbox]: items.filter((item) => item.id !== input.itemId),
-      [STORAGE_KEYS.sent]: [input.sent, ...history].slice(0, SENT_LIMIT),
+      [STORAGE_KEYS.sent]: retainSent([input.sent, ...history]),
     });
   });
 }
@@ -76,7 +76,7 @@ export function commitDeliveredItem(input: DeliveredCommit): Promise<void> {
 export function appendToSent(item: SentItem): Promise<void> {
   return enqueueStorageWrite(async () => {
     const items = await readSent();
-    await browser.storage.local.set({ [STORAGE_KEYS.sent]: [item, ...items].slice(0, SENT_LIMIT) });
+    await browser.storage.local.set({ [STORAGE_KEYS.sent]: retainSent([item, ...items]) });
   });
 }
 
@@ -102,10 +102,18 @@ export function writeStoredSession(
 function updateOutboxItem(id: string, update: (item: OutboxItem) => OutboxItem): Promise<void> {
   return enqueueStorageWrite(async () => {
     const items = await readOutbox();
-    await browser.storage.local.set({
-      [STORAGE_KEYS.outbox]: items.map((item) => (item.id === id ? update(item) : item)),
-    });
+    const next = items.map((item) => (item.id === id ? update(item) : item));
+    if (outboxSize(next) > MAX_OUTBOX_BYTES) throw new OutboxFullError();
+    await browser.storage.local.set({ [STORAGE_KEYS.outbox]: next });
   });
+}
+
+function retainSent(history: SentItem[]): SentItem[] {
+  let retained = history.slice(0, SENT_LIMIT);
+  while (retained.length > 1 && jsonByteSize(retained) > MAX_SENT_BYTES) {
+    retained = retained.slice(0, -1);
+  }
+  return retained;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

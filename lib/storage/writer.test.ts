@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { MAX_OUTBOX_BYTES, outboxSize, OutboxFullError } from './budgets';
+import { MAX_OUTBOX_BYTES, MAX_SENT_BYTES, outboxSize, OutboxFullError } from './budgets';
 import { getStoredSession, type StoredSession } from './sessions';
 import { readOutbox, type OutboxItem } from './outbox';
 import { readSent, type SentItem } from './sent';
 import {
   appendToOutbox,
+  appendToSent,
   commitDeliveredItem,
   hasQueuedOutboxItem,
   removeFromOutbox,
@@ -125,6 +126,38 @@ describe('serialized storage writer', () => {
     expect((await readOutbox()).map((item) => item.comment)).toEqual([seed.comment]);
   });
 
+  it('rejects an append whose multibyte text exceeds the budget in bytes', async () => {
+    const huge = pageItem('cjk');
+    huge.comment = '漢'.repeat(3_500_000);
+
+    expect(JSON.stringify([huge]).length).toBeLessThan(MAX_OUTBOX_BYTES);
+    expect(Buffer.byteLength(JSON.stringify([huge]), 'utf8')).toBeGreaterThan(MAX_OUTBOX_BYTES);
+
+    await expect(appendToOutbox(huge)).rejects.toBeInstanceOf(OutboxFullError);
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('rejects a metadata update that would push the outbox past its byte budget', async () => {
+    const seed = pageItem('seed');
+    const overhead = outboxSize([{ ...seed, comment: '' }]);
+    seed.comment = 'x'.repeat(MAX_OUTBOX_BYTES - overhead - 10);
+    await appendToOutbox(seed);
+
+    const attempt = {
+      requestID: 'req_1',
+      sentAt: '2026-10-10T09:00:00.000Z',
+      admissionInput: {
+        sessionID: 'ses_1',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        text: 'x'.repeat(200),
+        delivery: 'queue' as const,
+      },
+    };
+
+    await expect(setOutboxAttempt('ob_seed', attempt)).rejects.toBeInstanceOf(OutboxFullError);
+    expect((await readOutbox())[0]?.attempt).toBeUndefined();
+  });
+
   it('keeps every session ref when session writes interleave', async () => {
     const refA: StoredSession = { sessionID: 'ses_a', title: 'A', generation: 0 };
     const refB: StoredSession = { sessionID: 'ses_b', title: 'B', generation: 1 };
@@ -139,6 +172,29 @@ describe('serialized storage writer', () => {
     expect(await getStoredSession('fake@http://127.0.0.1:15001', 'per-day', 'day-a')).toEqual(refA);
     expect(await getStoredSession('fake@http://127.0.0.1:15001', 'per-day', 'day-b')).toEqual(refB);
     expect(await getStoredSession('fake@http://127.0.0.1:4096', 'sticky', 'dir')).toEqual(refC);
+  });
+
+  it('bounds retained sent history by bytes', async () => {
+    const bulky = (id: string): SentItem => ({ ...sentItem(id), comment: '漢'.repeat(200_000) });
+
+    await appendToSent(bulky('a'));
+    await appendToSent(bulky('b'));
+    await appendToSent(bulky('c'));
+
+    const history = await readSent();
+    expect(history.map((item) => item.id)).toEqual(['c']);
+    expect(Buffer.byteLength(JSON.stringify(history), 'utf8')).toBeLessThanOrEqual(MAX_SENT_BYTES);
+  });
+
+  it('bounds the sent history by bytes when a delivery commits', async () => {
+    await appendToSent({ ...sentItem('seeded'), comment: '漢'.repeat(300_000) });
+    await appendToOutbox(pageItem('first'));
+
+    await commitDeliveredItem({ itemId: 'ob_first', sent: { ...sentItem('ob_first'), comment: '漢'.repeat(100_000) } });
+
+    const history = await readSent();
+    expect(history.map((item) => item.id)).toEqual(['ob_first']);
+    expect(Buffer.byteLength(JSON.stringify(history), 'utf8')).toBeLessThanOrEqual(MAX_SENT_BYTES);
   });
 
   it('records the attempt and the admission on one item without touching the others', async () => {

@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
+import { isQuotaExceeded } from '@/lib/storage/budgets';
 import { clearPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
@@ -60,9 +61,22 @@ export async function respondToPickerRequest(
       });
       if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
 
-      await setPendingFeedback(tabId, withScreenshot(request.feedback, screenshot));
+      await persistPendingCapture(tabId, request.feedback, screenshot);
       return { ok: true };
     }
+  }
+}
+
+async function persistPendingCapture(
+  tabId: number,
+  feedback: PickerFeedback,
+  screenshot: PickerScreenshotFacts | null,
+): Promise<void> {
+  try {
+    await setPendingFeedback(tabId, withScreenshot(feedback, screenshot));
+  } catch (error) {
+    if (screenshot === null || !isQuotaExceeded(error)) throw error;
+    await setPendingFeedback(tabId, feedback);
   }
 }
 

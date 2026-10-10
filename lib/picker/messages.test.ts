@@ -208,6 +208,31 @@ describe('picker messaging', () => {
     expect(await getPendingFeedback(1)).toEqual(item);
   });
 
+  it('drops the screenshot and keeps the capture when pending storage is full', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+    const setSpy = vi.spyOn(browser.storage.session, 'set').mockRejectedValueOnce(new Error('quota exceeded'));
+
+    await expect(captured(sampleFeedback(), 1)).resolves.toEqual({ ok: true });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.extras?.screenshot).toBeUndefined();
+    expect(pending?.id).toBe('fb_1');
+    expect(setSpy).toHaveBeenCalledTimes(2);
+    setSpy.mockRestore();
+  });
+
+  it('reports an error when the capture cannot be stored without the screenshot either', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+    const setSpy = vi.spyOn(browser.storage.session, 'set').mockRejectedValue(new Error('quota exceeded'));
+
+    await expect(captured(sampleFeedback(), 1)).rejects.toThrow('quota exceeded');
+
+    expect(await getPendingFeedback(1)).toBeNull();
+    setSpy.mockRestore();
+  });
+
   it('passes the sender window to the screenshotter', async () => {
     const captureFor = vi.fn(async () => null);
     setElementScreenshotter({ captureFor });

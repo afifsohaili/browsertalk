@@ -59,6 +59,18 @@ describe('project bindings', () => {
     expect(await getBoundProject(KEY_A, 'https://example.com')).toBe('/home/afif/other');
   });
 
+  it('keeps concurrent bindings for two origins', async () => {
+    await Promise.all([
+      bindProject(KEY_A, 'https://first.example', '/home/afif/first'),
+      bindProject(KEY_A, 'https://second.example', '/home/afif/second'),
+    ]);
+
+    expect(await getOriginBindings(KEY_A)).toEqual({
+      'https://first.example': '/home/afif/first',
+      'https://second.example': '/home/afif/second',
+    });
+  });
+
   it('ignores junk values', async () => {
     await browser.storage.local.set({ 'projects.byOrigin': 42 });
     expect(await getOriginBindings(KEY_A)).toEqual({});

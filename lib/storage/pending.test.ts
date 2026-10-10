@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { PickerFeedback } from '@/lib/picker/facts';
-import { clearPendingFeedback, getPendingFeedback, setPendingFeedback } from './pending';
+import {
+  clearPendingFeedback,
+  getPendingFeedback,
+  pendingFeedbackKey,
+  setPendingFeedback,
+} from './pending';
 
 function feedback(id = 'fb_1'): PickerFeedback {
   return {
@@ -26,6 +31,10 @@ function feedback(id = 'fb_1'): PickerFeedback {
 describe('pending feedback storage', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('is empty before a capture', async () => {
@@ -76,5 +85,43 @@ describe('pending feedback storage', () => {
 
     expect(await getPendingFeedback(1)).toBeNull();
     expect(await getPendingFeedback(2)).toEqual(feedback('fb_b'));
+  });
+
+  it('never deletes a replacement written while an older cleanup reads', async () => {
+    const key = pendingFeedbackKey(1);
+    const stored: Record<string, unknown> = { [key]: feedback('fb_a') };
+    let resolveRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      resolveRead = resolve;
+    });
+    let gated = false;
+
+    const session = browser.storage.session as unknown as {
+      get: (key: string) => Promise<Record<string, unknown>>;
+      set: (items: Record<string, unknown>) => Promise<void>;
+      remove: (key: string) => Promise<void>;
+    };
+    vi.spyOn(session, 'get').mockImplementation(async (key) => {
+      const snapshot = { [key]: stored[key] };
+      if (!gated) {
+        gated = true;
+        await readGate;
+      }
+      return snapshot;
+    });
+    vi.spyOn(session, 'set').mockImplementation(async (items) => {
+      Object.assign(stored, items);
+    });
+    vi.spyOn(session, 'remove').mockImplementation(async (key) => {
+      delete stored[key];
+    });
+
+    const cleanup = clearPendingFeedback(1, 'fb_a');
+    const replacement = setPendingFeedback(1, feedback('fb_b'));
+    resolveRead();
+    await Promise.all([cleanup, replacement]);
+
+    expect(stored[key]).toEqual(feedback('fb_b'));
+    expect((await getPendingFeedback(1))?.id).toBe('fb_b');
   });
 });
