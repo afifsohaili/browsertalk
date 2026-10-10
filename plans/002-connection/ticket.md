@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** done
+**Status:** done · f53aada
 
 - [x] Pairing works end to end against a live loopback server: a code issued by `opencode api post /api/pair` (TUI side) is redeemed; a wrong or expired code shows a clear error and changes nothing — verified against the live 2.0.24 server on 2026-10-10 with the real adapter module (see Outcome; the command needs `--server <settings.serverUrl>` because a bare `opencode api post /api/pair` targets the CLI's own background service on a random port)
 - [x] The token lives only in extension storage; never in code, logs, or pages (responses to the surfaces carry no token; asserted in tests)

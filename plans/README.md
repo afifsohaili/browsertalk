@@ -5,7 +5,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | Phase | Folder | Ticket | Status | Blocked by |
 |---|---|---|---|---|
 | 001 | `001-scaffold/` | — | shipped | — |
-| 002 | `002-connection/` | `ticket.md` | shipped | — |
+| 002 | `002-connection/` | `ticket.md` | shipped · f53aada | — |
 | 003a | `003-session-strategy/` | `ticket-01-seam.md` | ready | 002 |
 | 003b | `003-session-strategy/` | `ticket-02-settings.md` | ready | 003a |
 | 004a | `004-picker/` | `ticket-01-core.md` | ready | 003b |
