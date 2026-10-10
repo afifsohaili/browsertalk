@@ -4,7 +4,7 @@
 
 **Blocked by:** 007 — Panel.
 
-**Status:** done
+**Status:** done · 342d0d7
 
 - [x] Unbound origin: panel offers the project list; picking one binds it (`projects.byOrigin`) and the header shows it
 - [x] Bound origin: header shows the project; a small "change" affordance re-opens the picker

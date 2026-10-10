@@ -38,7 +38,7 @@ Pending human steps (recorded in `CHROMEWEBSTORE.md` §6):
 
 - Register the CWS developer account + pay the one-time fee; enable 2SV.
 - Make the repo public / host the privacy policy URL.
-- **Before public submission: ship the project-binding UI.** `requestBind` has no caller (carried from 002/007), so a fresh install can pair, pick, comment, and queue, but sends end with "This site has no project binding". The packet's test instructions say this honestly.
+- **Before public submission: ship the project-binding UI — closed by 007b** (`feat(panel): origin to project binding UI`, 342d0d7): the panel offers the server project list for an unbound origin, picking binds the origin (header shows it), "change" re-binds, and a queued feedback resolves the picked directory on the send path (unit integration + real-browser smoke, 21/21). Remaining: `CHROMEWEBSTORE.md` still carries the "not shipped yet" caveat (the line marked "Do not remove … until the binding UI ships") — drop it on the next packet touch, and the screenshots can now capture the full loop.
 - Capture screenshots (and optionally the 440×280 promo tile).
 - Upload the ZIP, fill the dashboard with the packet texts, set visibility Public, submit.
 
