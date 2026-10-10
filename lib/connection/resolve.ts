@@ -17,10 +17,16 @@ export async function resolveConfiguredConnection(): Promise<ConfiguredConnectio
   const { backendId, serverUrl } = await getSettings();
   const parsed = parseLoopbackUrl(serverUrl);
   if (!parsed.ok) return { ok: false, error: parsed.error };
+  return resolveConnection({ backendId, endpoint: parsed.endpoint });
+}
 
-  const identity: ConnectionIdentity = { backendId, endpoint: parsed.endpoint };
-  const token = await getToken(connectionKey(identity));
-  return { ok: true, connection: { ...identity, token } };
+export async function resolveConnection(identity: ConnectionIdentity): Promise<ConfiguredConnectionResult> {
+  const parsed = parseLoopbackUrl(identity.endpoint);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  const canonical: ConnectionIdentity = { backendId: identity.backendId, endpoint: parsed.endpoint };
+  const token = await getToken(connectionKey(canonical));
+  return { ok: true, connection: { ...canonical, token } };
 }
 
 export function connectionBackend(connection: ConfiguredConnection): AgentBackend {

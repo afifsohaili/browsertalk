@@ -3,7 +3,7 @@ import { effectScope } from 'vue';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
-import type { Project } from '@/lib/agent-backend/interface';
+import type { Project, SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { acceptConsent } from '@/lib/consent/consent';
@@ -28,7 +28,9 @@ const ORIGIN = 'https://example.com';
 const PAGE_URL = `${ORIGIN}/cart?step=2`;
 const DIRECTORY = '/home/afif/example';
 const STICKY_TITLE = 'Browsertalk · example';
+const ENDPOINT_B = 'http://127.0.0.1:15002';
 const KEY = 'fake@http://127.0.0.1:15001';
+const KEY_B = `fake@${ENDPOINT_B}`;
 const OPENCODE_KEY = 'opencode@http://127.0.0.1:15001';
 
 const DEFAULT_PROJECTS: Project[] = [
@@ -70,6 +72,21 @@ class GatedProjectsBackend extends PanelFakeBackend {
   }
 
   releaseList(): void {
+    this.releases.shift()?.();
+  }
+}
+
+class GatedCreateBackend extends PanelFakeBackend {
+  readonly startedCreates: SessionCreateInput[] = [];
+  private releases: Array<() => void> = [];
+
+  override async createSession(input: SessionCreateInput): Promise<SessionRef> {
+    this.startedCreates.push(input);
+    await new Promise<void>((resolve) => this.releases.push(resolve));
+    return super.createSession(input);
+  }
+
+  releaseCreate(): void {
     this.releases.shift()?.();
   }
 }
@@ -350,6 +367,41 @@ describe('panel logic', () => {
     stop();
   });
 
+  it('rolls over the connection captured when the rollover started', async () => {
+    stubQuery([tab(1, PAGE_URL)]);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
+
+    const gated = new GatedCreateBackend();
+    fakeBackend = gated;
+    const { panel, stop } = await loadedPanel();
+    expect(panel.target.value?.session?.id).toBe('ses_old');
+
+    const rolling = panel.newSession();
+    await vi.waitFor(() => {
+      expect(gated.startedCreates).toHaveLength(1);
+    });
+
+    await setSettings({ serverUrl: ENDPOINT_B });
+    await vi.waitFor(() => {
+      expect(panel.target.value?.project).toBeNull();
+    });
+
+    gated.releaseCreate();
+    await rolling;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_fake_1',
+      title: STICKY_TITLE,
+      generation: 1,
+    });
+    expect(await getStoredSession(KEY_B, 'sticky', DIRECTORY)).toBeNull();
+    expect(panel.target.value?.session).toBeNull();
+    expect(panel.error.value).toBeNull();
+    stop();
+  });
+
   it('reports a rollover failure without fake success', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
@@ -562,6 +614,31 @@ describe('panel logic', () => {
       stop();
     });
 
+    it('discards a delayed project list when the connection changed meanwhile', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const gated = new GatedProjectsBackend();
+      fakeBackend = gated;
+      const { panel, stop } = await loadedPanel();
+
+      const opening = panel.openProjects();
+      await vi.waitFor(() => {
+        expect(gated.startedLists).toHaveLength(1);
+      });
+
+      await setSettings({ serverUrl: ENDPOINT_B });
+      await vi.waitFor(() => {
+        expect(panel.projectsOpen.value).toBe(false);
+      });
+
+      gated.releaseList();
+      await opening;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.projects.value).toEqual([]);
+      stop();
+    });
+
     it('binds the origin captured when the project list opened', async () => {
       stubQuery([tab(1, PAGE_URL)]);
       const { panel, stop } = await loadedPanel();
@@ -574,6 +651,25 @@ describe('panel logic', () => {
 
       expect(await getBoundProject(KEY, ORIGIN)).toBe('/tmp/fake-project');
       expect(await getBoundProject(KEY, 'https://moved.example.org')).toBeNull();
+      stop();
+    });
+
+    it('refuses to bind after the connection changed', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      await panel.openProjects();
+      expect(panel.projectsOpen.value).toBe(true);
+
+      await setSettings({ serverUrl: ENDPOINT_B });
+      await vi.waitFor(() => {
+        expect(panel.projectsOpen.value).toBe(false);
+      });
+
+      await panel.chooseProject('/tmp/fake-project');
+
+      expect(panel.error.value).toBe('No page to target');
+      expect(await getBoundProject(KEY, ORIGIN)).toBeNull();
+      expect(await getBoundProject(KEY_B, ORIGIN)).toBeNull();
       stop();
     });
 

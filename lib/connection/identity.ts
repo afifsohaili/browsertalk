@@ -9,3 +9,7 @@ export interface ConnectionIdentity {
 export function connectionKey(identity: ConnectionIdentity): string {
   return `${identity.backendId}@${identity.endpoint}`;
 }
+
+export function sameConnection(a: ConnectionIdentity, b: ConnectionIdentity): boolean {
+  return a.backendId === b.backendId && a.endpoint === b.endpoint;
+}

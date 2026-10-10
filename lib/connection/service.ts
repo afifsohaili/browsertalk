@@ -1,8 +1,9 @@
 import { isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
-import { connectionKey } from '@/lib/connection/identity';
-import { connectionBackend, resolveConfiguredConnection } from '@/lib/connection/resolve';
+import { connectionKey, type ConnectionIdentity } from '@/lib/connection/identity';
+import { connectionBackend, resolveConfiguredConnection, resolveConnection } from '@/lib/connection/resolve';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
+import { parseLoopbackUrl } from './endpoint';
 import type { ConnectionResult, OnboardingResult, ProjectsResult } from './protocol';
 
 export async function pairWithServer(credential: string): Promise<ConnectionResult> {
@@ -56,9 +57,9 @@ export async function connectionOnboarding(): Promise<OnboardingResult> {
   }
 }
 
-export async function listServerProjects(): Promise<ProjectsResult> {
+export async function listServerProjects(connection: ConnectionIdentity): Promise<ProjectsResult> {
   try {
-    const resolved = await resolveConfiguredConnection();
+    const resolved = await resolveConnection(connection);
     if (!resolved.ok) return { ok: false, error: resolved.error };
 
     const backend = connectionBackend(resolved.connection);
@@ -77,6 +78,7 @@ export async function listServerProjects(): Promise<ProjectsResult> {
 export interface BindOriginInput {
   origin: string;
   projectDirectory: string;
+  connection: ConnectionIdentity;
 }
 
 export async function bindOrigin(input: BindOriginInput): Promise<ConnectionResult> {
@@ -86,10 +88,11 @@ export async function bindOrigin(input: BindOriginInput): Promise<ConnectionResu
   const projectDirectory = input.projectDirectory.trim();
   if (projectDirectory.length === 0) return { ok: false, error: 'Pick a project first' };
 
-  const resolved = await resolveConfiguredConnection();
-  if (!resolved.ok) return { ok: false, error: resolved.error };
+  const parsed = parseLoopbackUrl(input.connection.endpoint);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  await bindProject(connectionKey(resolved.connection), origin, projectDirectory);
+  const key = connectionKey({ backendId: input.connection.backendId, endpoint: parsed.endpoint });
+  await bindProject(key, origin, projectDirectory);
   return { ok: true };
 }
 

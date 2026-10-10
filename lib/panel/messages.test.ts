@@ -25,9 +25,14 @@ import {
 const ORIGIN = 'https://example.com';
 const DIRECTORY = '/home/afif/example';
 const STICKY_TITLE = 'Browsertalk · example';
-const KEY = 'fake@http://127.0.0.1:15001';
-const OPENCODE_KEY = 'opencode@http://127.0.0.1:15001';
-const GATED_KEY = 'gated@http://127.0.0.1:15001';
+const ENDPOINT = 'http://127.0.0.1:15001';
+const ENDPOINT_B = 'http://127.0.0.1:15002';
+const KEY = `fake@${ENDPOINT}`;
+const KEY_B = `fake@${ENDPOINT_B}`;
+const OPENCODE_KEY = `opencode@${ENDPOINT}`;
+const GATED_KEY = `gated@${ENDPOINT}`;
+const FAKE_CONNECTION = { backendId: 'fake', endpoint: ENDPOINT };
+const GATED_CONNECTION = { backendId: 'gated', endpoint: ENDPOINT };
 
 class GatedCreateBackend extends FakeAgentBackend {
   readonly startedCreates: SessionCreateInput[] = [];
@@ -83,6 +88,7 @@ describe('panel messaging', () => {
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,
       target: { project: DIRECTORY, session: { id: 'ses_seed', title: 'My review thread' } },
+      connection: FAKE_CONNECTION,
     });
   });
 
@@ -90,6 +96,7 @@ describe('panel messaging', () => {
     await expect(requestTargetRead('https://unbound.example.org')).resolves.toEqual({
       ok: true,
       target: { project: null, session: null },
+      connection: FAKE_CONNECTION,
     });
   });
 
@@ -97,6 +104,7 @@ describe('panel messaging', () => {
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,
       target: { project: DIRECTORY, session: null },
+      connection: FAKE_CONNECTION,
     });
   });
 
@@ -132,7 +140,7 @@ describe('panel messaging', () => {
   it('rolls the session over and continues on the fresh one', async () => {
     await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
 
-    await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({
+    await expect(requestSessionRollover(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
       ok: true,
       session: { id: 'ses_fake_1', title: STICKY_TITLE },
     });
@@ -145,7 +153,25 @@ describe('panel messaging', () => {
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,
       target: { project: DIRECTORY, session: { id: 'ses_fake_1', title: STICKY_TITLE } },
+      connection: FAKE_CONNECTION,
     });
+  });
+
+  it('rolls over the captured connection even when the settings point elsewhere', async () => {
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
+    await setSettings({ serverUrl: ENDPOINT_B });
+
+    await expect(requestSessionRollover(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
+      ok: true,
+      session: { id: 'ses_fake_1', title: STICKY_TITLE },
+    });
+
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_fake_1',
+      title: STICKY_TITLE,
+      generation: 1,
+    });
+    expect(await getStoredSession(KEY_B, 'sticky', DIRECTORY)).toBeNull();
   });
 
   it('withholds a rollover while the first send is resolving its session', async () => {
@@ -160,7 +186,7 @@ describe('panel messaging', () => {
       expect(gatedBackend.startedCreates).toHaveLength(1);
     });
 
-    const rollover = requestSessionRollover(ORIGIN);
+    const rollover = requestSessionRollover(ORIGIN, GATED_CONNECTION);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(gatedBackend.startedCreates).toHaveLength(1);
 
@@ -185,7 +211,7 @@ describe('panel messaging', () => {
   });
 
   it('refuses a rollover for an unbound origin', async () => {
-    await expect(requestSessionRollover('https://unbound.example.org')).resolves.toEqual({
+    await expect(requestSessionRollover('https://unbound.example.org', FAKE_CONNECTION)).resolves.toEqual({
       ok: false,
       error: 'This site has no project binding',
     });
@@ -195,7 +221,9 @@ describe('panel messaging', () => {
     await setSettings({ backendId: 'opencode' });
     await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
 
-    await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({ ok: false, error: 'Not paired' });
+    await expect(
+      requestSessionRollover(ORIGIN, { backendId: 'opencode', endpoint: ENDPOINT }),
+    ).resolves.toEqual({ ok: false, error: 'Not paired' });
     expect(await getStoredSession(OPENCODE_KEY, 'per-day', `${DIRECTORY}::2026-10-10`)).toBeNull();
     expect(await getStoredSession(OPENCODE_KEY, 'sticky', DIRECTORY)).toBeNull();
   });
@@ -222,7 +250,7 @@ describe('panel messaging', () => {
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestOutboxRetry('ob_1')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestOutboxDiscard('ob_1')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
-    await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({
+    await expect(requestSessionRollover(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
       ok: false,
       error: 'Background unavailable',
     });

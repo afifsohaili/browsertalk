@@ -285,7 +285,7 @@ describe('listServerProjects', () => {
     resetOpenCodeFetch();
   });
 
-  it('returns the mapped project list', async () => {
+  it('returns the mapped project list for the captured connection', async () => {
     await setToken(KEY, 'tok_live');
     setOpenCodeFetch(
       vi.fn<FetchLike>(async () =>
@@ -293,7 +293,7 @@ describe('listServerProjects', () => {
       ),
     );
 
-    await expect(listServerProjects()).resolves.toEqual({
+    await expect(listServerProjects({ backendId: 'opencode', endpoint: BASE })).resolves.toEqual({
       ok: true,
       supported: true,
       projects: [{ id: 'proj_1', name: 'example', directory: '/home/afif/example' }],
@@ -304,27 +304,35 @@ describe('listServerProjects', () => {
     await setToken(KEY, 'tok_live');
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse([])));
 
-    await expect(listServerProjects()).resolves.toEqual({ ok: true, supported: true, projects: [] });
+    await expect(listServerProjects({ backendId: 'opencode', endpoint: BASE })).resolves.toEqual({
+      ok: true,
+      supported: true,
+      projects: [],
+    });
   });
 
   it('reports unsupported discovery without asking the backend to list', async () => {
-    await setSettings({ backendId: 'no-projects' });
-
-    await expect(listServerProjects()).resolves.toEqual({ ok: true, supported: false, projects: [] });
+    await expect(listServerProjects({ backendId: 'no-projects', endpoint: BASE })).resolves.toEqual({
+      ok: true,
+      supported: false,
+      projects: [],
+    });
   });
 
   it('returns an error when not paired', async () => {
     setOpenCodeFetch(vi.fn<FetchLike>());
 
-    await expect(listServerProjects()).resolves.toEqual({ ok: false, error: 'Not paired' });
+    await expect(listServerProjects({ backendId: 'opencode', endpoint: BASE })).resolves.toEqual({
+      ok: false,
+      error: 'Not paired',
+    });
   });
 
-  it('refuses a stored non-loopback server URL without touching the network', async () => {
-    await browser.storage.local.set({ 'settings.serverUrl': 'https://example.com' });
+  it('refuses a non-loopback captured endpoint without touching the network', async () => {
     const fetchFn = vi.fn<FetchLike>();
     setOpenCodeFetch(fetchFn);
 
-    await expect(listServerProjects()).resolves.toEqual({
+    await expect(listServerProjects({ backendId: 'opencode', endpoint: 'https://example.com' })).resolves.toEqual({
       ok: false,
       error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
     });
@@ -337,25 +345,52 @@ describe('bindOrigin', () => {
     fakeBrowser.reset();
   });
 
-  it('binds a page origin to a project directory under the configured connection', async () => {
+  it('binds a page origin to a project directory under the captured connection', async () => {
     await expect(
-      bindOrigin({ origin: 'https://example.com', projectDirectory: '/home/afif/example' }),
+      bindOrigin({
+        origin: 'https://example.com',
+        projectDirectory: '/home/afif/example',
+        connection: { backendId: 'opencode', endpoint: BASE },
+      }),
     ).resolves.toEqual({ ok: true });
 
     expect(await getOriginBindings(KEY)).toEqual({ 'https://example.com': '/home/afif/example' });
+    expect(await getOriginBindings(KEY_4096)).toEqual({});
+  });
 
+  it('binds under the captured connection even when the settings point elsewhere', async () => {
     await setSettings({ serverUrl: 'http://127.0.0.1:4096' });
+
+    await expect(
+      bindOrigin({
+        origin: 'https://example.com',
+        projectDirectory: '/home/afif/example',
+        connection: { backendId: 'opencode', endpoint: BASE },
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(await getOriginBindings(KEY)).toEqual({ 'https://example.com': '/home/afif/example' });
     expect(await getOriginBindings(KEY_4096)).toEqual({});
   });
 
   it('normalizes a full URL down to its origin', async () => {
-    await bindOrigin({ origin: 'https://example.com/some/page?q=1', projectDirectory: '/home/afif/example' });
+    await bindOrigin({
+      origin: 'https://example.com/some/page?q=1',
+      projectDirectory: '/home/afif/example',
+      connection: { backendId: 'opencode', endpoint: BASE },
+    });
 
     expect(await getOriginBindings(KEY)).toEqual({ 'https://example.com': '/home/afif/example' });
   });
 
   it('refuses an unparseable origin', async () => {
-    await expect(bindOrigin({ origin: 'not a url', projectDirectory: '/home/afif/example' })).resolves.toEqual({
+    await expect(
+      bindOrigin({
+        origin: 'not a url',
+        projectDirectory: '/home/afif/example',
+        connection: { backendId: 'opencode', endpoint: BASE },
+      }),
+    ).resolves.toEqual({
       ok: false,
       error: 'That page has no bindable origin',
     });
@@ -363,18 +398,26 @@ describe('bindOrigin', () => {
   });
 
   it('refuses a missing project', async () => {
-    await expect(bindOrigin({ origin: 'https://example.com', projectDirectory: '  ' })).resolves.toEqual({
+    await expect(
+      bindOrigin({
+        origin: 'https://example.com',
+        projectDirectory: '  ',
+        connection: { backendId: 'opencode', endpoint: BASE },
+      }),
+    ).resolves.toEqual({
       ok: false,
       error: 'Pick a project first',
     });
     expect(await getOriginBindings(KEY)).toEqual({});
   });
 
-  it('refuses to bind against a non-loopback server URL', async () => {
-    await browser.storage.local.set({ 'settings.serverUrl': 'https://example.com' });
-
+  it('refuses a non-loopback captured endpoint', async () => {
     await expect(
-      bindOrigin({ origin: 'https://example.com', projectDirectory: '/home/afif/example' }),
+      bindOrigin({
+        origin: 'https://example.com',
+        projectDirectory: '/home/afif/example',
+        connection: { backendId: 'opencode', endpoint: 'https://example.com' },
+      }),
     ).resolves.toEqual({
       ok: false,
       error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',

@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import type { Project, SessionRef } from '@/lib/agent-backend/interface';
 import { onOutboxChanged } from '@/lib/composer/messages';
 import { requestBind, requestProjects } from '@/lib/connection/messages';
+import { sameConnection, type ConnectionIdentity } from '@/lib/connection/identity';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent, type SentItem } from '@/lib/storage/sent';
@@ -73,6 +74,8 @@ export function usePanel(): Panel {
   const projectsError = ref<string | null>(null);
   const binding = ref(false);
   let projectsOrigin: string | null = null;
+  let projectsConnection: ConnectionIdentity | null = null;
+  let targetConnection: ConnectionIdentity | null = null;
   let targetGeneration = 0;
   let projectsGeneration = 0;
 
@@ -104,6 +107,10 @@ export function usePanel(): Panel {
       target.value = null;
       throw new Error(result.error);
     }
+    if (projectsOpen.value && (projectsConnection === null || !sameConnection(projectsConnection, result.connection))) {
+      closeProjects();
+    }
+    targetConnection = result.connection;
     target.value = { origin, project: result.target.project, session: result.target.session };
   }
 
@@ -144,7 +151,8 @@ export function usePanel(): Panel {
 
   async function newSession(): Promise<void> {
     const current = target.value;
-    if (current === null || current.origin === null) {
+    const connection = targetConnection;
+    if (current === null || current.origin === null || connection === null) {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
@@ -152,12 +160,14 @@ export function usePanel(): Panel {
 
     rollingOver.value = true;
     await run(async () => {
-      const result = await requestSessionRollover(origin);
+      const result = await requestSessionRollover(origin, connection);
+      if (target.value?.origin !== origin || targetConnection === null || !sameConnection(targetConnection, connection)) {
+        return;
+      }
       if (!result.ok) {
         error.value = result.error;
         return;
       }
-      if (target.value?.origin !== origin) return;
       target.value = { origin, project, session: result.session };
     });
     rollingOver.value = false;
@@ -166,6 +176,7 @@ export function usePanel(): Panel {
   function closeProjects(): void {
     projectsOpen.value = false;
     projectsOrigin = null;
+    projectsConnection = null;
     projectsLoading.value = false;
     projectsError.value = null;
     projectsGeneration += 1;
@@ -173,19 +184,21 @@ export function usePanel(): Panel {
 
   async function openProjects(): Promise<void> {
     const current = target.value;
-    if (current === null || current.origin === null) {
+    const connection = targetConnection;
+    if (current === null || current.origin === null || connection === null) {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
     const origin = current.origin;
     projectsOrigin = origin;
+    projectsConnection = connection;
     const generation = ++projectsGeneration;
 
     projectsOpen.value = true;
     projectsLoading.value = true;
     projectsError.value = null;
 
-    const result = await requestProjects();
+    const result = await requestProjects(connection);
     if (generation !== projectsGeneration || projectsOrigin !== origin) return;
 
     projectsLoading.value = false;
@@ -200,13 +213,14 @@ export function usePanel(): Panel {
 
   async function chooseProject(directory: string): Promise<void> {
     const origin = projectsOrigin;
-    if (origin === null) {
+    const connection = projectsConnection;
+    if (origin === null || connection === null) {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
 
     binding.value = true;
-    const result = await requestBind(origin, directory);
+    const result = await requestBind(origin, directory, connection);
     binding.value = false;
     if (!result.ok) {
       projectsError.value = result.error;
@@ -227,11 +241,13 @@ export function usePanel(): Panel {
 
   function onStorageChanged(changes: Record<string, unknown>): void {
     const keys = Object.keys(changes);
+    const connectionChanged =
+      keys.includes(STORAGE_KEYS.settings.backendId) || keys.includes(STORAGE_KEYS.settings.serverUrl);
+    if (connectionChanged) closeProjects();
     if (
+      connectionChanged ||
       keys.includes(STORAGE_KEYS.sessions) ||
       keys.includes(STORAGE_KEYS.projects.byOrigin) ||
-      keys.includes(STORAGE_KEYS.settings.backendId) ||
-      keys.includes(STORAGE_KEYS.settings.serverUrl) ||
       keys.includes(STORAGE_KEYS.settings.sessionStrategy)
     ) {
       reloadTarget();

@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
+import type { ConnectionIdentity } from './identity';
 import {
   isBackendStatus,
   isConnectionChanged,
@@ -38,9 +39,13 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
     case 'connection/onboarding':
       return connectionOnboarding();
     case 'connection/projects':
-      return listServerProjects();
+      return listServerProjects(request.connection);
     case 'connection/bind':
-      return bindOrigin({ origin: request.origin, projectDirectory: request.projectDirectory });
+      return bindOrigin({
+        origin: request.origin,
+        projectDirectory: request.projectDirectory,
+        connection: request.connection,
+      });
   }
 }
 
@@ -79,13 +84,17 @@ export async function requestOnboarding(): Promise<OnboardingView | null> {
   return isOnboardingResult(response) && response.ok ? response.onboarding : null;
 }
 
-export async function requestProjects(): Promise<ProjectsResult> {
-  const response = await sendSafely({ type: 'connection/projects' });
+export async function requestProjects(connection: ConnectionIdentity): Promise<ProjectsResult> {
+  const response = await sendSafely({ type: 'connection/projects', connection });
   return isProjectsResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
-export async function requestBind(origin: string, projectDirectory: string): Promise<ConnectionResult> {
-  const response = await sendSafely({ type: 'connection/bind', origin, projectDirectory });
+export async function requestBind(
+  origin: string,
+  projectDirectory: string,
+  connection: ConnectionIdentity,
+): Promise<ConnectionResult> {
+  const response = await sendSafely({ type: 'connection/bind', origin, projectDirectory, connection });
   return isConnectionResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 

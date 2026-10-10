@@ -1,18 +1,22 @@
 import type { SessionRef } from '@/lib/agent-backend/interface';
+import type { ConnectionIdentity } from '@/lib/connection/identity';
+import { isConnectionIdentity } from '@/lib/connection/protocol';
 import { isRecord } from '@/lib/picker/facts';
 
 export type PanelRequest =
   | { type: 'target/read'; origin: string }
   | { type: 'outbox/retry'; itemId: string }
   | { type: 'outbox/discard'; itemId: string }
-  | { type: 'session/rollover'; origin: string };
+  | { type: 'session/rollover'; origin: string; connection: ConnectionIdentity };
 
 export interface TargetSnapshot {
   project: string | null;
   session: SessionRef | null;
 }
 
-export type TargetReadResult = { ok: true; target: TargetSnapshot } | { ok: false; error: string };
+export type TargetReadResult =
+  | { ok: true; target: TargetSnapshot; connection: ConnectionIdentity }
+  | { ok: false; error: string };
 
 export type PanelRetryResult = { ok: true } | { ok: false; error: string };
 
@@ -24,8 +28,11 @@ export function isPanelRequest(value: unknown): value is PanelRequest {
   if (!isRecord(value)) return false;
   switch (value.type) {
     case 'target/read':
-    case 'session/rollover':
       return typeof value.origin === 'string' && value.origin.length > 0;
+    case 'session/rollover':
+      return (
+        typeof value.origin === 'string' && value.origin.length > 0 && isConnectionIdentity(value.connection)
+      );
     case 'outbox/retry':
     case 'outbox/discard':
       return typeof value.itemId === 'string' && value.itemId.length > 0;
@@ -36,7 +43,7 @@ export function isPanelRequest(value: unknown): value is PanelRequest {
 
 export function isTargetReadResult(value: unknown): value is TargetReadResult {
   if (!isRecord(value)) return false;
-  if (value.ok === true) return isTargetSnapshot(value.target);
+  if (value.ok === true) return isTargetSnapshot(value.target) && isConnectionIdentity(value.connection);
   return value.ok === false && typeof value.error === 'string';
 }
 

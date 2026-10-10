@@ -7,12 +7,16 @@ import {
   isTargetReadResult,
 } from './protocol';
 
+const CONNECTION = { backendId: 'fake', endpoint: 'http://127.0.0.1:15001' };
+
 describe('panel request guard', () => {
   it('accepts the four request shapes', () => {
     expect(isPanelRequest({ type: 'target/read', origin: 'https://example.com' })).toBe(true);
     expect(isPanelRequest({ type: 'outbox/retry', itemId: 'ob_1' })).toBe(true);
     expect(isPanelRequest({ type: 'outbox/discard', itemId: 'ob_1' })).toBe(true);
-    expect(isPanelRequest({ type: 'session/rollover', origin: 'https://example.com' })).toBe(true);
+    expect(isPanelRequest({ type: 'session/rollover', origin: 'https://example.com', connection: CONNECTION })).toBe(
+      true,
+    );
   });
 
   it('rejects malformed requests', () => {
@@ -23,6 +27,10 @@ describe('panel request guard', () => {
     expect(isPanelRequest({ type: 'outbox/discard' })).toBe(false);
     expect(isPanelRequest({ type: 'outbox/discard', itemId: '' })).toBe(false);
     expect(isPanelRequest({ type: 'session/rollover' })).toBe(false);
+    expect(isPanelRequest({ type: 'session/rollover', origin: 'https://example.com' })).toBe(false);
+    expect(
+      isPanelRequest({ type: 'session/rollover', origin: 'https://example.com', connection: { backendId: 'fake' } }),
+    ).toBe(false);
   });
 
   it('leaves other messages alone', () => {
@@ -36,20 +44,33 @@ describe('panel request guard', () => {
 
 describe('panel result guards', () => {
   it('accepts both target read result shapes', () => {
-    expect(isTargetReadResult({ ok: true, target: { project: '/home/afif/example', session: null } })).toBe(true);
+    expect(
+      isTargetReadResult({ ok: true, target: { project: '/home/afif/example', session: null }, connection: CONNECTION }),
+    ).toBe(true);
     expect(
       isTargetReadResult({
         ok: true,
         target: { project: '/home/afif/example', session: { id: 'ses_1', title: 'Browsertalk · example' } },
+        connection: CONNECTION,
       }),
     ).toBe(true);
     expect(isTargetReadResult({ ok: false, error: 'nope' })).toBe(true);
   });
 
   it('rejects malformed target read results', () => {
-    expect(isTargetReadResult({ ok: true, target: { project: null, session: 'no' } })).toBe(false);
-    expect(isTargetReadResult({ ok: true, target: { session: null } })).toBe(false);
-    expect(isTargetReadResult({ ok: true })).toBe(false);
+    expect(isTargetReadResult({ ok: true, target: { project: null, session: 'no' }, connection: CONNECTION })).toBe(
+      false,
+    );
+    expect(isTargetReadResult({ ok: true, target: { session: null }, connection: CONNECTION })).toBe(false);
+    expect(isTargetReadResult({ ok: true, target: { project: null, session: null } })).toBe(false);
+    expect(
+      isTargetReadResult({
+        ok: true,
+        target: { project: null, session: null },
+        connection: { backendId: 'fake', endpoint: 'https://example.com' },
+      }),
+    ).toBe(false);
+    expect(isTargetReadResult({ ok: true, connection: CONNECTION })).toBe(false);
     expect(isTargetReadResult({ ok: false })).toBe(false);
     expect(isTargetReadResult(null)).toBe(false);
   });

@@ -1,11 +1,13 @@
-import { isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
+import { isAgentBackendId, isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
+import { parseLoopbackUrl } from './endpoint';
+import type { ConnectionIdentity } from './identity';
 
 export type ConnectionRequest =
   | { type: 'connection/pair'; code: string }
   | { type: 'connection/status' }
   | { type: 'connection/onboarding' }
-  | { type: 'connection/projects' }
-  | { type: 'connection/bind'; origin: string; projectDirectory: string };
+  | { type: 'connection/projects'; connection: ConnectionIdentity }
+  | { type: 'connection/bind'; origin: string; projectDirectory: string; connection: ConnectionIdentity };
 
 export interface ConnectionChangedEvent {
   type: 'connection/changed';
@@ -31,7 +33,13 @@ export type ProjectsResult =
 
 export function isConnectionRequest(value: unknown): value is ConnectionRequest {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as { type?: unknown; code?: unknown; origin?: unknown; projectDirectory?: unknown };
+  const candidate = value as {
+    type?: unknown;
+    code?: unknown;
+    origin?: unknown;
+    projectDirectory?: unknown;
+    connection?: unknown;
+  };
   switch (candidate.type) {
     case 'connection/pair':
       return typeof candidate.code === 'string' && candidate.code.length > 0;
@@ -40,15 +48,27 @@ export function isConnectionRequest(value: unknown): value is ConnectionRequest 
         typeof candidate.origin === 'string' &&
         candidate.origin.length > 0 &&
         typeof candidate.projectDirectory === 'string' &&
-        candidate.projectDirectory.length > 0
+        candidate.projectDirectory.length > 0 &&
+        isConnectionIdentity(candidate.connection)
       );
+    case 'connection/projects':
+      return isConnectionIdentity(candidate.connection);
     case 'connection/status':
     case 'connection/onboarding':
-    case 'connection/projects':
       return true;
     default:
       return false;
   }
+}
+
+export function isConnectionIdentity(value: unknown): value is ConnectionIdentity {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { backendId?: unknown; endpoint?: unknown };
+  if (!isAgentBackendId(candidate.backendId)) return false;
+  if (typeof candidate.endpoint !== 'string') return false;
+
+  const parsed = parseLoopbackUrl(candidate.endpoint);
+  return parsed.ok && parsed.endpoint === candidate.endpoint;
 }
 
 export function isConnectionChanged(value: unknown): value is ConnectionChangedEvent {

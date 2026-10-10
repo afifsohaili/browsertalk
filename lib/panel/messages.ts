@@ -1,8 +1,9 @@
 import { browser } from 'wxt/browser';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
+import type { ConnectionIdentity } from '@/lib/connection/identity';
 import { sendQueuedItem } from '@/lib/send/send';
 import { sessionLockKey, withSessionLock } from '@/lib/session-strategy/lock';
-import { resolveActiveSessionStrategy } from '@/lib/session-strategy/selection';
+import { resolveActiveSessionStrategy, resolveSessionStrategyFor } from '@/lib/session-strategy/selection';
 import { getBoundProject } from '@/lib/storage/projects';
 import { removeFromOutbox } from '@/lib/storage/writer';
 import {
@@ -32,7 +33,7 @@ export async function respondToPanelRequest(request: PanelRequest): Promise<Pane
     case 'outbox/discard':
       return discardOutboxItem(request.itemId);
     case 'session/rollover':
-      return rolloverSession(request.origin);
+      return rolloverSession(request.origin, request.connection);
   }
 }
 
@@ -62,19 +63,23 @@ export async function requestOutboxDiscard(itemId: string): Promise<PanelDiscard
   return isPanelDiscardResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
-export async function requestSessionRollover(origin: string): Promise<SessionRolloverResult> {
-  const response = await sendSafely({ type: 'session/rollover', origin });
+export async function requestSessionRollover(
+  origin: string,
+  connection: ConnectionIdentity,
+): Promise<SessionRolloverResult> {
+  const response = await sendSafely({ type: 'session/rollover', origin, connection });
   return isSessionRolloverResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
 async function readTarget(origin: string): Promise<TargetReadResult> {
   try {
-    const { backend, strategy, connectionKey } = await resolveActiveSessionStrategy();
+    const { backend, strategy, connectionKey, connection } = await resolveActiveSessionStrategy();
+    const identity = connectionIdentity(connection);
     const project = await getBoundProject(connectionKey, origin);
-    if (project === null) return { ok: true, target: { project: null, session: null } };
+    if (project === null) return { ok: true, target: { project: null, session: null }, connection: identity };
 
     const session = await strategy.peekSession({ backend, connectionKey, directory: project });
-    return { ok: true, target: { project, session } };
+    return { ok: true, target: { project, session }, connection: identity };
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }
@@ -99,9 +104,9 @@ async function discardOutboxItem(itemId: string): Promise<PanelDiscardResult> {
   }
 }
 
-async function rolloverSession(origin: string): Promise<SessionRolloverResult> {
+async function rolloverSession(origin: string, connection: ConnectionIdentity): Promise<SessionRolloverResult> {
   try {
-    const { backend, strategy, connectionKey } = await resolveActiveSessionStrategy();
+    const { backend, strategy, connectionKey } = await resolveSessionStrategyFor(connection);
     const project = await getBoundProject(connectionKey, origin);
     if (project === null) return { ok: false, error: NO_PROJECT_BINDING };
 
@@ -112,6 +117,10 @@ async function rolloverSession(origin: string): Promise<SessionRolloverResult> {
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }
+}
+
+function connectionIdentity(connection: ConnectionIdentity): ConnectionIdentity {
+  return { backendId: connection.backendId, endpoint: connection.endpoint };
 }
 
 async function sendSafely(message: PanelRequest): Promise<unknown> {

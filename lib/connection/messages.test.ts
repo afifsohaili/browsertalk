@@ -5,7 +5,12 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import type { Project } from '@/lib/agent-backend/interface';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
-import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import {
+  openCodeAuthHeader,
+  resetOpenCodeFetch,
+  setOpenCodeFetch,
+  type FetchLike,
+} from '@/lib/agent-backend/opencode-api';
 import { getToken, setToken } from '@/lib/storage/auth';
 import { setSettings } from '@/lib/storage/settings';
 import {
@@ -19,7 +24,9 @@ import {
 } from './messages';
 
 const BASE = 'http://127.0.0.1:15001';
+const BASE_B = 'http://127.0.0.1:4096';
 const KEY = `opencode@${BASE}`;
+const CONNECTION = { backendId: 'opencode', endpoint: BASE };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -90,11 +97,28 @@ describe('connection messaging', () => {
     await setToken(KEY, 'tok_live');
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse([{ id: 'p1', canonical: '/home/afif/x' }])));
 
-    await expect(requestProjects()).resolves.toEqual({
+    await expect(requestProjects(CONNECTION)).resolves.toEqual({
       ok: true,
       supported: true,
       projects: [{ id: 'p1', name: 'x', directory: '/home/afif/x' }],
     });
+  });
+
+  it('lists projects for the captured connection even when the settings point elsewhere', async () => {
+    await setToken(KEY, 'tok_live');
+    await setSettings({ serverUrl: BASE_B });
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse([{ id: 'p1', canonical: '/home/afif/x' }]));
+    setOpenCodeFetch(fetchFn);
+
+    await expect(requestProjects(CONNECTION)).resolves.toEqual({
+      ok: true,
+      supported: true,
+      projects: [{ id: 'p1', name: 'x', directory: '/home/afif/x' }],
+    });
+
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/project`);
+    const headers = new Headers(fetchFn.mock.calls[0]?.[1]?.headers);
+    expect(headers.get('authorization')).toBe(openCodeAuthHeader('tok_live'));
   });
 
   it('delivers the backend onboarding copy with the endpoint baked in', async () => {
@@ -114,7 +138,7 @@ describe('connection messaging', () => {
   it('surfaces a project list failure honestly', async () => {
     setOpenCodeFetch(vi.fn<FetchLike>());
 
-    await expect(requestProjects()).resolves.toEqual({ ok: false, error: 'Not paired' });
+    await expect(requestProjects(CONNECTION)).resolves.toEqual({ ok: false, error: 'Not paired' });
   });
 
   it('reports a malformed project list honestly', async () => {
@@ -124,9 +148,8 @@ describe('connection messaging', () => {
       }
     }
     registerAgentBackend('junk', () => new JunkProjectsBackend());
-    await setSettings({ backendId: 'junk' });
 
-    await expect(requestProjects()).resolves.toEqual({
+    await expect(requestProjects({ backendId: 'junk', endpoint: BASE })).resolves.toEqual({
       ok: false,
       error: 'The server sent a project list we could not read',
     });
@@ -144,8 +167,10 @@ describe('connection messaging', () => {
     await expect(browser.runtime.sendMessage({ type: 'connection/pair' })).resolves.toBe('other module');
   });
 
-  it('binds an origin through the background under the active connection', async () => {
-    await expect(requestBind('https://example.com', '/home/afif/example')).resolves.toEqual({ ok: true });
+  it('binds an origin through the background under the captured connection', async () => {
+    await setSettings({ serverUrl: BASE_B });
+
+    await expect(requestBind('https://example.com', '/home/afif/example', CONNECTION)).resolves.toEqual({ ok: true });
 
     expect(await browser.storage.local.get('projects.byOrigin')).toEqual({
       'projects.byOrigin': { [KEY]: { 'https://example.com': '/home/afif/example' } },

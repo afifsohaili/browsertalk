@@ -1,11 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
+import { setToken } from '@/lib/storage/auth';
 import { setSessionStrategyOverride, setSettings } from '@/lib/storage/settings';
 import { registerBuiltinSessionStrategies } from './builtins';
-import { pickSessionStrategyId, resolveActiveSessionStrategy } from './selection';
+import { pickSessionStrategyId, resolveActiveSessionStrategy, resolveSessionStrategyFor } from './selection';
 
 describe('session strategy selection', () => {
   beforeAll(() => {
@@ -85,5 +87,39 @@ describe('session strategy selection', () => {
 
     await setSessionStrategyOverride('fake', null);
     expect((await resolveActiveSessionStrategy()).strategy.id).toBe('per-day');
+  });
+
+  it('resolves the strategy, key, and token for a captured connection', async () => {
+    await setSettings({ sessionStrategy: { fake: 'sticky' } });
+    await setToken('fake@http://127.0.0.1:15001', 'tok_captured');
+
+    const active = await resolveSessionStrategyFor({ backendId: 'fake', endpoint: 'http://127.0.0.1:15001' });
+
+    expect(active.backend.id).toBe('fake');
+    expect(active.strategy.id).toBe('sticky');
+    expect(active.connectionKey).toBe('fake@http://127.0.0.1:15001');
+    expect(active.connection).toEqual({
+      backendId: 'fake',
+      endpoint: 'http://127.0.0.1:15001',
+      token: 'tok_captured',
+    });
+  });
+
+  it('ignores the stored connection when resolving a captured one', async () => {
+    await browser.storage.local.set({
+      'settings.backendId': 'opencode',
+      'settings.serverUrl': 'http://127.0.0.1:4096',
+    });
+
+    const active = await resolveSessionStrategyFor({ backendId: 'fake', endpoint: 'http://127.0.0.1:15001' });
+
+    expect(active.backend.id).toBe('fake');
+    expect(active.connectionKey).toBe('fake@http://127.0.0.1:15001');
+  });
+
+  it('refuses a non-loopback captured endpoint', async () => {
+    await expect(resolveSessionStrategyFor({ backendId: 'fake', endpoint: 'https://example.com' })).rejects.toThrow(
+      'The server must be on this machine',
+    );
   });
 });

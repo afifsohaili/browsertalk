@@ -7,7 +7,7 @@ import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
 import { captureQueuedDestination } from './destinations';
-import { connectionBackend, resolveConfiguredConnection } from './resolve';
+import { connectionBackend, resolveConfiguredConnection, resolveConnection } from './resolve';
 
 let seenConfigs: Array<BackendConnectionConfig | undefined> = [];
 
@@ -65,6 +65,34 @@ describe('resolveConfiguredConnection', () => {
 
     expect(backend.id).toBe('fake');
     expect(seenConfigs).toEqual([{ baseUrl: 'http://127.0.0.1:15001', token: 'tok_fake' }]);
+  });
+});
+
+describe('resolveConnection', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    seenConfigs = [];
+  });
+
+  it('resolves a captured identity against its own token, ignoring the stored settings', async () => {
+    await browser.storage.local.set({
+      'settings.backendId': 'fake',
+      'settings.serverUrl': 'http://127.0.0.1:4096',
+    });
+    await setToken('fake@http://127.0.0.1:15001', 'tok_captured');
+    await setToken('fake@http://127.0.0.1:4096', 'tok_stored');
+
+    await expect(resolveConnection({ backendId: 'fake', endpoint: 'http://127.0.0.1:15001' })).resolves.toEqual({
+      ok: true,
+      connection: { backendId: 'fake', endpoint: 'http://127.0.0.1:15001', token: 'tok_captured' },
+    });
+  });
+
+  it('refuses a non-loopback captured endpoint', async () => {
+    await expect(resolveConnection({ backendId: 'fake', endpoint: 'https://example.com' })).resolves.toEqual({
+      ok: false,
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+    });
   });
 });
 

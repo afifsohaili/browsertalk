@@ -156,7 +156,7 @@ export async function checkProjectDiscovery(h: ConformanceHarness): Promise<void
   const c = h.adapter;
   await prepareSendFlow(h);
 
-  const result = await listServerProjects();
+  const result = await listServerProjects({ backendId: h.adapter.id, endpoint: CONFORMANCE_ENDPOINT });
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.supported).toBe(c.capabilities.projects);

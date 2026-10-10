@@ -76,12 +76,15 @@ describe('migrateLegacyConnectionStorage', () => {
     expect(await getToken(KEY)).toBe('tok_legacy');
   });
 
-  it('keeps already-scoped data and never overwrites it with legacy data', async () => {
+  it('keeps already-scoped data and consumes the legacy leftovers in the same pass', async () => {
     await seedLegacy();
     await browser.storage.local.set({
       'auth.tokens': { [KEY]: 'tok_scoped' },
       'projects.byOrigin': { [KEY]: { 'https://example.com': '/home/afif/scoped' } },
-      sessions: { [KEY]: { 'per-day': { '/home/afif/example::2026-10-09': { sessionID: 'ses_scoped', title: 'new' } } } },
+      sessions: {
+        opencode: { 'per-day': { '/home/afif/example::2026-10-09': LEGACY_REF } },
+        [KEY]: { 'per-day': { '/home/afif/example::2026-10-09': { sessionID: 'ses_scoped', title: 'new' } } },
+      },
     });
 
     await migrateLegacyConnectionStorage();
@@ -95,7 +98,61 @@ describe('migrateLegacyConnectionStorage', () => {
     });
 
     const raw = await browser.storage.local.get(null);
-    expect(raw['auth.token']).toBe('tok_legacy');
+    expect(raw['auth.token']).toBeUndefined();
+    expect((raw.sessions as Record<string, unknown>).opencode).toBeUndefined();
+  });
+
+  it('never lets a scoped-first migration hand the legacy token or refs to a later endpoint', async () => {
+    await seedLegacy();
+    await browser.storage.local.set({
+      'auth.tokens': { [KEY]: 'tok_scoped' },
+      sessions: {
+        opencode: { 'per-day': { '/home/afif/example::2026-10-09': LEGACY_REF } },
+        [KEY]: { 'per-day': { '/home/afif/example::2026-10-09': { sessionID: 'ses_scoped', title: 'new' } } },
+      },
+    });
+
+    await migrateLegacyConnectionStorage();
+
+    const otherKey = 'opencode@http://127.0.0.1:15002';
+    await browser.storage.local.set({ 'settings.serverUrl': 'http://127.0.0.1:15002' });
+    await migrateLegacyConnectionStorage();
+
+    expect(await getToken(otherKey)).toBeNull();
+    expect(await getStoredSession(otherKey, 'per-day', '/home/afif/example::2026-10-09')).toBeNull();
+    expect(await getBoundProject(otherKey, 'https://example.com')).toBeNull();
+    expect(await getToken(KEY)).toBe('tok_scoped');
+  });
+
+  it('merges unrelated legacy refs into the scoped connection without overwriting scoped slots', async () => {
+    await seedLegacy();
+    await browser.storage.local.set({
+      sessions: {
+        opencode: {
+          'per-day': {
+            '/home/afif/example::2026-10-09': LEGACY_REF,
+            '/home/afif/other::2026-10-09': { sessionID: 'ses_other', title: 'other' },
+          },
+        },
+        [KEY]: { 'per-day': { '/home/afif/example::2026-10-09': { sessionID: 'ses_scoped', title: 'new' } } },
+      },
+    });
+
+    await migrateLegacyConnectionStorage();
+
+    expect(await getStoredSession(KEY, 'per-day', '/home/afif/example::2026-10-09')).toEqual({
+      sessionID: 'ses_scoped',
+      title: 'new',
+      generation: 0,
+    });
+    expect(await getStoredSession(KEY, 'per-day', '/home/afif/other::2026-10-09')).toEqual({
+      sessionID: 'ses_other',
+      title: 'other',
+      generation: 0,
+    });
+
+    const raw = await browser.storage.local.get(null);
+    expect((raw.sessions as Record<string, unknown>).opencode).toBeUndefined();
   });
 
   it('does nothing when there is no legacy data', async () => {

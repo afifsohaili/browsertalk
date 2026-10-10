@@ -23,9 +23,9 @@ async function migrateLegacyToken(key: string): Promise<void> {
 
   const tokens = asRecord(stored[STORAGE_KEYS.auth.tokens]);
   const scoped = tokens[key];
-  if (typeof scoped === 'string' && scoped.length > 0) return;
-
-  await browser.storage.local.set({ [STORAGE_KEYS.auth.tokens]: { ...tokens, [key]: legacy } });
+  if (!(typeof scoped === 'string' && scoped.length > 0)) {
+    await browser.storage.local.set({ [STORAGE_KEYS.auth.tokens]: { ...tokens, [key]: legacy } });
+  }
   await browser.storage.local.remove(STORAGE_KEYS.auth.token);
 }
 
@@ -54,11 +54,19 @@ async function migrateLegacySessions(key: string, backendId: string): Promise<vo
 
   const legacy = asRecord(raw[backendId]);
   if (Object.keys(legacy).length === 0) return;
-  if (Object.keys(asRecord(raw[key])).length > 0) return;
 
-  const next = { ...raw, [key]: legacy };
+  const scoped = asRecord(raw[key]);
+  const next = { ...raw, [key]: mergeStrategyStores(legacy, scoped) };
   delete next[backendId];
   await browser.storage.local.set({ [STORAGE_KEYS.sessions]: next });
+}
+
+function mergeStrategyStores(legacy: Record<string, unknown>, scoped: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...legacy };
+  for (const [strategyId, refs] of Object.entries(scoped)) {
+    merged[strategyId] = { ...asRecord(merged[strategyId]), ...asRecord(refs) };
+  }
+  return merged;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
