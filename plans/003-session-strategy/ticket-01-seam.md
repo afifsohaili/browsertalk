@@ -4,7 +4,7 @@
 
 **Blocked by:** 002 — Connection.
 
-**Status:** done
+**Status:** done · 588474d
 
 - [x] Strategy contract mirrors the agent-backend seam: register / get / list; unknown ids fail fast with the known list (`lib/session-strategy/registry.ts`; tests assert the exact error with `per-day, sticky`)
 - [x] Per-day: first feedback of the day creates the session; later feedback reuses it; rolls over at local midnight (key `<directory>::<YYYY-MM-DD>`; `now` injected per call so tests cross midnight)
