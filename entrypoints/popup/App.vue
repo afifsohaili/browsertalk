@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
+import ArmPickerButton from '@/components/ArmPickerButton.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
 
@@ -19,7 +20,7 @@ const sentCount = ref(0);
     <ConnectionPanel />
 
     <div class="actions">
-      <button type="button" disabled>Point at element</button>
+      <ArmPickerButton close-on-arm />
       <button type="button" disabled>Comment on page</button>
       <button type="button" disabled>Send page URL only</button>
     </div>
@@ -29,6 +30,6 @@ const sentCount = ref(0);
       <span>outbox {{ outboxCount }} · sent {{ sentCount }}</span>
     </div>
 
-    <p class="note">Picker, composer, and sending land in later phases.</p>
+    <p class="note">Composer and sending land in later phases.</p>
   </main>
 </template>

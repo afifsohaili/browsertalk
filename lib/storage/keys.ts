@@ -11,4 +11,7 @@ export const STORAGE_KEYS = {
     byOrigin: 'projects.byOrigin',
   },
   sessions: 'sessions',
+  pending: {
+    feedback: 'pending.feedback',
+  },
 } as const;

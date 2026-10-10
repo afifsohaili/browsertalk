@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
+import ArmPickerButton from '@/components/ArmPickerButton.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
 
@@ -22,7 +23,7 @@ const sessionTitle = ref('—');
     </section>
 
     <div class="actions">
-      <button type="button" disabled>Point at element</button>
+      <ArmPickerButton />
       <button type="button" disabled>Comment on page</button>
     </div>
 
@@ -36,6 +37,6 @@ const sessionTitle = ref('—');
       <p class="empty">Nothing sent yet.</p>
     </section>
 
-    <p class="note">Picker, composer, and sending land in later phases.</p>
+    <p class="note">Composer and sending land in later phases.</p>
   </main>
 </template>
