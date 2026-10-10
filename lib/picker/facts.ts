@@ -121,7 +121,7 @@ function isPoint(value: unknown): value is PickerPointFacts {
   return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
 }
 
-function isPageFacts(value: unknown): value is PickerPageFacts {
+export function isPageFacts(value: unknown): value is PickerPageFacts {
   return (
     isRecord(value) &&
     isString(value.url) &&
@@ -131,7 +131,7 @@ function isPageFacts(value: unknown): value is PickerPageFacts {
   );
 }
 
-function isElementFacts(value: unknown): value is PickerElementFacts {
+export function isElementFacts(value: unknown): value is PickerElementFacts {
   return (
     isRecord(value) &&
     isString(value.tag) &&

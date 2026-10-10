@@ -1,0 +1,148 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
+import type { PickerFeedback } from '@/lib/picker/facts';
+import { appendToOutbox, countOutbox, isOutboxItem, readOutbox, type OutboxItem } from './outbox';
+
+function pageItem(comment: string): OutboxItem {
+  return {
+    id: `ob_${comment}`,
+    comment,
+    capturedAt: '2026-10-10T09:00:00.000Z',
+    status: 'queued',
+    facts: {
+      page: {
+        url: 'https://example.com/cart?step=2',
+        path: '/cart',
+        query: [{ name: 'step', value: '2' }],
+        title: 'Cart',
+      },
+    },
+  };
+}
+
+function elementItem(): OutboxItem {
+  return {
+    id: 'ob_element',
+    comment: 'Checkout button is broken',
+    capturedAt: '2026-10-10T09:05:00.000Z',
+    status: 'queued',
+    facts: {
+      page: { url: 'https://example.com/cart', path: '/cart', query: [], title: 'Cart' },
+      element: {
+        tag: 'button',
+        id: 'checkout',
+        classes: ['btn'],
+        selector: 'button#checkout',
+        text: 'Checkout',
+        attributes: { role: 'button' },
+        box: { x: 10, y: 20, width: 120, height: 32 },
+        viewport: { width: 1280, height: 800 },
+        scroll: { x: 0, y: 0 },
+      },
+      extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+    },
+  };
+}
+
+describe('outbox storage', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('is empty before anything is queued', async () => {
+    expect(await readOutbox()).toEqual([]);
+    expect(await countOutbox()).toBe(0);
+  });
+
+  it('queues items in storage.local, not storage.session', async () => {
+    const item = pageItem('first');
+    await appendToOutbox(item);
+
+    expect(await browser.storage.local.get('outbox')).toEqual({ outbox: [item] });
+    expect(await browser.storage.session.get('outbox')).toEqual({});
+    expect(await readOutbox()).toEqual([item]);
+  });
+
+  it('keeps queue order across appends', async () => {
+    await appendToOutbox(pageItem('first'));
+    await appendToOutbox(pageItem('second'));
+
+    expect((await readOutbox()).map((item) => item.comment)).toEqual(['first', 'second']);
+    expect(await countOutbox()).toBe(2);
+  });
+
+  it('treats a junk store as empty', async () => {
+    await browser.storage.local.set({ outbox: 42 });
+    expect(await readOutbox()).toEqual([]);
+
+    await browser.storage.local.set({ outbox: { nope: true } });
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('drops malformed items instead of throwing', async () => {
+    const valid = pageItem('valid');
+    await browser.storage.local.set({
+      outbox: [valid, { id: 'broken' }, null, 'nope', { ...pageItem('bad status'), status: 'sent' }],
+    });
+
+    expect(await readOutbox()).toEqual([valid]);
+  });
+});
+
+describe('outbox item guard', () => {
+  it('accepts page-only and element items', () => {
+    expect(isOutboxItem(pageItem('hi'))).toBe(true);
+    expect(isOutboxItem(elementItem())).toBe(true);
+  });
+
+  it('accepts element facts without extras', () => {
+    const item = elementItem();
+    const { extras: _extras, ...facts } = item.facts;
+    expect(isOutboxItem({ ...item, facts })).toBe(true);
+  });
+
+  it('rejects broken shapes', () => {
+    expect(isOutboxItem(null)).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), id: '' })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), comment: 7 })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), capturedAt: null })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), status: 'sent' })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), facts: {} })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), facts: { page: { url: 1 } } })).toBe(false);
+  });
+
+  it('rejects broken element facts and extras', () => {
+    const item = elementItem();
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, element: { tag: 'button' } } })).toBe(false);
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, extras: { styles: { color: 1 } } } })).toBe(false);
+  });
+
+  it('accepts the facts it round-trips from a picked feedback', () => {
+    const pending: PickerFeedback = {
+      id: 'fb_1',
+      capturedAt: '2026-10-10T09:00:00.000Z',
+      page: { url: 'https://example.com/', path: '/', query: [], title: 'Example' },
+      element: {
+        tag: 'a',
+        id: null,
+        classes: [],
+        selector: 'a',
+        text: 'Home',
+        attributes: { href: '/' },
+        box: { x: 0, y: 0, width: 40, height: 16 },
+        viewport: { width: 1280, height: 800 },
+        scroll: { x: 0, y: 0 },
+      },
+      extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 40, height: 16 } },
+    };
+    const item: OutboxItem = {
+      id: 'ob_1',
+      comment: 'Home link wraps oddly',
+      capturedAt: pending.capturedAt,
+      status: 'queued',
+      facts: { page: pending.page, element: pending.element, extras: pending.extras },
+    };
+
+    expect(isOutboxItem(item)).toBe(true);
+  });
+});

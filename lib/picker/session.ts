@@ -10,7 +10,7 @@ export interface PickerSession {
   disarm(): void;
 }
 
-export function createPickerSession(onPick: (feedback: PickerFeedback) => void): PickerSession {
+export function createPickerSession(onPick: (feedback: PickerFeedback, element: Element) => void): PickerSession {
   let armed = false;
   let hovered: Element | null = null;
   let host: HTMLDivElement | null = null;
@@ -67,15 +67,16 @@ export function createPickerSession(onPick: (feedback: PickerFeedback) => void):
     event.preventDefault();
     event.stopPropagation();
     const target = event.target;
+    const element = target instanceof Element ? target : null;
     const feedback =
-      target instanceof Element
-        ? assembleFeedback(readCapture(target), {
+      element === null
+        ? null
+        : assembleFeedback(readCapture(element), {
             id: crypto.randomUUID(),
             capturedAt: new Date().toISOString(),
-          })
-        : null;
+          });
     disarm();
-    if (feedback !== null) onPick(feedback);
+    if (feedback !== null && element !== null) onPick(feedback, element);
   }
 
   function onKeyDown(event: KeyboardEvent): void {

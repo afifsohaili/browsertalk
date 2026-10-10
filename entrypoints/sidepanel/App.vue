@@ -1,11 +1,14 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
 import ArmPickerButton from '@/components/ArmPickerButton.vue';
+import CommentOnPageButton from '@/components/CommentOnPageButton.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
+import { useOutboxCount } from '@/lib/composer/use-outbox';
 
 const projectName = ref('—');
 const sessionTitle = ref('—');
+const { count: outboxCount } = useOutboxCount();
 </script>
 
 <template>
@@ -24,12 +27,12 @@ const sessionTitle = ref('—');
 
     <div class="actions">
       <ArmPickerButton />
-      <button type="button" disabled>Comment on page</button>
+      <CommentOnPageButton />
     </div>
 
     <section>
       <h2>Outbox</h2>
-      <p class="empty">Nothing waiting.</p>
+      <p class="empty">{{ outboxCount === 0 ? 'Nothing waiting.' : `${outboxCount} queued` }}</p>
     </section>
 
     <section>
@@ -37,6 +40,6 @@ const sessionTitle = ref('—');
       <p class="empty">Nothing sent yet.</p>
     </section>
 
-    <p class="note">Composer and sending land in later phases.</p>
+    <p class="note">Comments queue locally. Sending lands in a later phase.</p>
   </main>
 </template>

@@ -1,0 +1,57 @@
+import { browser } from 'wxt/browser';
+import {
+  isElementFacts,
+  isPageFacts,
+  isPickerExtras,
+  isRecord,
+  type PickerElementFacts,
+  type PickerExtras,
+  type PickerPageFacts,
+} from '@/lib/picker/facts';
+import { STORAGE_KEYS } from './keys';
+
+export interface OutboxFacts {
+  page: PickerPageFacts;
+  element?: PickerElementFacts;
+  extras?: PickerExtras;
+}
+
+export interface OutboxItem {
+  id: string;
+  comment: string;
+  capturedAt: string;
+  status: 'queued';
+  facts: OutboxFacts;
+}
+
+export function isOutboxItem(value: unknown): value is OutboxItem {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string' || value.id.length === 0) return false;
+  if (typeof value.comment !== 'string') return false;
+  if (typeof value.capturedAt !== 'string') return false;
+  if (value.status !== 'queued') return false;
+  return isOutboxFacts(value.facts);
+}
+
+function isOutboxFacts(value: unknown): value is OutboxFacts {
+  if (!isRecord(value)) return false;
+  if (!isPageFacts(value.page)) return false;
+  if (value.element !== undefined && !isElementFacts(value.element)) return false;
+  if (value.extras !== undefined && !isPickerExtras(value.extras)) return false;
+  return true;
+}
+
+export async function readOutbox(): Promise<OutboxItem[]> {
+  const stored = await browser.storage.local.get(STORAGE_KEYS.outbox);
+  const value = stored[STORAGE_KEYS.outbox];
+  return Array.isArray(value) ? value.filter(isOutboxItem) : [];
+}
+
+export async function appendToOutbox(item: OutboxItem): Promise<void> {
+  const items = await readOutbox();
+  await browser.storage.local.set({ [STORAGE_KEYS.outbox]: [...items, item] });
+}
+
+export async function countOutbox(): Promise<number> {
+  return (await readOutbox()).length;
+}
