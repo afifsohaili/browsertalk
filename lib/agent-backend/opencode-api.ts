@@ -208,44 +208,47 @@ async function requestJson(input: JsonRequest): Promise<unknown> {
   };
   if (input.body !== undefined) init.body = JSON.stringify(input.body);
 
-  let response: Response;
   try {
-    response = await fetchFn(url, init);
-  } catch (cause) {
-    if (input.ambiguousAdmission === true) {
-      throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+    let response: Response;
+    try {
+      response = await fetchFn(url, init);
+    } catch (cause) {
+      if (input.ambiguousAdmission === true) {
+        throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+      }
+      if (timedOut) throw new OpenCodeError(TIMED_OUT, { cause });
+      throw new OpenCodeError(`Cannot reach the opencode server at ${parsed.endpoint}`, { cause });
     }
-    if (timedOut) throw new OpenCodeError(TIMED_OUT, { cause });
-    throw new OpenCodeError(`Cannot reach the opencode server at ${parsed.endpoint}`, { cause });
+
+    if (response.redirected) {
+      throw new OpenCodeError(REDIRECT_REJECTED, { status: response.status });
+    }
+    if (response.status === 401) {
+      throw new BackendError('unauthorized', input.unauthorizedMessage);
+    }
+    if (response.status === 404 && input.notFoundMessage !== undefined) {
+      throw new BackendError('missing-session', input.notFoundMessage);
+    }
+    if (response.status === 409) {
+      throw new BackendError('busy', BUSY);
+    }
+    if (!response.ok) {
+      throw new OpenCodeError(`The opencode server returned HTTP ${response.status}`, {
+        status: response.status,
+      });
+    }
+
+    try {
+      return await response.json();
+    } catch (cause) {
+      if (input.ambiguousAdmission === true) {
+        throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+      }
+      if (timedOut) throw new OpenCodeError(TIMED_OUT, { cause });
+      throw new OpenCodeError(UNEXPECTED_RESPONSE, { cause });
+    }
   } finally {
     clearTimeout(timer);
-  }
-
-  if (response.redirected) {
-    throw new OpenCodeError(REDIRECT_REJECTED, { status: response.status });
-  }
-  if (response.status === 401) {
-    throw new BackendError('unauthorized', input.unauthorizedMessage);
-  }
-  if (response.status === 404 && input.notFoundMessage !== undefined) {
-    throw new BackendError('missing-session', input.notFoundMessage);
-  }
-  if (response.status === 409) {
-    throw new BackendError('busy', BUSY);
-  }
-  if (!response.ok) {
-    throw new OpenCodeError(`The opencode server returned HTTP ${response.status}`, {
-      status: response.status,
-    });
-  }
-
-  try {
-    return await response.json();
-  } catch (cause) {
-    if (input.ambiguousAdmission === true) {
-      throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
-    }
-    throw new OpenCodeError(UNEXPECTED_RESPONSE, { cause });
   }
 }
 

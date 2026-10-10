@@ -14,6 +14,7 @@ import {
   readOutbox,
   type OutboxAdmission,
   type OutboxAttempt,
+  type OutboxAttemptInput,
   type OutboxDestination,
   type OutboxItem,
 } from '@/lib/storage/outbox';
@@ -21,6 +22,7 @@ import { getBoundProject } from '@/lib/storage/projects';
 import { getSettings } from '@/lib/storage/settings';
 import {
   commitDeliveredItem,
+  hasQueuedOutboxItem,
   setOutboxAdmission,
   setOutboxAttempt,
   setOutboxDestination,
@@ -107,43 +109,72 @@ async function admit(item: OutboxItem, destination: OutboxDestination, options: 
   const key = connectionKeyOf(destination);
   const token = await getToken(key);
   const backend: AgentBackend = getAgentBackend(destination.backendId, { baseUrl: destination.endpoint, token });
-  const { sessionStrategy } = await getSettings();
-  const strategy = getSessionStrategy(pickSessionStrategyId(backend, sessionStrategy[destination.backendId]));
-
-  const session = await strategy.resolveSession({
-    backend,
-    connectionKey: key,
-    directory: destination.directory,
-    now: options.now,
-  });
-
   const now = options.now ?? new Date();
-  const attempt: OutboxAttempt = item.attempt ?? { requestID: crypto.randomUUID(), sentAt: now.toISOString() };
-  if (item.attempt === undefined) await setOutboxAttempt(item.id, attempt);
+  const attempt = await freezeAdmissionInput(item, destination, backend, now);
+  const input = attempt.admissionInput;
 
-  const text = renderPrompt({ projectName: projectName(destination.directory), item, sentAt: attempt.sentAt });
-  const attachment = backend.capabilities.images ? elementAttachment(item.facts.extras) : null;
-
+  if (!(await hasQueuedOutboxItem(item.id))) throw new Error(NO_LONGER_IN_OUTBOX);
   if (!(await hasConsent())) throw new Error(CONSENT_REQUIRED_ERROR);
 
   const result = await backend.sendFeedback({
-    sessionID: session.id,
-    text,
-    delivery: 'queue',
+    sessionID: input.sessionID,
+    text: input.text,
+    delivery: input.delivery,
     requestID: attempt.requestID,
-    ...(attachment === null ? {} : { files: [attachment] }),
+    ...(input.files === undefined || input.files.length === 0 ? {} : { files: input.files }),
   });
   if (result.admitted !== true) throw new BackendError('ambiguous-admission', MALFORMED_ADMISSION);
 
   const admission: OutboxAdmission = {
     requestID: attempt.requestID,
     messageID: result.messageID,
-    sessionID: session.id,
-    sessionTitle: session.title,
+    sessionID: input.sessionID,
+    sessionTitle: input.sessionTitle,
     admittedAt: now.toISOString(),
   };
   await setOutboxAdmission(item.id, admission);
   return commitAdmitted(item, admission);
+}
+
+interface FrozenAttempt extends OutboxAttempt {
+  admissionInput: OutboxAttemptInput;
+}
+
+async function freezeAdmissionInput(
+  item: OutboxItem,
+  destination: OutboxDestination,
+  backend: AgentBackend,
+  now: Date,
+): Promise<FrozenAttempt> {
+  const stored = item.attempt;
+  if (stored?.admissionInput !== undefined) {
+    return { requestID: stored.requestID, sentAt: stored.sentAt, admissionInput: stored.admissionInput };
+  }
+
+  const { sessionStrategy } = await getSettings();
+  const strategy = getSessionStrategy(pickSessionStrategyId(backend, sessionStrategy[destination.backendId]));
+  const session = await strategy.resolveSession({
+    backend,
+    connectionKey: connectionKeyOf(destination),
+    directory: destination.directory,
+    now,
+  });
+
+  const sentAt = stored?.sentAt ?? now.toISOString();
+  const attachment = backend.capabilities.images ? elementAttachment(item.facts.extras) : null;
+  const attempt: FrozenAttempt = {
+    requestID: stored?.requestID ?? crypto.randomUUID(),
+    sentAt,
+    admissionInput: {
+      sessionID: session.id,
+      sessionTitle: session.title,
+      text: renderPrompt({ projectName: projectName(destination.directory), item, sentAt }),
+      delivery: 'queue',
+      ...(attachment === null ? {} : { files: [attachment] }),
+    },
+  };
+  await setOutboxAttempt(item.id, attempt);
+  return attempt;
 }
 
 async function commitAdmitted(item: OutboxItem, admission: OutboxAdmission): Promise<SessionRef> {

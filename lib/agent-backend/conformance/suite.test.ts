@@ -7,8 +7,16 @@ import type {
   SessionCreateInput,
   SessionRef,
 } from '../interface';
+import { registerAgentBackend } from '../registry';
+import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
+import { listSessionStrategies } from '@/lib/session-strategy/registry';
 import { fakeConformanceCases, openCodeConformanceCase, piConformanceCase } from './cases';
-import { checkContract, checkOpaqueSessionHandles } from './checks';
+import {
+  checkAdmissionOnly,
+  checkConflictingRequestReuse,
+  checkContract,
+  checkOpaqueSessionHandles,
+} from './checks';
 import { ConformanceHarness } from './harness';
 import { describeAdapterConformance } from './suite';
 import type { AdapterConformanceCase } from './types';
@@ -48,6 +56,7 @@ function brokenCase(
   id: string,
   create: () => FakeAgentBackend,
   capabilities: BackendCapabilities,
+  overrides: Partial<AdapterConformanceCase> = {},
 ): AdapterConformanceCase {
   let adapter = create();
   return {
@@ -56,6 +65,9 @@ function brokenCase(
     capabilities,
     deterministicIds: false,
     transportSecurity: false,
+    deferTurn: false,
+    admitsWithoutMessageID: false,
+    rejectsConflictingReuse: false,
     deliveryMapping: { queue: 'queue', steer: 'steer' },
     token: null,
     pairing: null,
@@ -67,6 +79,7 @@ function brokenCase(
       adapter = create();
     },
     scenarios: {},
+    ...overrides,
   };
 }
 
@@ -83,5 +96,29 @@ describe('conformance suite teeth', () => {
     harness.reset();
 
     await expect(checkContract(harness)).rejects.toThrow();
+  });
+
+  it('fails a case that claims a deferrable turn without a scenario', async () => {
+    const harness = new ConformanceHarness(
+      brokenCase('missing-deferral', () => new FakeAgentBackend(), BROKEN_CAPABILITIES, { deferTurn: true }),
+    );
+    harness.reset();
+
+    await expect(checkAdmissionOnly(harness)).rejects.toThrow();
+  });
+
+  it('fails an adapter that silently admits a conflicting request id reuse', async () => {
+    const backend = new FakeAgentBackend();
+    const harness = new ConformanceHarness(
+      brokenCase('silent-dedup', () => backend, BROKEN_CAPABILITIES, {
+        rejectsConflictingReuse: true,
+        admissions: () => backend.feedbackCalls.length,
+      }),
+    );
+    if (listSessionStrategies().length === 0) registerBuiltinSessionStrategies();
+    registerAgentBackend('silent-dedup', () => backend);
+    harness.reset();
+
+    await expect(checkConflictingRequestReuse(harness)).rejects.toThrow();
   });
 });

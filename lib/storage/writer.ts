@@ -38,6 +38,10 @@ export function removeFromOutbox(id: string): Promise<void> {
   });
 }
 
+export function hasQueuedOutboxItem(id: string): Promise<boolean> {
+  return enqueueStorageWrite(async () => (await readOutbox()).some((item) => item.id === id));
+}
+
 export function setOutboxItemError(id: string, error: string): Promise<void> {
   return updateOutboxItem(id, (item) => ({ ...item, error }));
 }

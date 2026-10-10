@@ -40,6 +40,7 @@ export interface ConformanceScenarios {
   rejectNextSend?(kind: 'busy' | 'missing-session' | 'plain'): void;
   loseNextAdmissionReceipt?(): void;
   deferTurnCompletion?(): TurnDeferral;
+  admitWithoutMessageID?(): void;
 }
 
 export interface AdapterConformanceCase {
@@ -48,6 +49,9 @@ export interface AdapterConformanceCase {
   readonly capabilities: BackendCapabilities;
   readonly deterministicIds: boolean;
   readonly transportSecurity: boolean;
+  readonly deferTurn: boolean;
+  readonly admitsWithoutMessageID: boolean;
+  readonly rejectsConflictingReuse: boolean;
   readonly deliveryMapping: { readonly queue: string; readonly steer: string };
   readonly token: string | null;
   readonly pairing: { readonly credential: string; readonly wrongCredential: string } | null;

@@ -19,12 +19,13 @@ import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agen
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
+import { rolloverStoredSession } from '@/lib/session-strategy/persist';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { setSettings } from '@/lib/storage/settings';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
-import { appendToOutbox, appendToSent } from '@/lib/storage/writer';
+import { appendToOutbox, appendToSent, removeFromOutbox } from '@/lib/storage/writer';
 import { readSent, SENT_LIMIT, type SentItem } from '@/lib/storage/sent';
 import { onOutboxChanged } from '@/lib/composer/messages';
 import { sendQueuedItem } from './send';
@@ -528,6 +529,18 @@ class LostResponseBackend extends FakeAgentBackend {
   }
 }
 
+class FailsOnceBackend extends FakeAgentBackend {
+  private failed = false;
+
+  override async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    if (!this.failed) {
+      this.failed = true;
+      throw new Error('The fake server hiccuped');
+    }
+    return super.sendFeedback(input);
+  }
+}
+
 interface JsonBody {
   id?: string;
   text?: string;
@@ -590,6 +603,100 @@ describe('admission reliability', () => {
     expect(fakeBackend.sent).toHaveLength(1);
     expect(await readOutbox()).toEqual([]);
     expect(await readSent()).toHaveLength(1);
+  });
+
+  it('retries a lost receipt onto the original session after a rollover, and logs it against that session', async () => {
+    fakeBackend = new LostResponseBackend();
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: AMBIGUOUS_ERROR });
+
+    const failed = (await readOutbox())[0];
+    expect(failed?.attempt?.admissionInput).toEqual({
+      sessionID: 'ses_fake_1',
+      sessionTitle: DAY_TITLE,
+      text: expect.stringContaining('Checkout button is broken'),
+      delivery: 'queue',
+    });
+
+    await rolloverStoredSession({
+      backend: fakeBackend,
+      connectionKey: FAKE_KEY,
+      strategyId: 'per-day',
+      strategyKey: DAY_KEY,
+      directory: DIRECTORY,
+      title: DAY_TITLE,
+    });
+    const rolled = await getStoredSession(FAKE_KEY, 'per-day', DAY_KEY);
+    expect(rolled?.generation).toBe(1);
+    expect(rolled?.sessionID).not.toBe('ses_fake_1');
+
+    const createsBeforeRetry = fakeBackend.createInputs.length;
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.createInputs).toHaveLength(createsBeforeRetry);
+    expect(fakeBackend.feedbackCalls.map((call) => call.sessionID)).toEqual(['ses_fake_1', 'ses_fake_1']);
+    expect((await readSent())[0]).toMatchObject({
+      id: item.id,
+      session: { id: 'ses_fake_1', title: DAY_TITLE },
+    });
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('reuses the frozen session, text, and attachments when a retry meets changed backend capabilities', async () => {
+    fakeBackend = new FailsOnceBackend();
+    const item = elementItem({
+      facts: {
+        ...elementItem().facts,
+        extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
+      },
+    });
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: false,
+      error: 'The fake server hiccuped',
+    });
+
+    const frozen = (await readOutbox())[0]?.attempt?.admissionInput;
+    expect(frozen?.delivery).toBe('queue');
+    expect(frozen?.files).toEqual([
+      {
+        uri: 'data:image/png;base64,AAAA',
+        name: 'element.png',
+        description: 'Screenshot of the picked element',
+      },
+    ]);
+
+    fakeBackend = new NoImagesBackend();
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const retry = fakeBackend.feedbackCalls[0];
+    expect(retry?.sessionID).toBe(frozen?.sessionID);
+    expect(retry?.text).toBe(frozen?.text);
+    expect(retry?.files).toEqual(frozen?.files);
+    expect((await readSent())[0]?.session).toEqual({ id: frozen?.sessionID, title: DAY_TITLE });
+  });
+
+  it('transmits nothing and logs nothing when the item is discarded while the session resolves', async () => {
+    const gated = new GatedCreateBackend();
+    fakeBackend = gated;
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    const send = sendQueuedItem(item.id, { now: NOW });
+    await vi.waitFor(() => {
+      expect(gated.startedCreates).toHaveLength(1);
+    });
+
+    await removeFromOutbox(item.id);
+    gated.release();
+
+    await expect(send).resolves.toEqual({ ok: false, error: 'The item is no longer in the outbox' });
+    expect(gated.feedbackCalls).toEqual([]);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toEqual([]);
   });
 
   it('keeps a 2xx admission without a receipt retryable', async () => {
@@ -683,6 +790,27 @@ describe('admission reliability', () => {
         page: { title: 'Cart', url: 'https://example.com/cart?step=2' },
       },
     ]);
+  });
+
+  it('commits an admission receipt without a message id', async () => {
+    const item = elementItem({
+      attempt: { requestID: 'req_seed', sentAt: '2026-10-10T08:00:00.000Z' },
+      admission: {
+        requestID: 'req_seed',
+        messageID: null,
+        sessionID: 'ses_seed',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        admittedAt: '2026-10-10T08:00:01.000Z',
+      },
+    });
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls).toEqual([]);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
+    expect((await readSent())[0]?.session.id).toBe('ses_seed');
   });
 
   it('commits the outbox removal and the sent append in one storage write', async () => {

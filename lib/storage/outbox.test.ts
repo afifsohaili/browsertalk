@@ -193,6 +193,38 @@ describe('outbox item guard', () => {
     expect(isOutboxItem({ ...pageItem('hi'), admission: { ...admission, admittedAt: '' } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), admission: 'nonsense' })).toBe(false);
   });
+
+  it('accepts a frozen admission input on an attempt and rejects broken ones', () => {
+    const attempt = { requestID: 'req_1', sentAt: '2026-10-10T09:00:00.000Z' };
+    const admissionInput = {
+      sessionID: 'ses_1',
+      sessionTitle: 'Browsertalk · example · 2026-10-10',
+      text: '## Browser feedback — example',
+      delivery: 'queue',
+      files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png' }],
+    };
+
+    expect(isOutboxItem({ ...pageItem('hi'), attempt: { ...attempt, admissionInput } })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), attempt })).toBe(true);
+    expect(
+      isOutboxItem({ ...pageItem('hi'), attempt: { ...attempt, admissionInput: { ...admissionInput, sessionID: '' } } }),
+    ).toBe(false);
+    expect(
+      isOutboxItem({ ...pageItem('hi'), attempt: { ...attempt, admissionInput: { ...admissionInput, sessionTitle: 7 } } }),
+    ).toBe(false);
+    expect(
+      isOutboxItem({ ...pageItem('hi'), attempt: { ...attempt, admissionInput: { ...admissionInput, delivery: 'soon' } } }),
+    ).toBe(false);
+    expect(
+      isOutboxItem({
+        ...pageItem('hi'),
+        attempt: { ...attempt, admissionInput: { ...admissionInput, files: [{ name: 'element.png' }] } },
+      }),
+    ).toBe(false);
+    expect(
+      isOutboxItem({ ...pageItem('hi'), attempt: { ...attempt, admissionInput: 'nonsense' } }),
+    ).toBe(false);
+  });
 });
 
 describe('outbox mutations', () => {

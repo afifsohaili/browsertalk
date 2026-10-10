@@ -41,9 +41,11 @@ export class PiFixtureBridge {
   rejectNextSend: 'busy' | 'missing-session' | 'plain' | null = null;
   loseNextReceipt = false;
   turnRunning = false;
+  admitWithoutMessageID = false;
 
   private readonly sessions = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
+  private readonly admittedInputs = new Map<string, { sessionID: string; text: string }>();
 
   get admissionCount(): number {
     return this.admitted.size;
@@ -112,6 +114,7 @@ export class PiFixtureBridge {
     const body = readJsonBody(init);
     const requestID = String(body.requestID);
     const delivery = String(body.streamingBehavior);
+    const text = String(body.text ?? '');
     const attachments = Array.isArray(body.images)
       ? body.images.map((image) => String((image as { uri?: unknown }).uri ?? ''))
       : [];
@@ -124,8 +127,17 @@ export class PiFixtureBridge {
       return jsonResponse({ message: rejection }, status);
     }
 
+    const previous = this.admittedInputs.get(requestID);
+    if (previous !== undefined && (previous.sessionID !== sessionID || previous.text !== text)) {
+      this.calls.push({ operation: 'send', endpoint, credential, redirect, sessionID, requestID, delivery, admitted: false });
+      return jsonResponse({ message: 'This request id was already admitted with different content' }, 409);
+    }
+
     const known = this.admitted.get(requestID);
-    if (known === undefined) this.admitted.set(requestID, `pi.msg.${requestID}`);
+    if (known === undefined) {
+      this.admitted.set(requestID, `pi.msg.${requestID}`);
+      this.admittedInputs.set(requestID, { sessionID, text });
+    }
     const delivered = !(this.loseNextReceipt && known === undefined);
     if (!delivered) this.loseNextReceipt = false;
     this.calls.push({
@@ -140,7 +152,9 @@ export class PiFixtureBridge {
       admitted: delivered,
     });
     if (!delivered) throw new TypeError('pi bridge connection lost after admission');
-    return jsonResponse({ admitted: true, messageID: known ?? `pi.msg.${requestID}` });
+    return jsonResponse(
+      this.admitWithoutMessageID ? { admitted: true } : { admitted: true, messageID: known ?? `pi.msg.${requestID}` },
+    );
   }
 }
 
@@ -228,11 +242,10 @@ export class PiFixtureBackend implements AgentBackend {
       payload,
       { ambiguousAdmission: true },
     );
-    const messageID = readString(body, 'messageID');
-    if (body.admitted !== true || messageID === null) {
+    if (body.admitted !== true) {
       throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION);
     }
-    return { admitted: true, messageID };
+    return { admitted: true, messageID: readString(body, 'messageID') };
   }
 
   private pair(credential: string): Promise<string> {
@@ -273,33 +286,36 @@ export class PiFixtureBackend implements AgentBackend {
       init.body = JSON.stringify(payload);
     }
 
-    let response: Response;
     try {
-      const fetchFn = this.config.fetchFn;
-      if (fetchFn === undefined) throw new TypeError('no pi bridge transport');
-      response = await fetchFn(`${parsed.endpoint}${path}`, init);
-    } catch (cause) {
-      if (options.ambiguousAdmission === true) throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
-      if (timedOut) throw new Error(TIMED_OUT, { cause });
-      throw new Error(`Cannot reach the pi bridge at ${parsed.endpoint}`, { cause });
+      let response: Response;
+      try {
+        const fetchFn = this.config.fetchFn;
+        if (fetchFn === undefined) throw new TypeError('no pi bridge transport');
+        response = await fetchFn(`${parsed.endpoint}${path}`, init);
+      } catch (cause) {
+        if (options.ambiguousAdmission === true) throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+        if (timedOut) throw new Error(TIMED_OUT, { cause });
+        throw new Error(`Cannot reach the pi bridge at ${parsed.endpoint}`, { cause });
+      }
+
+      if (response.redirected) throw new Error('The pi bridge redirected the request; refusing to follow it');
+      if (response.status === 401) {
+        throw new BackendError('unauthorized', path === '/api/pair' ? 'That bridge token is wrong' : 'The bridge token was rejected');
+      }
+      if (response.status === 404 && options.ambiguousAdmission === true) throw new BackendError('missing-session', SESSION_NOT_FOUND);
+      if (response.status === 409) throw new BackendError('busy', BUSY);
+      if (!response.ok) throw new Error(`The pi bridge returned HTTP ${response.status}`);
+
+      try {
+        const body: unknown = await response.json();
+        return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+      } catch (cause) {
+        if (options.ambiguousAdmission === true) throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+        if (timedOut) throw new Error(TIMED_OUT, { cause });
+        throw new Error(UNEXPECTED_RESPONSE, { cause });
+      }
     } finally {
       clearTimeout(timer);
-    }
-
-    if (response.redirected) throw new Error('The pi bridge redirected the request; refusing to follow it');
-    if (response.status === 401) {
-      throw new BackendError('unauthorized', path === '/api/pair' ? 'That bridge token is wrong' : 'The bridge token was rejected');
-    }
-    if (response.status === 404 && options.ambiguousAdmission === true) throw new BackendError('missing-session', SESSION_NOT_FOUND);
-    if (response.status === 409) throw new BackendError('busy', BUSY);
-    if (!response.ok) throw new Error(`The pi bridge returned HTTP ${response.status}`);
-
-    try {
-      const body: unknown = await response.json();
-      return typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
-    } catch (cause) {
-      if (options.ambiguousAdmission === true) throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
-      throw new Error(UNEXPECTED_RESPONSE, { cause });
     }
   }
 }

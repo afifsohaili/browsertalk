@@ -22,6 +22,15 @@ function textResponse(body: string, status = 200): Response {
   return new Response(body, { status, headers: { 'content-type': 'application/json' } });
 }
 
+function stalledJsonResponse(init: RequestInit | undefined): Response {
+  const stream = new ReadableStream({
+    start(controller) {
+      init?.signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+    },
+  });
+  return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
 describe('redeemPairingCode', () => {
   afterEach(() => {
     resetOpenCodeFetch();
@@ -188,6 +197,17 @@ describe('OpenCodeApi.info', () => {
     });
 
     await expect(api.info()).rejects.toThrow('The opencode server sent an unexpected response');
+  });
+
+  it('keeps the deadline over a stalled response body', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      timeoutMs: 20,
+      fetchFn: vi.fn<FetchLike>(async (_url, init) => stalledJsonResponse(init)),
+    });
+
+    await expect(api.info()).rejects.toThrow('The opencode server did not answer in time');
   });
 });
 
@@ -472,6 +492,24 @@ describe('OpenCodeApi.sendPrompt', () => {
       .catch((cause: unknown) => cause);
 
     expect(backendErrorCode(error)).toBe('ambiguous-admission');
+  });
+
+  it('keeps the deadline over a stalled response body and reports an ambiguous admission', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      timeoutMs: 20,
+      fetchFn: vi.fn<FetchLike>(async (_url, init) => stalledJsonResponse(init)),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue', requestID: 'req_1' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
+    expect((error as Error).message).toBe(
+      'The opencode server did not confirm the admission; the request may have been received',
+    );
   });
 });
 

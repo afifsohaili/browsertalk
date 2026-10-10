@@ -31,10 +31,12 @@ class FakeScenarioAdapter implements AgentBackend {
 
   nextSendError: 'busy' | 'missing-session' | 'plain' | null = null;
   loseNextReceipt = false;
+  nullMessageIDNext = false;
+  turnRunning = false;
   admissionCount = 0;
 
   private readonly inner: FakeAgentBackend;
-  private readonly seen = new Set<string>();
+  private readonly admittedInputs = new Map<string, string>();
 
   constructor(id: string, capabilities: BackendCapabilities) {
     this.id = id;
@@ -65,15 +67,25 @@ class FakeScenarioAdapter implements AgentBackend {
       );
     }
 
-    const known = this.seen.has(input.requestID);
+    const fingerprint = `${input.sessionID}\u0000${input.text}`;
+    const previous = this.admittedInputs.get(input.requestID);
+    if (previous !== undefined && previous !== fingerprint) {
+      throw new BackendError('busy', 'The fake backend already admitted this request id with different content');
+    }
+    const known = previous !== undefined;
+
     const result = await this.inner.sendFeedback(input);
     if (!known) {
-      this.seen.add(input.requestID);
+      this.admittedInputs.set(input.requestID, fingerprint);
       this.admissionCount += 1;
     }
     if (this.loseNextReceipt) {
       this.loseNextReceipt = false;
       throw new BackendError('ambiguous-admission', 'The fake backend lost the admission response');
+    }
+    if (this.nullMessageIDNext) {
+      this.nullMessageIDNext = false;
+      return { admitted: true, messageID: null };
     }
     return result;
   }
@@ -87,6 +99,9 @@ function createFakeCase(id: string, label: string, capabilities: BackendCapabili
     capabilities,
     deterministicIds: false,
     transportSecurity: false,
+    deferTurn: true,
+    admitsWithoutMessageID: true,
+    rejectsConflictingReuse: true,
     deliveryMapping: { queue: 'queue', steer: 'steer' },
     token: null,
     pairing: null,
@@ -103,6 +118,18 @@ function createFakeCase(id: string, label: string, capabilities: BackendCapabili
       },
       loseNextAdmissionReceipt: () => {
         adapter.loseNextReceipt = true;
+      },
+      admitWithoutMessageID: () => {
+        adapter.nullMessageIDNext = true;
+      },
+      deferTurnCompletion: () => {
+        adapter.turnRunning = true;
+        return {
+          turnRunning: () => adapter.turnRunning,
+          release: () => {
+            adapter.turnRunning = false;
+          },
+        };
       },
     },
   };
@@ -125,9 +152,11 @@ class OpenCodeServerSim {
   rejectAuth = false;
   rejectNextSend: 'busy' | 'missing-session' | 'plain' | null = null;
   loseNextReceipt = false;
+  turnRunning = false;
 
   private readonly sessions = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
+  private readonly admittedInputs = new Map<string, { sessionID: string; text: string }>();
   private nextSession = 1;
 
   get admissionCount(): number {
@@ -194,6 +223,7 @@ class OpenCodeServerSim {
     const body = readJsonBody(init);
     const requestID = String(body.id ?? '').replace(/^msg_/, '');
     const delivery = String(body.delivery ?? '');
+    const text = String(body.text ?? '');
     const files = Array.isArray(body.files) ? body.files : [];
     const attachmentURIs = files.map((file) => String((file as { uri?: unknown }).uri ?? ''));
 
@@ -211,8 +241,17 @@ class OpenCodeServerSim {
       return jsonResponse({ _tag: tag }, status);
     }
 
+    const previous = this.admittedInputs.get(requestID);
+    if (previous !== undefined && (previous.sessionID !== sessionID || previous.text !== text)) {
+      this.calls.push({ operation: 'send', endpoint, credential, redirect, sessionID, requestID, delivery, attachmentURIs, admitted: false });
+      return jsonResponse({ _tag: 'PromptConflictError' }, 409);
+    }
+
     const known = this.admitted.get(requestID);
-    if (known === undefined) this.admitted.set(requestID, `msg_sim_${requestID}`);
+    if (known === undefined) {
+      this.admitted.set(requestID, `msg_sim_${requestID}`);
+      this.admittedInputs.set(requestID, { sessionID, text });
+    }
     const delivered = !(this.loseNextReceipt && known === undefined);
     if (!delivered) this.loseNextReceipt = false;
 
@@ -245,6 +284,9 @@ export function openCodeConformanceCase(): AdapterConformanceCase {
     },
     deterministicIds: false,
     transportSecurity: true,
+    deferTurn: true,
+    admitsWithoutMessageID: false,
+    rejectsConflictingReuse: true,
     deliveryMapping: { queue: 'queue', steer: 'steer' },
     token: OPENCODE_TOKEN,
     pairing: { credential: OPENCODE_PAIRING_CODE, wrongCredential: 'WRONG' },
@@ -270,6 +312,15 @@ export function openCodeConformanceCase(): AdapterConformanceCase {
       loseNextAdmissionReceipt: () => {
         sim.loseNextReceipt = true;
       },
+      deferTurnCompletion: () => {
+        sim.turnRunning = true;
+        return {
+          turnRunning: () => sim.turnRunning,
+          release: () => {
+            sim.turnRunning = false;
+          },
+        };
+      },
     },
   };
 }
@@ -287,6 +338,9 @@ export function piConformanceCase(): AdapterConformanceCase {
     },
     deterministicIds: true,
     transportSecurity: true,
+    deferTurn: true,
+    admitsWithoutMessageID: true,
+    rejectsConflictingReuse: true,
     deliveryMapping: { queue: 'followUp', steer: 'steer' },
     token: PI_FIXTURE_TOKEN,
     pairing: { credential: PI_FIXTURE_PAIRING_SECRET, wrongCredential: 'WRONG' },
@@ -311,6 +365,9 @@ export function piConformanceCase(): AdapterConformanceCase {
       },
       loseNextAdmissionReceipt: () => {
         bridge.loseNextReceipt = true;
+      },
+      admitWithoutMessageID: () => {
+        bridge.admitWithoutMessageID = true;
       },
       deferTurnCompletion: () => {
         bridge.startTurn();

@@ -1,5 +1,10 @@
 import { browser } from 'wxt/browser';
-import { isAgentBackendId, type AgentBackendId } from '@/lib/agent-backend/interface';
+import {
+  isAgentBackendId,
+  type AgentBackendId,
+  type DeliveryMode,
+  type FeedbackAttachment,
+} from '@/lib/agent-backend/interface';
 import {
   isElementFacts,
   isPageFacts,
@@ -23,9 +28,18 @@ export interface OutboxDestination {
   directory: string;
 }
 
+export interface OutboxAttemptInput {
+  sessionID: string;
+  sessionTitle: string;
+  text: string;
+  delivery: DeliveryMode;
+  files?: FeedbackAttachment[];
+}
+
 export interface OutboxAttempt {
   requestID: string;
   sentAt: string;
+  admissionInput?: OutboxAttemptInput;
 }
 
 export interface OutboxAdmission {
@@ -65,7 +79,32 @@ export function isOutboxAttempt(value: unknown): value is OutboxAttempt {
   if (!isRecord(value)) return false;
   if (typeof value.requestID !== 'string' || value.requestID.length === 0) return false;
   if (typeof value.sentAt !== 'string' || value.sentAt.length === 0) return false;
+  if (value.admissionInput !== undefined && !isOutboxAttemptInput(value.admissionInput)) return false;
   return true;
+}
+
+export function isOutboxAttemptInput(value: unknown): value is OutboxAttemptInput {
+  if (!isRecord(value)) return false;
+  if (typeof value.sessionID !== 'string' || value.sessionID.length === 0) return false;
+  if (typeof value.sessionTitle !== 'string') return false;
+  if (typeof value.text !== 'string') return false;
+  if (value.delivery !== 'queue' && value.delivery !== 'steer') return false;
+  if (value.files !== undefined && !isAttachmentList(value.files)) return false;
+  return true;
+}
+
+function isAttachmentList(value: unknown): value is FeedbackAttachment[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.uri === 'string' &&
+        entry.uri.length > 0 &&
+        (entry.name === undefined || typeof entry.name === 'string') &&
+        (entry.description === undefined || typeof entry.description === 'string'),
+    )
+  );
 }
 
 export function isOutboxAdmission(value: unknown): value is OutboxAdmission {

@@ -362,6 +362,11 @@ export async function checkAdmissionOnly(h: ConformanceHarness): Promise<void> {
   const c = h.adapter;
   await prepareSendFlow(h);
 
+  if (c.deferTurn) {
+    expect(c.scenarios.deferTurnCompletion).toBeTypeOf('function');
+  } else {
+    expect(c.scenarios.deferTurnCompletion).toBeUndefined();
+  }
   const deferral = c.scenarios.deferTurnCompletion?.();
   const item = elementItem();
   await appendToOutbox(item);
@@ -378,6 +383,73 @@ export async function checkAdmissionOnly(h: ConformanceHarness): Promise<void> {
 
   const raw = transportSends(h);
   if (raw.length > 0) expect(raw).toHaveLength(1);
+}
+
+export async function checkNullMessageID(h: ConformanceHarness): Promise<void> {
+  const c = h.adapter;
+  if (!c.admitsWithoutMessageID) {
+    expect(c.scenarios.admitWithoutMessageID).toBeUndefined();
+    return;
+  }
+  expect(c.scenarios.admitWithoutMessageID).toBeTypeOf('function');
+  await prepareSendFlow(h);
+
+  const item = elementItem();
+  await appendToOutbox(item);
+  c.scenarios.admitWithoutMessageID?.();
+
+  const outcome = await sendQueuedItem(item.id, { now: NOW });
+  expect(outcome).toMatchObject({ ok: true });
+  expect(await readOutbox()).toEqual([]);
+  expect((await readSent()).map((entry) => entry.id)).toEqual([item.id]);
+
+  const callsBefore = h.transport().length;
+  const receipt = elementItem({
+    id: 'ob_receipt_null',
+    attempt: { requestID: 'req_null', sentAt: '2026-10-10T08:00:00.000Z' },
+    admission: {
+      requestID: 'req_null',
+      messageID: null,
+      sessionID: 'ses_seed',
+      sessionTitle: DAY_TITLE,
+      admittedAt: '2026-10-10T08:00:01.000Z',
+    },
+  });
+  await appendToOutbox(receipt);
+
+  const resumed = await sendQueuedItem(receipt.id, { now: NOW });
+  expect(resumed).toMatchObject({ ok: true });
+  expect(h.transport()).toHaveLength(callsBefore);
+  expect(h.seam.sends.map((input) => input.requestID)).not.toContain('req_null');
+  expect(await readSent()).toHaveLength(2);
+}
+
+export async function checkConflictingRequestReuse(h: ConformanceHarness): Promise<void> {
+  const c = h.adapter;
+  if (!c.rejectsConflictingReuse) return;
+  await prepareSendFlow(h);
+
+  const item = elementItem();
+  await appendToOutbox(item);
+  const first = await sendQueuedItem(item.id, { now: NOW });
+  expect(first).toMatchObject({ ok: true });
+
+  const admitted = h.seam.admitted[0];
+  expect(admitted).toBeDefined();
+
+  const error = await h
+    .backend()
+    .sendFeedback({
+      sessionID: admitted?.sessionID ?? '',
+      text: `${admitted?.text ?? ''}\n\n(conflicting reuse)`,
+      delivery: 'queue',
+      requestID: admitted?.requestID ?? '',
+    })
+    .catch((cause: unknown) => cause);
+
+  expect(backendErrorCode(error)).not.toBeNull();
+  expect(c.admissions()).toBe(1);
+  expect(await readSent()).toHaveLength(1);
 }
 
 export async function checkTransportSecurity(h: ConformanceHarness): Promise<void> {

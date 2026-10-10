@@ -8,6 +8,7 @@ import { readSent, type SentItem } from './sent';
 import {
   appendToOutbox,
   commitDeliveredItem,
+  hasQueuedOutboxItem,
   removeFromOutbox,
   setOutboxAdmission,
   setOutboxAttempt,
@@ -65,6 +66,19 @@ describe('serialized storage writer', () => {
     ]);
 
     expect((await readOutbox()).map((item) => item.comment)).toEqual(['b', 'c', 'd', 'f', 'g']);
+  });
+
+  it('checks queued existence on the writer queue so a discard cannot interleave', async () => {
+    await appendToOutbox(pageItem('first'));
+    expect(await hasQueuedOutboxItem('ob_first')).toBe(true);
+
+    const discard = removeFromOutbox('ob_first');
+    const check = hasQueuedOutboxItem('ob_first');
+
+    await discard;
+    await expect(check).resolves.toBe(false);
+    await expect(hasQueuedOutboxItem('ob_first')).resolves.toBe(false);
+    await expect(hasQueuedOutboxItem('ob_missing')).resolves.toBe(false);
   });
 
   it('commits the outbox removal and the sent append in one write', async () => {
@@ -130,7 +144,16 @@ describe('serialized storage writer', () => {
   it('records the attempt and the admission on one item without touching the others', async () => {
     await appendToOutbox(pageItem('first'));
     await appendToOutbox(pageItem('second'));
-    const attempt = { requestID: 'req_1', sentAt: '2026-10-10T09:00:00.000Z' };
+    const attempt = {
+      requestID: 'req_1',
+      sentAt: '2026-10-10T09:00:00.000Z',
+      admissionInput: {
+        sessionID: 'ses_1',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        text: '## Browser feedback — example',
+        delivery: 'queue' as const,
+      },
+    };
     const admission = {
       requestID: 'req_1',
       messageID: 'msg_1',
