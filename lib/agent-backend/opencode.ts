@@ -23,6 +23,7 @@ export class OpenCodeBackend implements AgentBackend {
   readonly id = 'opencode';
   readonly label = 'opencode';
   readonly capabilities = { projects: true };
+  readonly defaultSessionStrategy = 'per-day';
 
   constructor(private readonly config: OpenCodeBackendConfig = {}) {}
 

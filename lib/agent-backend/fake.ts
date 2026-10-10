@@ -12,9 +12,11 @@ export class FakeAgentBackend implements AgentBackend {
   readonly id = 'fake';
   readonly label = 'Fake';
   readonly capabilities = { projects: true };
+  readonly defaultSessionStrategy = 'per-day';
 
   readonly sent: FeedbackSendInput[] = [];
   readonly sessions: SessionRef[] = [];
+  readonly createInputs: SessionCreateInput[] = [];
 
   private nextID = 1;
 
@@ -28,6 +30,7 @@ export class FakeAgentBackend implements AgentBackend {
 
   async createSession(input: SessionCreateInput): Promise<SessionRef> {
     const session = { id: `ses_fake_${this.nextID++}`, title: input.title };
+    this.createInputs.push(input);
     this.sessions.push(session);
     return session;
   }

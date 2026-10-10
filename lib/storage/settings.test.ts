@@ -8,7 +8,11 @@ describe('settings storage', () => {
   });
 
   it('defaults to opencode on the loopback server when nothing is stored', async () => {
-    expect(await getSettings()).toEqual({ backendId: DEFAULT_BACKEND_ID, serverUrl: DEFAULT_SERVER_URL });
+    expect(await getSettings()).toEqual({
+      backendId: DEFAULT_BACKEND_ID,
+      serverUrl: DEFAULT_SERVER_URL,
+      sessionStrategy: {},
+    });
   });
 
   it('returns stored values over the defaults', async () => {
@@ -17,18 +21,51 @@ describe('settings storage', () => {
       'settings.serverUrl': 'http://127.0.0.1:4096',
     });
 
-    expect(await getSettings()).toEqual({ backendId: 'fake', serverUrl: 'http://127.0.0.1:4096' });
+    expect(await getSettings()).toEqual({
+      backendId: 'fake',
+      serverUrl: 'http://127.0.0.1:4096',
+      sessionStrategy: {},
+    });
   });
 
   it('persists partial updates and keeps the other default', async () => {
     await setSettings({ serverUrl: 'http://127.0.0.1:4096' });
 
-    expect(await getSettings()).toEqual({ backendId: DEFAULT_BACKEND_ID, serverUrl: 'http://127.0.0.1:4096' });
+    expect(await getSettings()).toEqual({
+      backendId: DEFAULT_BACKEND_ID,
+      serverUrl: 'http://127.0.0.1:4096',
+      sessionStrategy: {},
+    });
   });
 
   it('falls back to the defaults for junk values', async () => {
     await browser.storage.local.set({ 'settings.backendId': 'nope', 'settings.serverUrl': 42 });
 
-    expect(await getSettings()).toEqual({ backendId: DEFAULT_BACKEND_ID, serverUrl: DEFAULT_SERVER_URL });
+    expect(await getSettings()).toEqual({
+      backendId: DEFAULT_BACKEND_ID,
+      serverUrl: DEFAULT_SERVER_URL,
+      sessionStrategy: {},
+    });
+  });
+
+  it('reads per-backend strategy overrides and drops junk entries', async () => {
+    await browser.storage.local.set({
+      'settings.sessionStrategy': { opencode: 'sticky', pi: 'nonsense', other: 'per-day', fake: 42 },
+    });
+
+    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky' });
+  });
+
+  it('persists a strategy override map', async () => {
+    await setSettings({ sessionStrategy: { fake: 'sticky' } });
+
+    expect((await getSettings()).sessionStrategy).toEqual({ fake: 'sticky' });
+  });
+
+  it('replaces the whole override map on a later write', async () => {
+    await setSettings({ sessionStrategy: { opencode: 'sticky' } });
+    await setSettings({ sessionStrategy: { fake: 'per-day' } });
+
+    expect((await getSettings()).sessionStrategy).toEqual({ fake: 'per-day' });
   });
 });

@@ -1,3 +1,5 @@
+import type { SessionStrategyId } from '@/lib/session-strategy/interface';
+
 export const AGENT_BACKEND_IDS = ['opencode', 'pi', 'fake'] as const;
 
 export type AgentBackendId = (typeof AGENT_BACKEND_IDS)[number];
@@ -47,6 +49,7 @@ export interface AgentBackend {
   readonly id: AgentBackendId;
   readonly label: string;
   readonly capabilities: BackendCapabilities;
+  readonly defaultSessionStrategy: SessionStrategyId;
   ping(): Promise<BackendStatus>;
   listProjects(): Promise<Project[]>;
   createSession(input: SessionCreateInput): Promise<SessionRef>;

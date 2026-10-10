@@ -2,6 +2,7 @@ export const STORAGE_KEYS = {
   settings: {
     backendId: 'settings.backendId',
     serverUrl: 'settings.serverUrl',
+    sessionStrategy: 'settings.sessionStrategy',
   },
   auth: {
     token: 'auth.token',
@@ -9,4 +10,5 @@ export const STORAGE_KEYS = {
   projects: {
     byOrigin: 'projects.byOrigin',
   },
+  sessions: 'sessions',
 } as const;
