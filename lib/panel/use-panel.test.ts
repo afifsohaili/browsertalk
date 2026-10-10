@@ -2,9 +2,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { effectScope } from 'vue';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import { FakeAgentBackend } from '@/lib/agent-backend/fake';
+import type { Project } from '@/lib/agent-backend/interface';
+import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
+import { registerAgentBackend } from '@/lib/agent-backend/registry';
+import { registerConnectionHandler } from '@/lib/connection/messages';
+import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
-import { bindProject } from '@/lib/storage/projects';
+import { setToken } from '@/lib/storage/auth';
+import { bindProject, getBoundProject } from '@/lib/storage/projects';
 import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
 import { setSettings } from '@/lib/storage/settings';
 import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
@@ -19,6 +25,24 @@ const ORIGIN = 'https://example.com';
 const PAGE_URL = `${ORIGIN}/cart?step=2`;
 const DIRECTORY = '/home/afif/example';
 const STICKY_TITLE = 'Browsertalk · example';
+
+const DEFAULT_PROJECTS: Project[] = [
+  { id: 'proj_fake', name: 'fake-project', directory: '/tmp/fake-project' },
+  { id: 'proj_other', name: 'other-project', directory: '/tmp/other-project' },
+];
+
+const offlineFetch = async (): Promise<Response> => {
+  throw new TypeError('fetch failed');
+};
+
+class PanelFakeBackend extends FakeAgentBackend {
+  override async listProjects(): Promise<Project[]> {
+    return fakeProjects;
+  }
+}
+
+let fakeProjects = DEFAULT_PROJECTS;
+let fakeBackend = new PanelFakeBackend();
 
 function tab(id: number, url?: string): Tab {
   return { id, url } as unknown as Tab;
@@ -61,13 +85,17 @@ async function loadedPanel(): Promise<{ panel: Panel; stop: () => void }> {
 
 describe('panel logic', () => {
   beforeAll(() => {
-    registerBuiltinBackends();
+    registerAgentBackend('fake', () => fakeBackend);
+    registerAgentBackend('opencode', () => new OpenCodeBackend({ fetchFn: offlineFetch }));
     registerBuiltinSessionStrategies();
   });
 
   beforeEach(async () => {
     fakeBrowser.reset();
+    fakeBackend = new PanelFakeBackend();
+    fakeProjects = DEFAULT_PROJECTS;
     registerPanelHandler();
+    registerConnectionHandler();
     await setSettings({ backendId: 'fake', sessionStrategy: { fake: 'sticky' } });
   });
 
@@ -295,6 +323,138 @@ describe('panel logic', () => {
 
     expect(panel.outbox.value).toEqual([]);
     expect(panel.target.value?.origin).toBe(ORIGIN);
+  });
+
+  describe('project binding', () => {
+    it('offers the server projects for an unbound origin', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      expect(targetState(panel.target.value)).toBe('unbound');
+
+      await panel.openProjects();
+
+      expect(panel.projectsOpen.value).toBe(true);
+      expect(panel.projectsLoading.value).toBe(false);
+      expect(panel.projectsError.value).toBeNull();
+      expect(panel.projects.value).toEqual(DEFAULT_PROJECTS);
+      stop();
+    });
+
+    it('binds the picked project and updates the header', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      await panel.openProjects();
+
+      await panel.chooseProject('/tmp/fake-project');
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.error.value).toBeNull();
+      expect(panel.target.value).toEqual({ origin: ORIGIN, project: '/tmp/fake-project', session: null });
+      expect(await getBoundProject(ORIGIN)).toBe('/tmp/fake-project');
+      stop();
+    });
+
+    it('re-binds through the change affordance', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(ORIGIN, '/tmp/fake-project');
+      const { panel, stop } = await loadedPanel();
+      expect(panel.target.value?.project).toBe('/tmp/fake-project');
+
+      await panel.openProjects();
+      await panel.chooseProject('/tmp/other-project');
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.target.value?.project).toBe('/tmp/other-project');
+      expect(await getBoundProject(ORIGIN)).toBe('/tmp/other-project');
+      stop();
+    });
+
+    it('keeps the list open with the honest error when the server is unreachable', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await setSettings({ backendId: 'opencode' });
+      await setToken('tok_offline');
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openProjects();
+
+      expect(panel.projectsOpen.value).toBe(true);
+      expect(panel.projectsLoading.value).toBe(false);
+      expect(panel.projects.value).toEqual([]);
+      expect(panel.projectsError.value).toBe('Cannot reach the opencode server at http://127.0.0.1:15001');
+      stop();
+    });
+
+    it('shows an honest empty list without inventing projects', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      fakeProjects = [];
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openProjects();
+
+      expect(panel.projectsOpen.value).toBe(true);
+      expect(panel.projects.value).toEqual([]);
+      expect(panel.projectsError.value).toBeNull();
+      stop();
+    });
+
+    it('reports a failed bind without faking success', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      await panel.openProjects();
+
+      await panel.chooseProject('   ');
+
+      expect(panel.projectsOpen.value).toBe(true);
+      expect(panel.projectsError.value).toBe('Pick a project first');
+      expect(panel.target.value?.project).toBeNull();
+      expect(await getBoundProject(ORIGIN)).toBeNull();
+      stop();
+    });
+
+    it('refuses to open the list with no active page', async () => {
+      stubQuery([tab(1, 'chrome://newtab/')]);
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openProjects();
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.error.value).toBe('No page to target');
+      stop();
+    });
+
+    it('closes the list when the active origin changes', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+      await panel.openProjects();
+      expect(panel.projectsOpen.value).toBe(true);
+
+      stubQuery([tab(2, 'https://other.example.org/page')]);
+      await triggerEvent(browser.tabs.onActivated, { tabId: 2, windowId: 0 });
+
+      await vi.waitFor(() => {
+        expect(panel.projectsOpen.value).toBe(false);
+      });
+      stop();
+    });
+
+    it('sends a queued feedback to the project chosen in the panel', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await appendToOutbox(item({ id: 'ob_bind_send' }));
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openProjects();
+      await panel.chooseProject('/tmp/other-project');
+
+      await expect(sendQueuedItem('ob_bind_send')).resolves.toMatchObject({ ok: true });
+
+      expect(fakeBackend.createInputs).toEqual([
+        { directory: '/tmp/other-project', title: 'Browsertalk · other-project' },
+      ]);
+      expect(fakeBackend.sent[0]?.sessionID).toBe('ses_fake_1');
+      expect(fakeBackend.sent[0]?.text).toContain('## Browser feedback — other-project');
+      expect(await readOutbox()).toEqual([]);
+      stop();
+    });
   });
 });
 

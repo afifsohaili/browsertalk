@@ -1,7 +1,8 @@
 import { getCurrentScope, onScopeDispose, ref, type Ref } from 'vue';
 import { browser } from 'wxt/browser';
-import type { SessionRef } from '@/lib/agent-backend/interface';
+import type { Project, SessionRef } from '@/lib/agent-backend/interface';
 import { broadcastOutboxChanged, onOutboxChanged } from '@/lib/composer/messages';
+import { requestBind, requestProjects } from '@/lib/connection/messages';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { readOutbox, removeFromOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent, type SentItem } from '@/lib/storage/sent';
@@ -42,10 +43,18 @@ export interface Panel {
   retrying: Ref<string | null>;
   rollingOver: Ref<boolean>;
   error: Ref<string | null>;
+  projectsOpen: Ref<boolean>;
+  projectsLoading: Ref<boolean>;
+  projects: Ref<Project[]>;
+  projectsError: Ref<string | null>;
+  binding: Ref<boolean>;
   refresh: () => Promise<void>;
   retry: (itemId: string) => Promise<void>;
   discard: (itemId: string) => Promise<void>;
   newSession: () => Promise<void>;
+  openProjects: () => Promise<void>;
+  closeProjects: () => void;
+  chooseProject: (directory: string) => Promise<void>;
 }
 
 export function usePanel(): Panel {
@@ -56,6 +65,12 @@ export function usePanel(): Panel {
   const retrying = ref<string | null>(null);
   const rollingOver = ref(false);
   const error = ref<string | null>(null);
+  const projectsOpen = ref(false);
+  const projectsLoading = ref(false);
+  const projects = ref<Project[]>([]);
+  const projectsError = ref<string | null>(null);
+  const binding = ref(false);
+  let projectsOrigin: string | null = null;
 
   async function run(action: () => Promise<void>): Promise<void> {
     error.value = null;
@@ -69,9 +84,11 @@ export function usePanel(): Panel {
   async function refreshTarget(): Promise<void> {
     const origin = await activeOrigin();
     if (origin === null) {
+      closeProjects();
       target.value = { origin: null, project: null, session: null };
       return;
     }
+    if (projectsOpen.value && projectsOrigin !== origin) closeProjects();
 
     const result = await requestTargetRead(origin);
     if (!result.ok) {
@@ -136,6 +153,53 @@ export function usePanel(): Panel {
     rollingOver.value = false;
   }
 
+  function closeProjects(): void {
+    projectsOpen.value = false;
+    projectsOrigin = null;
+    projectsError.value = null;
+  }
+
+  async function openProjects(): Promise<void> {
+    const current = target.value;
+    if (current === null || current.origin === null) {
+      error.value = NO_PAGE_TO_TARGET;
+      return;
+    }
+
+    projectsOrigin = current.origin;
+    projectsOpen.value = true;
+    projectsLoading.value = true;
+    projectsError.value = null;
+
+    const result = await requestProjects();
+    projectsLoading.value = false;
+    if (!result.ok) {
+      projects.value = [];
+      projectsError.value = result.error;
+      return;
+    }
+    projects.value = result.projects;
+  }
+
+  async function chooseProject(directory: string): Promise<void> {
+    const current = target.value;
+    if (current === null || current.origin === null) {
+      error.value = NO_PAGE_TO_TARGET;
+      return;
+    }
+
+    binding.value = true;
+    const result = await requestBind(current.origin, directory);
+    binding.value = false;
+    if (!result.ok) {
+      projectsError.value = result.error;
+      return;
+    }
+
+    closeProjects();
+    await run(refreshTarget);
+  }
+
   function reloadTarget(): void {
     void run(refreshTarget);
   }
@@ -184,10 +248,18 @@ export function usePanel(): Panel {
     retrying,
     rollingOver,
     error,
+    projectsOpen,
+    projectsLoading,
+    projects,
+    projectsError,
+    binding,
     refresh,
     retry,
     discard,
     newSession,
+    openProjects,
+    closeProjects,
+    chooseProject,
   };
 }
 

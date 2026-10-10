@@ -17,9 +17,30 @@ const {
   decline: declineConsent,
 } = useConsent();
 
-const { loaded, target, outbox, sent, retrying, rollingOver, error, retry, discard, newSession } = usePanel();
+const {
+  loaded,
+  target,
+  outbox,
+  sent,
+  retrying,
+  rollingOver,
+  error,
+  retry,
+  discard,
+  newSession,
+  projectsOpen,
+  projectsLoading,
+  projects,
+  projectsError,
+  binding,
+  openProjects,
+  closeProjects,
+  chooseProject,
+} = usePanel();
 
 const state = computed(() => targetState(target.value));
+
+const bound = computed(() => state.value === 'no-session' || state.value === 'ready');
 
 const projectText = computed(() => {
   switch (state.value) {
@@ -39,8 +60,6 @@ const sessionText = computed(() => {
   if (current === null || current.project === null) return '—';
   return current.session?.title ?? 'No session yet';
 });
-
-const canRollOver = computed(() => state.value === 'no-session' || state.value === 'ready');
 </script>
 
 <template>
@@ -62,17 +81,47 @@ const canRollOver = computed(() => state.value === 'no-session' || state.value =
       <div class="row">
         <span class="label">Project</span>
         <span class="value project-value" :title="target?.project ?? undefined">{{ projectText }}</span>
+        <button v-if="bound" type="button" class="change-project" title="Change project" @click="openProjects">
+          change
+        </button>
       </div>
       <div class="row">
         <span class="label">Session</span>
         <span class="value session-value" :title="target?.session?.title ?? undefined">{{ sessionText }}</span>
       </div>
+      <button v-if="state === 'unbound'" type="button" class="choose-project" @click="openProjects">
+        Choose project
+      </button>
       <p v-if="target?.session" class="session-id" :data-session-id="target.session.id">
         {{ target.session.id }}
       </p>
-      <button type="button" class="new-session" :disabled="!canRollOver || rollingOver" @click="newSession">
+      <button type="button" class="new-session" :disabled="!bound || rollingOver" @click="newSession">
         {{ rollingOver ? 'Starting…' : '+ new session' }}
       </button>
+    </section>
+
+    <section v-if="projectsOpen" class="projects">
+      <p v-if="projectsLoading" class="empty">Loading projects…</p>
+      <p v-else-if="projectsError" class="projects-error">{{ projectsError }}</p>
+      <p v-else-if="projects.length === 0" class="empty">No projects on the server.</p>
+      <ul v-else class="project-list">
+        <li v-for="project in projects" :key="project.directory">
+          <button
+            type="button"
+            class="project-choice"
+            :class="{ current: project.directory === target?.project }"
+            :disabled="binding"
+            @click="chooseProject(project.directory)"
+          >
+            <span class="project-name">{{ project.name }}</span>
+            <span class="project-dir">{{ project.directory }}</span>
+          </button>
+        </li>
+      </ul>
+      <div class="projects-actions">
+        <button v-if="!projectsLoading" type="button" :disabled="binding" @click="openProjects">Refresh</button>
+        <button type="button" @click="closeProjects">Close</button>
+      </div>
     </section>
 
     <div class="actions">
@@ -118,6 +167,71 @@ const canRollOver = computed(() => state.value === 'no-session' || state.value =
 </template>
 
 <style scoped>
+.change-project {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: light-dark(#636366, #aeaeb2);
+}
+
+.choose-project {
+  text-align: center;
+}
+
+.projects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projects-error {
+  margin: 0;
+  font-size: 11px;
+  color: #ff3b30;
+  overflow-wrap: anywhere;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.project-choice.current {
+  border-color: #34c759;
+}
+
+.project-name {
+  font-size: 12px;
+}
+
+.project-dir {
+  font-size: 10px;
+  color: light-dark(#8e8e93, #98989d);
+  overflow-wrap: anywhere;
+}
+
+.projects-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.projects-actions button {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  text-align: center;
+}
+
 .new-session {
   margin-top: 2px;
   text-align: center;
