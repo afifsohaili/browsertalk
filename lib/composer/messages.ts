@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { requestSend } from '@/lib/send/trigger';
 import { clearPendingFeedback, getPendingFeedback } from '@/lib/storage/pending';
 import { appendToOutbox, countOutbox } from '@/lib/storage/outbox';
@@ -52,6 +53,8 @@ export function registerComposerHandler(): void {
 }
 
 async function queueComment(request: ComposerQueueRequest): Promise<ComposerQueueResult> {
+  if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
+
   const meta = { id: crypto.randomUUID(), now: new Date().toISOString() };
 
   let item;
@@ -71,6 +74,8 @@ async function queueComment(request: ComposerQueueRequest): Promise<ComposerQueu
 }
 
 async function queueUrlOnly(): Promise<ComposerQueueResult> {
+  if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
+
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
   if (tab === undefined) return { ok: false, error: NO_ACTIVE_PAGE };

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { CONSENT_REQUIRED_ERROR, acceptConsent } from '@/lib/consent/consent';
 import type { PickerFeedback } from '@/lib/picker/facts';
 import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
@@ -81,8 +82,9 @@ function storedItem(): OutboxItem {
 }
 
 describe('composer messaging', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     fakeBrowser.reset();
+    await acceptConsent();
     registerComposerHandler();
     requestedSends = [];
     setSendDispatcher((itemId) => requestedSends.push(itemId));
@@ -255,5 +257,43 @@ describe('composer messaging', () => {
     });
 
     await expect(browser.runtime.sendMessage({ type: 'picker/arm' })).resolves.toBe('other module');
+  });
+
+  describe('before the feedback disclosure is accepted', () => {
+    beforeEach(() => {
+      fakeBrowser.reset();
+      registerComposerHandler();
+      requestedSends = [];
+      setSendDispatcher((itemId) => requestedSends.push(itemId));
+    });
+
+    it('refuses to queue a page comment', async () => {
+      await expect(
+        requestQueueComment('Layout jumps', 'page', { url: 'https://example.com/cart', title: 'Cart' }),
+      ).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+
+      expect(await readOutbox()).toEqual([]);
+      expect(requestedSends).toEqual([]);
+    });
+
+    it('refuses to queue an element comment even with a pending pick', async () => {
+      await setPendingFeedback(sampleFeedback());
+
+      await expect(
+        requestQueueComment('Button is misaligned', 'element', { url: 'https://example.com/cart', title: 'Cart' }),
+      ).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+
+      expect(await readOutbox()).toEqual([]);
+      expect(requestedSends).toEqual([]);
+    });
+
+    it('refuses to queue the active page URL only', async () => {
+      stubQuery([tab(4, 'https://example.com/page?q=1', 'Page')]);
+
+      await expect(requestQueueUrlOnly()).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+
+      expect(await readOutbox()).toEqual([]);
+      expect(requestedSends).toEqual([]);
+    });
   });
 });

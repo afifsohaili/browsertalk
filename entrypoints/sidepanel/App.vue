@@ -2,10 +2,20 @@
 import { computed } from 'vue';
 import ArmPickerButton from '@/components/ArmPickerButton.vue';
 import CommentOnPageButton from '@/components/CommentOnPageButton.vue';
+import ConsentGate from '@/components/ConsentGate.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
+import { useConsent } from '@/lib/consent/use-consent';
 import { formatTimestamp, targetState, usePanel } from '@/lib/panel/use-panel';
 import { projectName } from '@/lib/session-strategy/interface';
+
+const {
+  loaded: consentLoaded,
+  status: consentStatus,
+  accepted: consentAccepted,
+  accept: acceptConsent,
+  decline: declineConsent,
+} = useConsent();
 
 const { loaded, target, outbox, sent, retrying, rollingOver, error, retry, discard, newSession } = usePanel();
 
@@ -34,7 +44,13 @@ const canRollOver = computed(() => state.value === 'no-session' || state.value =
 </script>
 
 <template>
-  <main class="panel">
+  <ConsentGate
+    v-if="consentLoaded && !consentAccepted"
+    :status="consentStatus"
+    @accept="acceptConsent"
+    @decline="declineConsent"
+  />
+  <main v-else-if="consentLoaded" class="panel">
     <header>
       <h1>Browsertalk</h1>
       <SettingsLink />

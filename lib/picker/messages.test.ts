@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
 import { getPendingFeedback } from '@/lib/storage/pending';
 import type { PickerFeedback } from './facts';
 import {
@@ -63,8 +64,9 @@ function sampleFeedback(): PickerFeedback {
 }
 
 describe('picker messaging', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     fakeBrowser.reset();
+    await acceptConsent();
     registerPickerMessageHandler();
     setElementScreenshotter({ captureFor: vi.fn(async () => null) });
   });
@@ -187,5 +189,47 @@ describe('picker messaging', () => {
     });
 
     await expect(browser.runtime.sendMessage({ type: 'connection/status' })).resolves.toBe('other module');
+  });
+
+  describe('before the feedback disclosure is accepted', () => {
+    beforeEach(() => {
+      fakeBrowser.reset();
+      registerPickerMessageHandler();
+      setElementScreenshotter({ captureFor: vi.fn(async () => null) });
+    });
+
+    it('refuses to arm the picker', async () => {
+      stubQuery([tab(7)]);
+      const send = stubSendMessage({ ok: true, armed: true });
+
+      await expect(armPickerOnActiveTab()).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('refuses to arm the picker from a surface', async () => {
+      stubQuery([tab(7)]);
+      stubSendMessage({ ok: true, armed: true });
+
+      await expect(requestArmPicker()).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+    });
+
+    it('refuses to arm the picker after a decline', async () => {
+      await declineConsent();
+      stubQuery([tab(7)]);
+
+      await expect(armPickerOnActiveTab()).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+    });
+
+    it('refuses to hold a capture', async () => {
+      const captureFor = vi.fn(async () => null);
+      setElementScreenshotter({ captureFor });
+
+      await expect(notifyCaptured(sampleFeedback())).resolves.toEqual({
+        ok: false,
+        error: CONSENT_REQUIRED_ERROR,
+      });
+      expect(await getPendingFeedback()).toBeNull();
+      expect(captureFor).not.toHaveBeenCalled();
+    });
   });
 });

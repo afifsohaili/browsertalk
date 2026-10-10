@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'opencode Browsertalk',
     description: 'Send browser feedback straight into opencode sessions.',
-    permissions: ['storage', 'sidePanel', 'contextMenus', 'activeTab'],
+    permissions: ['storage', 'sidePanel', 'contextMenus'],
     host_permissions: ['<all_urls>'],
     commands: {
       'arm-picker': {

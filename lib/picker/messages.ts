@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { setPendingFeedback } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
@@ -45,6 +46,7 @@ export async function respondToPickerRequest(
     case 'picker/arm':
       return armPickerOnActiveTab();
     case 'picker/captured': {
+      if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
       if (!isPickerFeedback(request.feedback)) return { ok: false, error: INVALID_CAPTURE };
       const screenshot = await activeScreenshotter.captureFor(request.feedback, context.windowId);
       await setPendingFeedback(withScreenshot(request.feedback, screenshot));
@@ -107,6 +109,7 @@ export async function armPickerOnActiveTab(): Promise<ArmPickerResult> {
 }
 
 export async function armPickerOnTab(tabId: number): Promise<ArmPickerResult> {
+  if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
   try {
     const response = await browser.tabs.sendMessage(tabId, { type: 'picker/arm' } satisfies PickerMessage);
     return isArmPickerResult(response) ? response : { ok: false, error: NO_CONTENT_SCRIPT };
