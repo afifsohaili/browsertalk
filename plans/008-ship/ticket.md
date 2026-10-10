@@ -4,7 +4,7 @@
 
 **Blocked by:** 007 — Panel.
 
-**Status:** done
+**Status:** done · bcaa003
 
 - [x] First-run in-product disclosure + accept/decline (User Data FAQ #10); consent recorded
 - [x] Privacy policy written (`PRIVACY.md`); Limited Use statement present; dashboard disclosures match actual behavior exactly — publishing the policy URL is a pending human step (see Outcome)
