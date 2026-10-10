@@ -71,4 +71,16 @@ describe('StickySessionStrategy', () => {
   it('titles without a date', () => {
     expect(stickyTitle('/home/afif/example/')).toBe('Browsertalk · example');
   });
+
+  it('peeks the stored session without creating one', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new StickySessionStrategy();
+
+    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(10) })).toBeNull();
+    expect(backend.createInputs).toEqual([]);
+
+    const created = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(11) });
+    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(12) })).toEqual(created);
+    expect(backend.createInputs).toHaveLength(1);
+  });
 });

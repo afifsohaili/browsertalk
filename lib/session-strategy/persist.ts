@@ -16,6 +16,11 @@ export async function resolveStoredSession(input: PersistSessionInput): Promise<
   return createStoredSession(input);
 }
 
+export async function peekStoredSession(input: PersistSessionInput): Promise<SessionRef | null> {
+  const stored = await getStoredSession(input.backend.id, input.strategyId, input.strategyKey);
+  return stored === null ? null : { id: stored.sessionID, title: stored.title };
+}
+
 export function rolloverStoredSession(input: PersistSessionInput): Promise<SessionRef> {
   return createStoredSession(input);
 }

@@ -19,6 +19,7 @@ export interface SessionStrategy {
   readonly label: string;
   resolveSession(input: SessionStrategyInput): Promise<SessionRef>;
   rolloverSession(input: SessionStrategyInput): Promise<SessionRef>;
+  peekSession(input: SessionStrategyInput): Promise<SessionRef | null>;
 }
 
 export function projectName(directory: string): string {

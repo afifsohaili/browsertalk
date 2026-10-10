@@ -8,6 +8,7 @@ function stub(id: SessionStrategy['id']): SessionStrategy {
     label: id,
     resolveSession: async () => ({ id: `ses_${id}`, title: id }),
     rolloverSession: async () => ({ id: `ses_${id}`, title: id }),
+    peekSession: async () => null,
   };
 }
 

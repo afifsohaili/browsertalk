@@ -88,4 +88,24 @@ describe('PerDaySessionStrategy', () => {
     expect(localDateKey(new Date(2026, 0, 5))).toBe('2026-01-05');
     expect(perDayTitle('/home/afif/example/', new Date(2026, 9, 10))).toBe('Browsertalk · example · 2026-10-10');
   });
+
+  it('peeks the day session without creating one', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new PerDaySessionStrategy();
+
+    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(9, 30) })).toBeNull();
+    expect(backend.createInputs).toEqual([]);
+
+    const created = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10, 0) });
+    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(22, 0) })).toEqual(created);
+    expect(backend.createInputs).toHaveLength(1);
+  });
+
+  it('peeks nothing after the day rolls over', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new PerDaySessionStrategy();
+    await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(23, 59) });
+
+    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(0, 1, 11) })).toBeNull();
+  });
 });

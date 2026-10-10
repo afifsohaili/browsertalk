@@ -1,0 +1,209 @@
+import { getCurrentScope, onScopeDispose, ref, type Ref } from 'vue';
+import { browser } from 'wxt/browser';
+import type { SessionRef } from '@/lib/agent-backend/interface';
+import { broadcastOutboxChanged, onOutboxChanged } from '@/lib/composer/messages';
+import { STORAGE_KEYS } from '@/lib/storage/keys';
+import { readOutbox, removeFromOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import { readSent, type SentItem } from '@/lib/storage/sent';
+import { requestOutboxRetry, requestSessionRollover, requestTargetRead } from './messages';
+
+const NO_PAGE_TO_TARGET = 'No page to target';
+
+export interface PanelTarget {
+  origin: string | null;
+  project: string | null;
+  session: SessionRef | null;
+}
+
+export type TargetState = 'unavailable' | 'no-page' | 'unbound' | 'no-session' | 'ready';
+
+export function targetState(target: PanelTarget | null): TargetState {
+  if (target === null) return 'unavailable';
+  if (target.origin === null) return 'no-page';
+  if (target.project === null) return 'unbound';
+  if (target.session === null) return 'no-session';
+  return 'ready';
+}
+
+export function formatTimestamp(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (date.toDateString() === now.toDateString()) return time;
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
+}
+
+export interface Panel {
+  loaded: Ref<boolean>;
+  target: Ref<PanelTarget | null>;
+  outbox: Ref<OutboxItem[]>;
+  sent: Ref<SentItem[]>;
+  retrying: Ref<string | null>;
+  rollingOver: Ref<boolean>;
+  error: Ref<string | null>;
+  refresh: () => Promise<void>;
+  retry: (itemId: string) => Promise<void>;
+  discard: (itemId: string) => Promise<void>;
+  newSession: () => Promise<void>;
+}
+
+export function usePanel(): Panel {
+  const loaded = ref(false);
+  const target = ref<PanelTarget | null>(null);
+  const outbox = ref<OutboxItem[]>([]);
+  const sent = ref<SentItem[]>([]);
+  const retrying = ref<string | null>(null);
+  const rollingOver = ref(false);
+  const error = ref<string | null>(null);
+
+  async function run(action: () => Promise<void>): Promise<void> {
+    error.value = null;
+    try {
+      await action();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function refreshTarget(): Promise<void> {
+    const origin = await activeOrigin();
+    if (origin === null) {
+      target.value = { origin: null, project: null, session: null };
+      return;
+    }
+
+    const result = await requestTargetRead(origin);
+    if (!result.ok) {
+      target.value = null;
+      throw new Error(result.error);
+    }
+    target.value = { origin, project: result.target.project, session: result.target.session };
+  }
+
+  async function refreshLists(): Promise<void> {
+    const [items, history] = await Promise.all([readOutbox(), readSent()]);
+    outbox.value = items;
+    sent.value = history;
+  }
+
+  function refresh(): Promise<void> {
+    return (async () => {
+      await run(async () => {
+        await Promise.all([refreshTarget(), refreshLists()]);
+      });
+      loaded.value = true;
+    })();
+  }
+
+  async function retry(itemId: string): Promise<void> {
+    retrying.value = itemId;
+    await run(async () => {
+      const result = await requestOutboxRetry(itemId);
+      await refreshLists();
+      if (!result.ok && !outbox.value.some((item) => item.id === itemId && item.error === result.error)) {
+        error.value = result.error;
+      }
+    });
+    retrying.value = null;
+  }
+
+  async function discard(itemId: string): Promise<void> {
+    await run(async () => {
+      await removeFromOutbox(itemId);
+      broadcastOutboxChanged();
+      await refreshLists();
+    });
+  }
+
+  async function newSession(): Promise<void> {
+    const current = target.value;
+    if (current === null || current.origin === null) {
+      error.value = NO_PAGE_TO_TARGET;
+      return;
+    }
+    const { origin, project } = current;
+
+    rollingOver.value = true;
+    await run(async () => {
+      const result = await requestSessionRollover(origin);
+      if (!result.ok) {
+        error.value = result.error;
+        return;
+      }
+      target.value = { origin, project, session: result.session };
+    });
+    rollingOver.value = false;
+  }
+
+  function reloadTarget(): void {
+    void run(refreshTarget);
+  }
+
+  function reloadLists(): void {
+    void run(refreshLists);
+  }
+
+  function onStorageChanged(changes: Record<string, unknown>): void {
+    const keys = Object.keys(changes);
+    if (
+      keys.includes(STORAGE_KEYS.sessions) ||
+      keys.includes(STORAGE_KEYS.projects.byOrigin) ||
+      keys.includes(STORAGE_KEYS.settings.backendId) ||
+      keys.includes(STORAGE_KEYS.settings.sessionStrategy)
+    ) {
+      reloadTarget();
+    }
+    if (keys.includes(STORAGE_KEYS.outbox) || keys.includes(STORAGE_KEYS.sent)) reloadLists();
+  }
+
+  function onTabUpdated(_tabId: number, changeInfo: { url?: string }): void {
+    if (changeInfo.url !== undefined) reloadTarget();
+  }
+
+  const stopOutbox = onOutboxChanged(reloadLists);
+  browser.tabs.onActivated.addListener(reloadTarget);
+  browser.tabs.onUpdated.addListener(onTabUpdated);
+  browser.storage.local.onChanged.addListener(onStorageChanged);
+
+  function stop(): void {
+    stopOutbox();
+    browser.tabs.onActivated.removeListener(reloadTarget);
+    browser.tabs.onUpdated.removeListener(onTabUpdated);
+    browser.storage.local.onChanged.removeListener(onStorageChanged);
+  }
+  if (getCurrentScope()) onScopeDispose(stop);
+
+  void refresh();
+
+  return {
+    loaded,
+    target,
+    outbox,
+    sent,
+    retrying,
+    rollingOver,
+    error,
+    refresh,
+    retry,
+    discard,
+    newSession,
+  };
+}
+
+async function activeOrigin(): Promise<string | null> {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  const url = tabs[0]?.url;
+  if (typeof url !== 'string' || url.length === 0) return null;
+
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}

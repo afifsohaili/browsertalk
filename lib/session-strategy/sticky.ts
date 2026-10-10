@@ -1,6 +1,6 @@
 import type { SessionRef } from '@/lib/agent-backend/interface';
 import { projectName, type SessionStrategy, type SessionStrategyInput } from './interface';
-import { resolveStoredSession, rolloverStoredSession, type PersistSessionInput } from './persist';
+import { peekStoredSession, resolveStoredSession, rolloverStoredSession, type PersistSessionInput } from './persist';
 
 export function stickyTitle(directory: string): string {
   return `Browsertalk · ${projectName(directory)}`;
@@ -16,6 +16,10 @@ export class StickySessionStrategy implements SessionStrategy {
 
   rolloverSession(input: SessionStrategyInput): Promise<SessionRef> {
     return rolloverStoredSession(this.persistInput(input));
+  }
+
+  peekSession(input: SessionStrategyInput): Promise<SessionRef | null> {
+    return peekStoredSession(this.persistInput(input));
   }
 
   private persistInput(input: SessionStrategyInput): PersistSessionInput {
