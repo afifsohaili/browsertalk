@@ -14,6 +14,11 @@ export interface BackendCapabilities {
   projects: boolean;
 }
 
+export interface BackendConnectionConfig {
+  baseUrl: string;
+  token: string | null;
+}
+
 export interface BackendStatus {
   ok: boolean;
   detail: string;

@@ -1,10 +1,11 @@
 import { parsePageFacts, type RawPageCapture } from '@/lib/picker/collect';
 import type { PickerFeedback } from '@/lib/picker/facts';
-import type { OutboxItem } from '@/lib/storage/outbox';
+import type { OutboxDestination, OutboxItem } from '@/lib/storage/outbox';
 
 export interface OutboxItemMeta {
   id: string;
   now: string;
+  destination?: OutboxDestination;
 }
 
 export function buildElementOutboxItem(
@@ -22,6 +23,7 @@ export function buildElementOutboxItem(
       element: pending.element,
       ...(pending.extras === undefined ? {} : { extras: pending.extras }),
     },
+    ...(meta.destination === undefined ? {} : { destination: meta.destination }),
   };
 }
 
@@ -32,5 +34,6 @@ export function buildPageOutboxItem(raw: RawPageCapture, comment: string, meta: 
     capturedAt: meta.now,
     status: 'queued',
     facts: { page: parsePageFacts(raw.url, raw.title) },
+    ...(meta.destination === undefined ? {} : { destination: meta.destination }),
   };
 }

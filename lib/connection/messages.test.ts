@@ -14,6 +14,7 @@ import {
 } from './messages';
 
 const BASE = 'http://127.0.0.1:15001';
+const KEY = `opencode@${BASE}`;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -47,7 +48,7 @@ describe('connection messaging', () => {
 
     expect(response).toEqual({ ok: true });
     expect(JSON.stringify(response)).not.toContain('tok_live');
-    expect(await getToken()).toBe('tok_live');
+    expect(await getToken(KEY)).toBe('tok_live');
   });
 
   it('reports a pairing failure to the surface', async () => {
@@ -57,7 +58,7 @@ describe('connection messaging', () => {
       ok: false,
       error: 'That pairing code is wrong or expired',
     });
-    expect(await getToken()).toBeNull();
+    expect(await getToken(KEY)).toBeNull();
   });
 
   it('tells every open surface after a successful pairing', async () => {
@@ -81,7 +82,7 @@ describe('connection messaging', () => {
   });
 
   it('lists projects through the background', async () => {
-    await setToken('tok_live');
+    await setToken(KEY, 'tok_live');
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse([{ id: 'p1', canonical: '/home/afif/x' }])));
 
     await expect(requestProjects()).resolves.toEqual({
@@ -96,11 +97,11 @@ describe('connection messaging', () => {
     await expect(requestProjects()).resolves.toEqual({ ok: false, error: 'Not paired' });
   });
 
-  it('binds an origin through the background', async () => {
+  it('binds an origin through the background under the active connection', async () => {
     await expect(requestBind('https://example.com', '/home/afif/example')).resolves.toEqual({ ok: true });
 
     expect(await browser.storage.local.get('projects.byOrigin')).toEqual({
-      'projects.byOrigin': { 'https://example.com': '/home/afif/example' },
+      'projects.byOrigin': { [KEY]: { 'https://example.com': '/home/afif/example' } },
     });
   });
 

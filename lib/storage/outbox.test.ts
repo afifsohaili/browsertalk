@@ -1,7 +1,22 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { PickerFeedback } from '@/lib/picker/facts';
-import { appendToOutbox, countOutbox, isOutboxItem, readOutbox, removeFromOutbox, setOutboxItemError, type OutboxItem } from './outbox';
+import {
+  appendToOutbox,
+  countOutbox,
+  isOutboxItem,
+  readOutbox,
+  removeFromOutbox,
+  setOutboxDestination,
+  setOutboxItemError,
+  type OutboxItem,
+} from './outbox';
+
+const DESTINATION = {
+  backendId: 'opencode',
+  endpoint: 'http://127.0.0.1:15001',
+  directory: '/home/afif/example',
+} as const;
 
 function pageItem(comment: string): OutboxItem {
   return {
@@ -150,6 +165,15 @@ describe('outbox item guard', () => {
     expect(isOutboxItem({ ...pageItem('hi'), error: 'Not paired' })).toBe(true);
     expect(isOutboxItem({ ...pageItem('hi'), error: 7 })).toBe(false);
   });
+
+  it('accepts an item with a captured destination and rejects a broken one', () => {
+    expect(isOutboxItem({ ...pageItem('hi'), destination: DESTINATION })).toBe(true);
+    expect(isOutboxItem(pageItem('hi'))).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, backendId: 'nope' } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, endpoint: '' } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, directory: 7 } })).toBe(false);
+    expect(isOutboxItem({ ...pageItem('hi'), destination: 'nonsense' })).toBe(false);
+  });
 });
 
 describe('outbox mutations', () => {
@@ -193,5 +217,27 @@ describe('outbox mutations', () => {
     await setOutboxItemError('ob_first', 'new error');
 
     expect((await readOutbox())[0]?.error).toBe('new error');
+  });
+
+  it('records the captured destination on one item without touching the others', async () => {
+    await appendToOutbox(pageItem('first'));
+    await appendToOutbox(pageItem('second'));
+
+    await setOutboxDestination('ob_second', DESTINATION);
+
+    expect(await readOutbox()).toEqual([
+      pageItem('first'),
+      { ...pageItem('second'), destination: DESTINATION },
+    ]);
+  });
+
+  it('keeps the destination when a later error is recorded', async () => {
+    await appendToOutbox({ ...pageItem('first'), destination: DESTINATION });
+
+    await setOutboxItemError('ob_first', 'Not paired');
+
+    expect(await readOutbox()).toEqual([
+      { ...pageItem('first'), destination: DESTINATION, error: 'Not paired' },
+    ]);
   });
 });

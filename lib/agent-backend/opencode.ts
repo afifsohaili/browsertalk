@@ -1,5 +1,4 @@
-import { getToken } from '@/lib/storage/auth';
-import { getSettings } from '@/lib/storage/settings';
+import { resolveConfiguredConnection } from '@/lib/connection/resolve';
 import type {
   AgentBackend,
   BackendStatus,
@@ -13,7 +12,7 @@ import { OpenCodeApi, OpenCodeError, type FetchLike } from './opencode-api';
 
 export interface OpenCodeBackendConfig {
   baseUrl?: string;
-  token?: string;
+  token?: string | null;
   fetchFn?: FetchLike;
 }
 
@@ -28,10 +27,10 @@ export class OpenCodeBackend implements AgentBackend {
   constructor(private readonly config: OpenCodeBackendConfig = {}) {}
 
   async ping(): Promise<BackendStatus> {
-    const { baseUrl, token } = await this.resolve();
-    if (token.length === 0) return { ok: false, detail: NOT_PAIRED };
-
     try {
+      const { baseUrl, token } = await this.resolve();
+      if (token.length === 0) return { ok: false, detail: NOT_PAIRED };
+
       const { version } = await this.api(baseUrl, token).info();
       return { ok: true, detail: `opencode ${version}` };
     } catch (error) {
@@ -62,8 +61,12 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   private async resolve(): Promise<{ baseUrl: string; token: string }> {
-    const baseUrl = this.config.baseUrl ?? (await getSettings()).serverUrl;
-    const token = this.config.token ?? (await getToken()) ?? '';
-    return { baseUrl, token };
+    if (this.config.baseUrl !== undefined) {
+      return { baseUrl: this.config.baseUrl, token: this.config.token ?? '' };
+    }
+
+    const resolved = await resolveConfiguredConnection();
+    if (!resolved.ok) throw new OpenCodeError(resolved.error);
+    return { baseUrl: resolved.connection.endpoint, token: resolved.connection.token ?? '' };
   }
 }

@@ -25,6 +25,8 @@ const ORIGIN = 'https://example.com';
 const PAGE_URL = `${ORIGIN}/cart?step=2`;
 const DIRECTORY = '/home/afif/example';
 const STICKY_TITLE = 'Browsertalk · example';
+const KEY = 'fake@http://127.0.0.1:15001';
+const OPENCODE_KEY = 'opencode@http://127.0.0.1:15001';
 
 const DEFAULT_PROJECTS: Project[] = [
   { id: 'proj_fake', name: 'fake-project', directory: '/tmp/fake-project' },
@@ -86,7 +88,7 @@ async function loadedPanel(): Promise<{ panel: Panel; stop: () => void }> {
 describe('panel logic', () => {
   beforeAll(() => {
     registerAgentBackend('fake', () => fakeBackend);
-    registerAgentBackend('opencode', () => new OpenCodeBackend({ fetchFn: offlineFetch }));
+    registerAgentBackend('opencode', (config) => new OpenCodeBackend({ ...(config ?? {}), fetchFn: offlineFetch }));
     registerBuiltinSessionStrategies();
   });
 
@@ -106,8 +108,8 @@ describe('panel logic', () => {
 
   it('loads the bound target and the lists on start', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
+    await bindProject(KEY, ORIGIN, DIRECTORY);
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
     await appendToOutbox(item());
 
     const { panel, stop } = await loadedPanel();
@@ -148,7 +150,7 @@ describe('panel logic', () => {
     const { panel, stop } = await loadedPanel();
     expect(targetState(panel.target.value)).toBe('unbound');
 
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
 
     await vi.waitFor(() => {
       expect(panel.target.value?.project).toBe(DIRECTORY);
@@ -159,11 +161,11 @@ describe('panel logic', () => {
 
   it('updates the header when the session changes', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     const { panel, stop } = await loadedPanel();
     expect(targetState(panel.target.value)).toBe('no-session');
 
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread' });
 
     await vi.waitFor(() => {
       expect(panel.target.value?.session).toEqual({ id: 'ses_later', title: 'Later thread' });
@@ -174,7 +176,7 @@ describe('panel logic', () => {
 
   it('follows the active tab', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     const { panel, stop } = await loadedPanel();
     expect(panel.target.value?.origin).toBe(ORIGIN);
 
@@ -189,7 +191,7 @@ describe('panel logic', () => {
 
   it('follows a tab that navigates to another origin', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     const { panel, stop } = await loadedPanel();
     expect(panel.target.value?.origin).toBe(ORIGIN);
 
@@ -221,7 +223,7 @@ describe('panel logic', () => {
 
   it('retries a failed item into the sent list', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     await appendToOutbox(item({ id: 'ob_retry', error: 'HTTP 500' }));
 
     const { panel, stop } = await loadedPanel();
@@ -242,8 +244,9 @@ describe('panel logic', () => {
 
   it('keeps a still-failing item in the outbox with its error', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     await setSettings({ backendId: 'opencode' });
+    await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
     await appendToOutbox(item({ id: 'ob_retry', error: 'old failure' }));
 
     const { panel, stop } = await loadedPanel();
@@ -256,8 +259,8 @@ describe('panel logic', () => {
 
   it('rolls the header to the fresh session and continues on it', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
+    await bindProject(KEY, ORIGIN, DIRECTORY);
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
 
     const { panel, stop } = await loadedPanel();
     expect(panel.target.value?.session?.id).toBe('ses_old');
@@ -266,7 +269,7 @@ describe('panel logic', () => {
 
     expect(panel.target.value?.session).toEqual({ id: 'ses_fake_1', title: STICKY_TITLE });
     expect(panel.rollingOver.value).toBe(false);
-    expect(await getStoredSession('fake', 'sticky', DIRECTORY)).toEqual({
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: STICKY_TITLE,
     });
@@ -275,8 +278,9 @@ describe('panel logic', () => {
 
   it('reports a rollover failure without fake success', async () => {
     stubQuery([tab(1, PAGE_URL)]);
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
     await setSettings({ backendId: 'opencode' });
+    await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
 
     const { panel, stop } = await loadedPanel();
     await panel.newSession();
@@ -350,13 +354,13 @@ describe('panel logic', () => {
       expect(panel.projectsOpen.value).toBe(false);
       expect(panel.error.value).toBeNull();
       expect(panel.target.value).toEqual({ origin: ORIGIN, project: '/tmp/fake-project', session: null });
-      expect(await getBoundProject(ORIGIN)).toBe('/tmp/fake-project');
+      expect(await getBoundProject(KEY, ORIGIN)).toBe('/tmp/fake-project');
       stop();
     });
 
     it('re-binds through the change affordance', async () => {
       stubQuery([tab(1, PAGE_URL)]);
-      await bindProject(ORIGIN, '/tmp/fake-project');
+      await bindProject(KEY, ORIGIN, '/tmp/fake-project');
       const { panel, stop } = await loadedPanel();
       expect(panel.target.value?.project).toBe('/tmp/fake-project');
 
@@ -365,14 +369,14 @@ describe('panel logic', () => {
 
       expect(panel.projectsOpen.value).toBe(false);
       expect(panel.target.value?.project).toBe('/tmp/other-project');
-      expect(await getBoundProject(ORIGIN)).toBe('/tmp/other-project');
+      expect(await getBoundProject(KEY, ORIGIN)).toBe('/tmp/other-project');
       stop();
     });
 
     it('keeps the list open with the honest error when the server is unreachable', async () => {
       stubQuery([tab(1, PAGE_URL)]);
       await setSettings({ backendId: 'opencode' });
-      await setToken('tok_offline');
+      await setToken(OPENCODE_KEY, 'tok_offline');
       const { panel, stop } = await loadedPanel();
 
       await panel.openProjects();
@@ -407,7 +411,7 @@ describe('panel logic', () => {
       expect(panel.projectsOpen.value).toBe(true);
       expect(panel.projectsError.value).toBe('Pick a project first');
       expect(panel.target.value?.project).toBeNull();
-      expect(await getBoundProject(ORIGIN)).toBeNull();
+      expect(await getBoundProject(KEY, ORIGIN)).toBeNull();
       stop();
     });
 

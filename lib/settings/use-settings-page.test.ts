@@ -75,6 +75,36 @@ describe('settings page logic', () => {
     expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
   });
 
+  it('refuses a remote server URL with a clear error and keeps the stored value', async () => {
+    const page = await loadedPage();
+
+    page.serverUrl.value = 'https://example.com';
+    await page.saveServerUrl();
+
+    expect(page.error.value).toBe('The server must be on this machine — use localhost, 127.0.0.1, or ::1');
+    expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('refuses a server URL with embedded credentials', async () => {
+    const page = await loadedPage();
+
+    page.serverUrl.value = 'http://user:pass@127.0.0.1:15001';
+    await page.saveServerUrl();
+
+    expect(page.error.value).toBe('Remove the username and password from the server URL');
+    expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('shows the canonical endpoint after saving', async () => {
+    const page = await loadedPage();
+
+    page.serverUrl.value = '  http://127.0.0.1:15001/  ';
+    await page.saveServerUrl();
+
+    expect(page.error.value).toBeNull();
+    expect(page.serverUrl.value).toBe('http://127.0.0.1:15001');
+  });
+
   it('merges a strategy override without clobbering the other backends', async () => {
     const page = await loadedPage();
 

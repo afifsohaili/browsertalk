@@ -4,6 +4,7 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { localDateKey, perDayTitle, PerDaySessionStrategy } from './per-day';
 
+const CONNECTION = 'fake@http://127.0.0.1:15001';
 const DIRECTORY = '/home/afif/example';
 const DAY = `${DIRECTORY}::2026-10-10`;
 
@@ -20,13 +21,18 @@ describe('PerDaySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new PerDaySessionStrategy();
 
-    const session = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(9, 30) });
+    const session = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(9, 30),
+    });
 
     expect(session).toEqual({ id: 'ses_fake_1', title: 'Browsertalk · example · 2026-10-10' });
     expect(backend.createInputs).toEqual([
       { directory: DIRECTORY, title: 'Browsertalk · example · 2026-10-10' },
     ]);
-    expect(await getStoredSession('fake', 'per-day', DAY)).toEqual({
+    expect(await getStoredSession(CONNECTION, 'per-day', DAY)).toEqual({
       sessionID: 'ses_fake_1',
       title: 'Browsertalk · example · 2026-10-10',
     });
@@ -36,11 +42,42 @@ describe('PerDaySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new PerDaySessionStrategy();
 
-    const first = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(9, 30) });
-    const second = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(22, 0) });
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(9, 30),
+    });
+    const second = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(22, 0),
+    });
 
     expect(second).toEqual(first);
     expect(backend.sessions).toHaveLength(1);
+  });
+
+  it('never reuses another connection session ref', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new PerDaySessionStrategy();
+
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(9, 30),
+    });
+    const other = await strategy.resolveSession({
+      backend,
+      connectionKey: 'fake@http://127.0.0.1:4096',
+      directory: DIRECTORY,
+      now: at(10, 0),
+    });
+
+    expect(other.id).not.toBe(first.id);
+    expect(backend.sessions).toHaveLength(2);
   });
 
   it('rolls over at local midnight', async () => {
@@ -49,18 +86,20 @@ describe('PerDaySessionStrategy', () => {
 
     const beforeMidnight = await strategy.resolveSession({
       backend,
+      connectionKey: CONNECTION,
       directory: DIRECTORY,
       now: at(23, 59),
     });
     const afterMidnight = await strategy.resolveSession({
       backend,
+      connectionKey: CONNECTION,
       directory: DIRECTORY,
       now: at(0, 1, 11),
     });
 
     expect(beforeMidnight.id).toBe('ses_fake_1');
     expect(afterMidnight).toEqual({ id: 'ses_fake_2', title: 'Browsertalk · example · 2026-10-11' });
-    expect(await getStoredSession('fake', 'per-day', `${DIRECTORY}::2026-10-11`)).toEqual({
+    expect(await getStoredSession(CONNECTION, 'per-day', `${DIRECTORY}::2026-10-11`)).toEqual({
       sessionID: 'ses_fake_2',
       title: 'Browsertalk · example · 2026-10-11',
     });
@@ -70,17 +109,32 @@ describe('PerDaySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new PerDaySessionStrategy();
 
-    const first = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(9, 30) });
-    const fresh = await strategy.rolloverSession({ backend, directory: DIRECTORY, now: at(10, 0) });
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(9, 30),
+    });
+    const fresh = await strategy.rolloverSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10, 0),
+    });
 
     expect(fresh.id).not.toBe(first.id);
     expect(fresh.title).toBe('Browsertalk · example · 2026-10-10');
-    expect(await getStoredSession('fake', 'per-day', DAY)).toEqual({
+    expect(await getStoredSession(CONNECTION, 'per-day', DAY)).toEqual({
       sessionID: fresh.id,
       title: fresh.title,
     });
 
-    const next = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(11, 0) });
+    const next = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(11, 0),
+    });
     expect(next).toEqual(fresh);
   });
 
@@ -93,19 +147,30 @@ describe('PerDaySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new PerDaySessionStrategy();
 
-    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(9, 30) })).toBeNull();
+    expect(
+      await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(9, 30) }),
+    ).toBeNull();
     expect(backend.createInputs).toEqual([]);
 
-    const created = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10, 0) });
-    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(22, 0) })).toEqual(created);
+    const created = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10, 0),
+    });
+    expect(
+      await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(22, 0) }),
+    ).toEqual(created);
     expect(backend.createInputs).toHaveLength(1);
   });
 
   it('peeks nothing after the day rolls over', async () => {
     const backend = new FakeAgentBackend();
     const strategy = new PerDaySessionStrategy();
-    await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(23, 59) });
+    await strategy.resolveSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(23, 59) });
 
-    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(0, 1, 11) })).toBeNull();
+    expect(
+      await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(0, 1, 11) }),
+    ).toBeNull();
   });
 });

@@ -41,6 +41,24 @@ describe('session strategy selection', () => {
 
     expect(active.backend.id).toBe('fake');
     expect(active.strategy.id).toBe('sticky');
+    expect(active.connectionKey).toBe('fake@http://127.0.0.1:15001');
+  });
+
+  it('scopes the connection to the canonical stored endpoint', async () => {
+    await browser.storage.local.set({
+      'settings.backendId': 'fake',
+      'settings.serverUrl': 'http://127.0.0.1:4096/',
+    });
+
+    const active = await resolveActiveSessionStrategy();
+
+    expect(active.connectionKey).toBe('fake@http://127.0.0.1:4096');
+  });
+
+  it('refuses to resolve against a non-loopback server URL', async () => {
+    await browser.storage.local.set({ 'settings.backendId': 'fake', 'settings.serverUrl': 'https://example.com' });
+
+    await expect(resolveActiveSessionStrategy()).rejects.toThrow('The server must be on this machine');
   });
 
   it('falls back to the backend default when the override targets another backend', async () => {

@@ -25,6 +25,26 @@ describe('redeemPairingCode', () => {
     resetOpenCodeFetch();
   });
 
+  it('refuses a remote server URL without touching the network', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(redeemPairingCode({ baseUrl: 'https://example.com', code: 'ABC123' })).rejects.toThrow(
+      'The server must be on this machine',
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with embedded credentials', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(
+      redeemPairingCode({ baseUrl: 'http://user:pass@127.0.0.1:15001', code: 'ABC123' }),
+    ).rejects.toThrow('Remove the username and password from the server URL');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it('exchanges a pairing code for the token', async () => {
     const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ token: 'tok_live' }));
     setOpenCodeFetch(fetchFn);
@@ -71,6 +91,66 @@ describe('redeemPairingCode', () => {
     await expect(redeemPairingCode({ baseUrl: BASE, code: 'ABC123' })).rejects.toThrow(
       'The opencode server sent an unexpected response',
     );
+  });
+});
+
+describe('OpenCodeApi transport security', () => {
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('refuses a stored non-loopback base URL before any fetch', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    const api = new OpenCodeApi({ baseUrl: 'https://example.com', token: 'tok_live', fetchFn });
+
+    await expect(api.info()).rejects.toThrow('The server must be on this machine');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('forbids redirects so credentials can never be carried off loopback', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.24' }));
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await api.info();
+
+    expect(fetchFn.mock.calls[0]?.[1]?.redirect).toBe('error');
+  });
+
+  it('refuses a response that was redirected anyway', async () => {
+    const redirected = jsonResponse({ version: '2.0.24' });
+    Object.defineProperty(redirected, 'redirected', { value: true });
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => redirected),
+    });
+
+    await expect(api.info()).rejects.toThrow('redirected the request');
+  });
+
+  it('never follows a loopback to remote redirect', async () => {
+    const requested: string[] = [];
+    const fetchFn = vi.fn<FetchLike>(async (url: string | URL | Request, init?: RequestInit) => {
+      requested.push(String(url));
+      expect(init?.redirect).toBe('error');
+      if (String(url).startsWith(BASE)) throw new TypeError('Failed to fetch');
+      return jsonResponse({ data: { id: 'msg_1' } });
+    });
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await expect(
+      api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' }),
+    ).rejects.toThrow(`Cannot reach the opencode server at ${BASE}`);
+    expect(requested).toEqual([`${BASE}/api/session/ses_x/prompt`]);
+  });
+
+  it('uses the canonical endpoint so a trailing slash cannot change routing', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.24' }));
+    const api = new OpenCodeApi({ baseUrl: `${BASE}/`, token: 'tok_live', fetchFn });
+
+    await api.info();
+
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/info`);
   });
 });
 

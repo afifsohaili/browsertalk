@@ -4,6 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { CONSENT_REQUIRED_ERROR, acceptConsent } from '@/lib/consent/consent';
 import type { PickerFeedback } from '@/lib/picker/facts';
 import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
+import { bindProject } from '@/lib/storage/projects';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import {
@@ -115,6 +116,27 @@ describe('composer messaging', () => {
     expect(items[0]?.facts.element).toEqual(pending.element);
     expect(requestedSends).toEqual([items[0]?.id]);
     expect(await getPendingFeedback()).toBeNull();
+  });
+
+  it('captures the destination connection and binding when queued', async () => {
+    await bindProject('opencode@http://127.0.0.1:15001', 'https://example.com', '/home/afif/example');
+    await setPendingFeedback(sampleFeedback());
+
+    await requestQueueComment('Button is misaligned', 'element', { url: 'https://example.com/cart', title: 'Cart' });
+
+    expect((await readOutbox())[0]?.destination).toEqual({
+      backendId: 'opencode',
+      endpoint: 'http://127.0.0.1:15001',
+      directory: '/home/afif/example',
+    });
+  });
+
+  it('leaves the destination empty for an unbound origin, honestly', async () => {
+    await setPendingFeedback(sampleFeedback());
+
+    await requestQueueComment('Button is misaligned', 'element', { url: 'https://example.com/cart', title: 'Cart' });
+
+    expect((await readOutbox())[0]?.destination).toBeUndefined();
   });
 
   it('keeps the extras that the background attached to the pick', async () => {

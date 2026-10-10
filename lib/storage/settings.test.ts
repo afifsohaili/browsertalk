@@ -109,4 +109,32 @@ describe('settings storage', () => {
 
     expect((await getSettings()).sessionStrategy).toEqual({});
   });
+
+  it('rejects a non-loopback server URL and leaves storage untouched', async () => {
+    await expect(setSettings({ serverUrl: 'https://example.com' })).rejects.toThrow(
+      'The server must be on this machine',
+    );
+
+    expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('rejects a server URL with embedded credentials', async () => {
+    await expect(setSettings({ serverUrl: 'http://user:pass@127.0.0.1:15001' })).rejects.toThrow(
+      'Remove the username and password from the server URL',
+    );
+
+    expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('stores the canonical loopback endpoint', async () => {
+    await setSettings({ serverUrl: '  http://127.0.0.1:15001/  ' });
+
+    expect((await getSettings()).serverUrl).toBe('http://127.0.0.1:15001');
+  });
+
+  it('keeps a stored remote URL visible instead of silently rewriting it', async () => {
+    await browser.storage.local.set({ 'settings.serverUrl': 'https://example.com' });
+
+    expect((await getSettings()).serverUrl).toBe('https://example.com');
+  });
 });

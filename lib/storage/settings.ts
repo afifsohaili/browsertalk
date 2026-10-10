@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { isAgentBackendId, type AgentBackendId } from '@/lib/agent-backend/interface';
+import { parseLoopbackUrl } from '@/lib/connection/endpoint';
 import { isSessionStrategyId, type SessionStrategyId } from '@/lib/session-strategy/interface';
 import { STORAGE_KEYS } from './keys';
 
@@ -33,7 +34,11 @@ export async function getSettings(): Promise<Settings> {
 export async function setSettings(patch: Partial<Settings>): Promise<void> {
   const values: Record<string, unknown> = {};
   if (patch.backendId !== undefined) values[STORAGE_KEYS.settings.backendId] = patch.backendId;
-  if (patch.serverUrl !== undefined) values[STORAGE_KEYS.settings.serverUrl] = patch.serverUrl;
+  if (patch.serverUrl !== undefined) {
+    const parsed = parseLoopbackUrl(patch.serverUrl);
+    if (!parsed.ok) throw new Error(parsed.error);
+    values[STORAGE_KEYS.settings.serverUrl] = parsed.endpoint;
+  }
   if (patch.sessionStrategy !== undefined) values[STORAGE_KEYS.settings.sessionStrategy] = patch.sessionStrategy;
   if (Object.keys(values).length > 0) await browser.storage.local.set(values);
 }

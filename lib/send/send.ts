@@ -1,10 +1,25 @@
-import type { SessionRef } from '@/lib/agent-backend/interface';
+import type { AgentBackend, SessionRef } from '@/lib/agent-backend/interface';
+import { getAgentBackend } from '@/lib/agent-backend/registry';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
+import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { connectionKey } from '@/lib/connection/identity';
+import { resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { projectName } from '@/lib/session-strategy/interface';
-import { resolveActiveSessionStrategy } from '@/lib/session-strategy/selection';
-import { readOutbox, removeFromOutbox, setOutboxItemError, type OutboxItem } from '@/lib/storage/outbox';
+import { getSessionStrategy } from '@/lib/session-strategy/registry';
+import { pickSessionStrategyId } from '@/lib/session-strategy/selection';
+import { getToken } from '@/lib/storage/auth';
+import {
+  readOutbox,
+  removeFromOutbox,
+  setOutboxDestination,
+  setOutboxItemError,
+  type OutboxDestination,
+  type OutboxItem,
+} from '@/lib/storage/outbox';
 import { getBoundProject } from '@/lib/storage/projects';
+import { getSettings } from '@/lib/storage/settings';
 import { appendToSent } from '@/lib/storage/sent';
+import { pageOrigin } from '@/lib/url';
 import { elementAttachment } from './attachments';
 import { renderPrompt } from './prompt';
 
@@ -32,16 +47,46 @@ async function attemptSend(itemId: string, options: SendOptions): Promise<SendOu
   return deliver(item, options);
 }
 
+type DestinationResult = { ok: true; destination: OutboxDestination } | { ok: false; error: string };
+
+async function resolveDestination(item: OutboxItem, origin: string): Promise<DestinationResult> {
+  if (item.destination !== undefined) {
+    const parsed = parseLoopbackUrl(item.destination.endpoint);
+    if (!parsed.ok) return { ok: false, error: parsed.error };
+    return { ok: true, destination: { ...item.destination, endpoint: parsed.endpoint } };
+  }
+
+  const resolved = await resolveConfiguredConnection();
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  const directory = await getBoundProject(connectionKey(resolved.connection), origin);
+  if (directory === null) return { ok: false, error: 'This site has no project binding' };
+
+  const destination: OutboxDestination = {
+    backendId: resolved.connection.backendId,
+    endpoint: resolved.connection.endpoint,
+    directory,
+  };
+  await setOutboxDestination(item.id, destination);
+  return { ok: true, destination };
+}
+
 export async function deliver(item: OutboxItem, options: SendOptions = {}): Promise<SendOutcome> {
   try {
     const origin = pageOrigin(item.facts.page.url);
     if (origin === null) return recordError(item, 'The page URL in this feedback is unreadable');
 
-    const directory = await getBoundProject(origin);
-    if (directory === null) return recordError(item, 'This site has no project binding');
+    const resolved = await resolveDestination(item, origin);
+    if (!resolved.ok) return recordError(item, resolved.error);
+    const { backendId, endpoint, directory } = resolved.destination;
 
-    const { backend, strategy } = await resolveActiveSessionStrategy();
-    const session = await strategy.resolveSession({ backend, directory, now: options.now });
+    const key = connectionKey({ backendId, endpoint });
+    const token = await getToken(key);
+    const backend: AgentBackend = getAgentBackend(backendId, { baseUrl: endpoint, token });
+    const { sessionStrategy } = await getSettings();
+    const strategy = getSessionStrategy(pickSessionStrategyId(backend, sessionStrategy[backendId]));
+
+    const session = await strategy.resolveSession({ backend, connectionKey: key, directory, now: options.now });
 
     const now = options.now ?? new Date();
     const sentAt = now.toISOString();
@@ -78,13 +123,4 @@ async function recordError(item: OutboxItem, error: string): Promise<SendOutcome
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong';
-}
-
-function pageOrigin(url: string): string | null {
-  try {
-    const origin = new URL(url).origin;
-    return origin === 'null' ? null : origin;
-  } catch {
-    return null;
-  }
 }

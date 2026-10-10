@@ -3,6 +3,6 @@ import { OpenCodeBackend } from './opencode';
 import { registerAgentBackend } from './registry';
 
 export function registerBuiltinBackends(): void {
-  registerAgentBackend('opencode', () => new OpenCodeBackend());
+  registerAgentBackend('opencode', (config) => new OpenCodeBackend(config));
   registerAgentBackend('fake', () => new FakeAgentBackend());
 }

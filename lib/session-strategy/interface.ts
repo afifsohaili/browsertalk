@@ -10,6 +10,7 @@ export function isSessionStrategyId(value: unknown): value is SessionStrategyId 
 
 export interface SessionStrategyInput {
   backend: AgentBackend;
+  connectionKey: string;
   directory: string;
   now?: Date;
 }

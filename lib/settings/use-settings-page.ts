@@ -83,7 +83,7 @@ export function useSettingsPage(): SettingsPage {
     return persist(async () => {
       const value = serverUrl.value.trim() || DEFAULT_SERVER_URL;
       await setSettings({ serverUrl: value });
-      serverUrl.value = value;
+      serverUrl.value = (await getSettings()).serverUrl;
     });
   }
 

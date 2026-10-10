@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { captureQueuedDestination } from '@/lib/connection/destinations';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { requestSend } from '@/lib/send/trigger';
 import { clearPendingFeedback, getPendingFeedback } from '@/lib/storage/pending';
@@ -61,9 +62,17 @@ async function queueComment(request: ComposerQueueRequest): Promise<ComposerQueu
   if (request.mode === 'element') {
     const pending = await getPendingFeedback();
     if (pending === null) return { ok: false, error: NO_PICKED_ELEMENT };
-    item = buildElementOutboxItem(pending, request.comment, meta);
+    const destination = await captureQueuedDestination(pending.page.url);
+    item = buildElementOutboxItem(pending, request.comment, {
+      ...meta,
+      ...(destination === null ? {} : { destination }),
+    });
   } else {
-    item = buildPageOutboxItem(request.page, request.comment, meta);
+    const destination = await captureQueuedDestination(request.page.url);
+    item = buildPageOutboxItem(request.page, request.comment, {
+      ...meta,
+      ...(destination === null ? {} : { destination }),
+    });
   }
 
   await appendToOutbox(item);
@@ -83,9 +92,11 @@ async function queueUrlOnly(): Promise<ComposerQueueResult> {
   const url = typeof tab.url === 'string' && tab.url.length > 0 ? tab.url : null;
   if (url === null) return { ok: false, error: NO_PAGE_URL };
 
+  const destination = await captureQueuedDestination(url);
   const item = buildPageOutboxItem({ url, title: typeof tab.title === 'string' ? tab.title : '' }, '', {
     id: crypto.randomUUID(),
     now: new Date().toISOString(),
+    ...(destination === null ? {} : { destination }),
   });
   await appendToOutbox(item);
   broadcastOutboxChanged();

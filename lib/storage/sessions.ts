@@ -7,38 +7,38 @@ export interface StoredSession {
 }
 
 export async function getStoredSession(
-  backendId: string,
+  connectionKey: string,
   strategyId: string,
   key: string,
 ): Promise<StoredSession | null> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.sessions);
-  return readSession(stored[STORAGE_KEYS.sessions], backendId, strategyId, key);
+  return readSession(stored[STORAGE_KEYS.sessions], connectionKey, strategyId, key);
 }
 
 export async function setStoredSession(
-  backendId: string,
+  connectionKey: string,
   strategyId: string,
   key: string,
   session: StoredSession,
 ): Promise<void> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.sessions);
-  const byBackend = asRecord(stored[STORAGE_KEYS.sessions]);
-  const byStrategy = asRecord(byBackend[backendId]);
+  const byConnection = asRecord(stored[STORAGE_KEYS.sessions]);
+  const byStrategy = asRecord(byConnection[connectionKey]);
   await browser.storage.local.set({
     [STORAGE_KEYS.sessions]: {
-      ...byBackend,
-      [backendId]: { ...byStrategy, [strategyId]: { ...asRecord(byStrategy[strategyId]), [key]: session } },
+      ...byConnection,
+      [connectionKey]: { ...byStrategy, [strategyId]: { ...asRecord(byStrategy[strategyId]), [key]: session } },
     },
   });
 }
 
 export function readSession(
   store: unknown,
-  backendId: string,
+  connectionKey: string,
   strategyId: string,
   key: string,
 ): StoredSession | null {
-  const entry = asRecord(asRecord(asRecord(store)[backendId])[strategyId])[key];
+  const entry = asRecord(asRecord(asRecord(store)[connectionKey])[strategyId])[key];
   const value = asRecord(entry);
   if (typeof value.sessionID !== 'string' || value.sessionID.length === 0) return null;
   if (typeof value.title !== 'string') return null;

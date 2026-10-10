@@ -32,6 +32,7 @@ export class PerDaySessionStrategy implements SessionStrategy {
     const now = input.now ?? new Date();
     return {
       backend: input.backend,
+      connectionKey: input.connectionKey,
       strategyId: this.id,
       strategyKey: `${input.directory}::${localDateKey(now)}`,
       directory: input.directory,

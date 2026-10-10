@@ -1,6 +1,6 @@
-import type { AgentBackend, AgentBackendId } from './interface';
+import type { AgentBackend, AgentBackendId, BackendConnectionConfig } from './interface';
 
-export type AgentBackendFactory = () => AgentBackend;
+export type AgentBackendFactory = (config?: BackendConnectionConfig) => AgentBackend;
 
 const factories = new Map<AgentBackendId, AgentBackendFactory>();
 
@@ -11,13 +11,13 @@ export function registerAgentBackend(id: AgentBackendId, factory: AgentBackendFa
   factories.set(id, factory);
 }
 
-export function getAgentBackend(id: AgentBackendId): AgentBackend {
+export function getAgentBackend(id: AgentBackendId, config?: BackendConnectionConfig): AgentBackend {
   const factory = factories.get(id);
   if (!factory) {
     const known = [...factories.keys()].join(', ') || 'none';
     throw new Error(`Agent backend "${id}" is not registered. Registered backends: ${known}`);
   }
-  return factory();
+  return factory(config);
 }
 
 export function listAgentBackends(): AgentBackendId[] {

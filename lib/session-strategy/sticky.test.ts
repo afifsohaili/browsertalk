@@ -4,6 +4,7 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import { getStoredSession, setStoredSession } from '@/lib/storage/sessions';
 import { stickyTitle, StickySessionStrategy } from './sticky';
 
+const CONNECTION = 'fake@http://127.0.0.1:15001';
 const DIRECTORY = '/home/afif/example';
 
 function at(day: number, hours = 9): Date {
@@ -19,11 +20,16 @@ describe('StickySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
-    const session = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10) });
+    const session = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10),
+    });
 
     expect(session).toEqual({ id: 'ses_fake_1', title: 'Browsertalk · example' });
     expect(backend.createInputs).toEqual([{ directory: DIRECTORY, title: 'Browsertalk · example' }]);
-    expect(await getStoredSession('fake', 'sticky', DIRECTORY)).toEqual({
+    expect(await getStoredSession(CONNECTION, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: 'Browsertalk · example',
     });
@@ -33,27 +39,73 @@ describe('StickySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
-    const first = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10) });
-    const later = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(14) });
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10),
+    });
+    const later = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(14),
+    });
 
     expect(later).toEqual(first);
     expect(backend.sessions).toHaveLength(1);
+  });
+
+  it('never reuses another connection session ref', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new StickySessionStrategy();
+
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10),
+    });
+    const other = await strategy.resolveSession({
+      backend,
+      connectionKey: 'fake@http://127.0.0.1:4096',
+      directory: DIRECTORY,
+      now: at(10),
+    });
+
+    expect(other.id).not.toBe(first.id);
+    expect(backend.sessions).toHaveLength(2);
   });
 
   it('rolls over to a fresh session on demand and continues on it', async () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
-    const first = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10) });
-    const fresh = await strategy.rolloverSession({ backend, directory: DIRECTORY, now: at(11) });
+    const first = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10),
+    });
+    const fresh = await strategy.rolloverSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(11),
+    });
 
     expect(fresh.id).not.toBe(first.id);
-    expect(await getStoredSession('fake', 'sticky', DIRECTORY)).toEqual({
+    expect(await getStoredSession(CONNECTION, 'sticky', DIRECTORY)).toEqual({
       sessionID: fresh.id,
       title: fresh.title,
     });
 
-    const next = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(12) });
+    const next = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(12),
+    });
     expect(next).toEqual(fresh);
   });
 
@@ -61,10 +113,20 @@ describe('StickySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
-    const created = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(10) });
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: created.id, title: 'My review thread' });
+    const created = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(10),
+    });
+    await setStoredSession(CONNECTION, 'sticky', DIRECTORY, { sessionID: created.id, title: 'My review thread' });
 
-    const reused = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(11) });
+    const reused = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(11),
+    });
     expect(reused).toEqual({ id: created.id, title: 'My review thread' });
   });
 
@@ -76,11 +138,20 @@ describe('StickySessionStrategy', () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
-    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(10) })).toBeNull();
+    expect(
+      await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(10) }),
+    ).toBeNull();
     expect(backend.createInputs).toEqual([]);
 
-    const created = await strategy.resolveSession({ backend, directory: DIRECTORY, now: at(11) });
-    expect(await strategy.peekSession({ backend, directory: DIRECTORY, now: at(12) })).toEqual(created);
+    const created = await strategy.resolveSession({
+      backend,
+      connectionKey: CONNECTION,
+      directory: DIRECTORY,
+      now: at(11),
+    });
+    expect(
+      await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(12) }),
+    ).toEqual(created);
     expect(backend.createInputs).toHaveLength(1);
   });
 });

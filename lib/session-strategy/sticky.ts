@@ -25,6 +25,7 @@ export class StickySessionStrategy implements SessionStrategy {
   private persistInput(input: SessionStrategyInput): PersistSessionInput {
     return {
       backend: input.backend,
+      connectionKey: input.connectionKey,
       strategyId: this.id,
       strategyKey: input.directory,
       directory: input.directory,

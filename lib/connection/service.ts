@@ -1,19 +1,21 @@
 import type { BackendStatus, Project } from '@/lib/agent-backend/interface';
 import { redeemPairingCode } from '@/lib/agent-backend/opencode-api';
-import { getAgentBackend } from '@/lib/agent-backend/registry';
+import { connectionKey } from '@/lib/connection/identity';
+import { connectionBackend, resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
-import { getSettings } from '@/lib/storage/settings';
 import type { ConnectionResult, ProjectsResult } from './protocol';
 
 export async function pairWithServer(code: string): Promise<ConnectionResult> {
   const trimmed = code.trim();
   if (trimmed.length === 0) return { ok: false, error: 'Enter a pairing code' };
 
-  const { serverUrl } = await getSettings();
+  const resolved = await resolveConfiguredConnection();
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
   try {
-    const token = await redeemPairingCode({ baseUrl: serverUrl, code: trimmed });
-    await setToken(token);
+    const token = await redeemPairingCode({ baseUrl: resolved.connection.endpoint, code: trimmed });
+    await setToken(connectionKey(resolved.connection), token);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: describeError(error) };
@@ -22,8 +24,9 @@ export async function pairWithServer(code: string): Promise<ConnectionResult> {
 
 export async function pingConnection(): Promise<BackendStatus> {
   try {
-    const { backendId } = await getSettings();
-    return await getAgentBackend(backendId).ping();
+    const resolved = await resolveConfiguredConnection();
+    if (!resolved.ok) return { ok: false, detail: resolved.error };
+    return await connectionBackend(resolved.connection).ping();
   } catch (error) {
     return { ok: false, detail: describeError(error) };
   }
@@ -31,8 +34,9 @@ export async function pingConnection(): Promise<BackendStatus> {
 
 export async function listServerProjects(): Promise<ProjectsResult> {
   try {
-    const { backendId } = await getSettings();
-    const projects: Project[] = await getAgentBackend(backendId).listProjects();
+    const resolved = await resolveConfiguredConnection();
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    const projects: Project[] = await connectionBackend(resolved.connection).listProjects();
     return { ok: true, projects };
   } catch (error) {
     return { ok: false, error: describeError(error) };
@@ -51,7 +55,10 @@ export async function bindOrigin(input: BindOriginInput): Promise<ConnectionResu
   const projectDirectory = input.projectDirectory.trim();
   if (projectDirectory.length === 0) return { ok: false, error: 'Pick a project first' };
 
-  await bindProject(origin, projectDirectory);
+  const resolved = await resolveConfiguredConnection();
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  await bindProject(connectionKey(resolved.connection), origin, projectDirectory);
   return { ok: true };
 }
 

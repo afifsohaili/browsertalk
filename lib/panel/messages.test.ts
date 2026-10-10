@@ -18,6 +18,8 @@ import {
 const ORIGIN = 'https://example.com';
 const DIRECTORY = '/home/afif/example';
 const STICKY_TITLE = 'Browsertalk · example';
+const KEY = 'fake@http://127.0.0.1:15001';
+const OPENCODE_KEY = 'opencode@http://127.0.0.1:15001';
 
 function item(overrides: Partial<OutboxItem> = {}): OutboxItem {
   return {
@@ -42,11 +44,11 @@ describe('panel messaging', () => {
     fakeBrowser.reset();
     registerPanelHandler();
     await setSettings({ backendId: 'fake', sessionStrategy: { fake: 'sticky' } });
-    await bindProject(ORIGIN, DIRECTORY);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
   });
 
   it('reads the bound target with the stored session', async () => {
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
 
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,
@@ -87,6 +89,7 @@ describe('panel messaging', () => {
 
   it('keeps the item and reports the error when the retry fails', async () => {
     await setSettings({ backendId: 'opencode' });
+    await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
     const failed = item({ error: 'old failure' });
     await appendToOutbox(failed);
 
@@ -97,14 +100,14 @@ describe('panel messaging', () => {
   });
 
   it('rolls the session over and continues on the fresh one', async () => {
-    await setStoredSession('fake', 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
 
     await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({
       ok: true,
       session: { id: 'ses_fake_1', title: STICKY_TITLE },
     });
 
-    expect(await getStoredSession('fake', 'sticky', DIRECTORY)).toEqual({
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: STICKY_TITLE,
     });
@@ -123,10 +126,11 @@ describe('panel messaging', () => {
 
   it('reports a backend failure during rollover without storing a session', async () => {
     await setSettings({ backendId: 'opencode' });
+    await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
 
     await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({ ok: false, error: 'Not paired' });
-    expect(await getStoredSession('opencode', 'per-day', `${DIRECTORY}::2026-10-10`)).toBeNull();
-    expect(await getStoredSession('opencode', 'sticky', DIRECTORY)).toBeNull();
+    expect(await getStoredSession(OPENCODE_KEY, 'per-day', `${DIRECTORY}::2026-10-10`)).toBeNull();
+    expect(await getStoredSession(OPENCODE_KEY, 'sticky', DIRECTORY)).toBeNull();
   });
 
   it('falls back honestly when the background is not there', async () => {

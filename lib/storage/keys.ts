@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   },
   auth: {
     token: 'auth.token',
+    tokens: 'auth.tokens',
   },
   consent: {
     status: 'consent.status',

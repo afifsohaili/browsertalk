@@ -57,11 +57,11 @@ export async function requestSessionRollover(origin: string): Promise<SessionRol
 
 async function readTarget(origin: string): Promise<TargetReadResult> {
   try {
-    const project = await getBoundProject(origin);
+    const { backend, strategy, connectionKey } = await resolveActiveSessionStrategy();
+    const project = await getBoundProject(connectionKey, origin);
     if (project === null) return { ok: true, target: { project: null, session: null } };
 
-    const { backend, strategy } = await resolveActiveSessionStrategy();
-    const session = await strategy.peekSession({ backend, directory: project });
+    const session = await strategy.peekSession({ backend, connectionKey, directory: project });
     return { ok: true, target: { project, session } };
   } catch (error) {
     return { ok: false, error: describeError(error) };
@@ -79,11 +79,11 @@ async function retryOutboxItem(itemId: string): Promise<PanelRetryResult> {
 
 async function rolloverSession(origin: string): Promise<SessionRolloverResult> {
   try {
-    const project = await getBoundProject(origin);
+    const { backend, strategy, connectionKey } = await resolveActiveSessionStrategy();
+    const project = await getBoundProject(connectionKey, origin);
     if (project === null) return { ok: false, error: NO_PROJECT_BINDING };
 
-    const { backend, strategy } = await resolveActiveSessionStrategy();
-    const session = await strategy.rolloverSession({ backend, directory: project });
+    const session = await strategy.rolloverSession({ backend, connectionKey, directory: project });
     return { ok: true, session };
   } catch (error) {
     return { ok: false, error: describeError(error) };

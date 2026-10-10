@@ -1,3 +1,4 @@
+import { parseLoopbackUrl } from '@/lib/connection/endpoint';
 import type { FeedbackAttachment, Project, SendResult, SessionCreateInput, SessionRef } from './interface';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -5,6 +6,7 @@ export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promis
 const AUTH_USERNAME = 'opencode';
 const UNEXPECTED_RESPONSE = 'The opencode server sent an unexpected response';
 const SESSION_NOT_FOUND = 'The session does not exist on the opencode server';
+const REDIRECT_REJECTED = 'The opencode server redirected the request; refusing to follow it';
 
 export class OpenCodeError extends Error {
   readonly status: number | null;
@@ -165,19 +167,25 @@ interface JsonRequest {
 }
 
 async function requestJson(input: JsonRequest): Promise<unknown> {
-  const fetchFn = input.fetchFn ?? fetchImpl ?? defaultFetch;
-  const url = `${input.baseUrl.replace(/\/+$/, '')}${input.path}`;
+  const parsed = parseLoopbackUrl(input.baseUrl);
+  if (!parsed.ok) throw new OpenCodeError(parsed.error);
 
-  const init: RequestInit = { method: input.method, headers: input.headers };
+  const fetchFn = input.fetchFn ?? fetchImpl ?? defaultFetch;
+  const url = `${parsed.endpoint}${input.path}`;
+
+  const init: RequestInit = { method: input.method, headers: input.headers, redirect: 'error' };
   if (input.body !== undefined) init.body = JSON.stringify(input.body);
 
   let response: Response;
   try {
     response = await fetchFn(url, init);
   } catch (cause) {
-    throw new OpenCodeError(`Cannot reach the opencode server at ${input.baseUrl}`, { cause });
+    throw new OpenCodeError(`Cannot reach the opencode server at ${parsed.endpoint}`, { cause });
   }
 
+  if (response.redirected) {
+    throw new OpenCodeError(REDIRECT_REJECTED, { status: response.status });
+  }
   if (response.status === 401) {
     throw new OpenCodeError(input.unauthorizedMessage, { status: response.status });
   }
