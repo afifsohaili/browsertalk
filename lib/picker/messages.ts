@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import { setPendingFeedback } from '@/lib/storage/pending';
-import { isPickerFeedback, type PickerFeedback } from './facts';
+import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
   isArmPickerResult,
   isCaptureResult,
@@ -9,6 +9,7 @@ import {
   type CaptureResult,
   type PickerMessage,
 } from './protocol';
+import { createElementScreenshotter, cropScreenshot, type ElementScreenshotter } from './screenshot';
 
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_ACTIVE_PAGE = 'No active page to arm the picker on';
@@ -16,23 +17,52 @@ const NO_CONTENT_SCRIPT = "Can't arm the picker on this page";
 const INVALID_CAPTURE = 'The captured feedback was invalid';
 const CONTEXT_MENU_ID = 'arm-picker';
 
-export async function respondToPickerRequest(request: PickerMessage): Promise<ArmPickerResult | CaptureResult> {
+const defaultScreenshotter = createElementScreenshotter({
+  captureTab: (windowId) =>
+    windowId === undefined
+      ? browser.tabs.captureVisibleTab({ format: 'png' })
+      : browser.tabs.captureVisibleTab(windowId, { format: 'png' }),
+  crop: cropScreenshot,
+  now: () => Date.now(),
+  sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+});
+
+let activeScreenshotter: ElementScreenshotter = defaultScreenshotter;
+
+export function setElementScreenshotter(next: ElementScreenshotter | null): void {
+  activeScreenshotter = next ?? defaultScreenshotter;
+}
+
+export interface PickerRequestContext {
+  windowId?: number;
+}
+
+export async function respondToPickerRequest(
+  request: PickerMessage,
+  context: PickerRequestContext = {},
+): Promise<ArmPickerResult | CaptureResult> {
   switch (request.type) {
     case 'picker/arm':
       return armPickerOnActiveTab();
     case 'picker/captured': {
       if (!isPickerFeedback(request.feedback)) return { ok: false, error: INVALID_CAPTURE };
-      await setPendingFeedback(request.feedback);
+      const screenshot = await activeScreenshotter.captureFor(request.feedback, context.windowId);
+      await setPendingFeedback(withScreenshot(request.feedback, screenshot));
       return { ok: true };
     }
   }
 }
 
+function withScreenshot(feedback: PickerFeedback, screenshot: PickerScreenshotFacts | null): PickerFeedback {
+  if (screenshot === null) return feedback;
+  return { ...feedback, extras: { ...feedback.extras, screenshot } };
+}
+
 export function registerPickerMessageHandler(): void {
-  browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     if (!isPickerMessage(message)) return undefined;
 
-    respondToPickerRequest(message).then(sendResponse, () => {
+    respondToPickerRequest(message, { windowId: sender.tab?.windowId }).then(sendResponse, () => {
       sendResponse({ ok: false, error: 'Something went wrong' } satisfies CaptureResult);
     });
     return true;

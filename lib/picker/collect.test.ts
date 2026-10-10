@@ -222,4 +222,44 @@ describe('fact assembly', () => {
       },
     });
   });
+
+  it('attaches extras when present', () => {
+    const withExtras: RawCapture = {
+      ...raw,
+      extras: {
+        component: 'CheckoutButton',
+        styles: { cursor: 'pointer', display: 'inline-block' },
+        aria: {
+          tag: 'button',
+          role: null,
+          inputType: null,
+          hasHref: false,
+          multiple: false,
+          ariaLabelledBy: null,
+          ariaLabel: 'Checkout',
+          labelText: null,
+          alt: null,
+          title: null,
+          text: 'Checkout now',
+        },
+      },
+    };
+
+    const feedback = assembleFeedback(withExtras, { id: 'fb_1', capturedAt: '2026-10-10T09:00:00.000Z' });
+
+    expect(feedback.extras).toEqual({
+      component: 'CheckoutButton',
+      styles: { display: 'inline-block', cursor: 'pointer' },
+      aria: { role: 'button', name: 'Checkout' },
+    });
+  });
+
+  it('omits extras when there is nothing to attach', () => {
+    const feedback = assembleFeedback(
+      { ...raw, extras: { component: null, styles: {}, aria: null } },
+      { id: 'fb_1', capturedAt: '2026-10-10T09:00:00.000Z' },
+    );
+
+    expect('extras' in feedback).toBe(false);
+  });
 });

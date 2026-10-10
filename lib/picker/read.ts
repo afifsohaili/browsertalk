@@ -1,4 +1,6 @@
 import type { ElementPathSegment, RawCapture, RawElementCapture } from './collect';
+import { detectComponentName } from './component';
+import { STYLE_PROPERTY_NAMES, type RawAriaCapture, type RawExtrasCapture } from './extras';
 
 export function readCapture(element: Element): RawCapture {
   return {
@@ -7,7 +9,73 @@ export function readCapture(element: Element): RawCapture {
       title: document.title,
     },
     element: readElement(element),
+    extras: readExtras(element),
   };
+}
+
+export function readExtras(element: Element): RawExtrasCapture {
+  return {
+    component: detectComponentName(element),
+    styles: readStyles(element),
+    aria: readAria(element),
+  };
+}
+
+function readStyles(element: Element): Record<string, string> {
+  const computed = window.getComputedStyle(element);
+  const styles: Record<string, string> = {};
+  for (const name of STYLE_PROPERTY_NAMES) {
+    styles[name] = computed.getPropertyValue(name);
+  }
+  return styles;
+}
+
+function readAria(element: Element): RawAriaCapture {
+  return {
+    tag: element.tagName.toLowerCase(),
+    role: element.getAttribute('role'),
+    inputType: element instanceof HTMLInputElement ? element.type : null,
+    hasHref: element.hasAttribute('href'),
+    multiple: element.hasAttribute('multiple'),
+    ariaLabelledBy: readLabelledByText(element),
+    ariaLabel: element.getAttribute('aria-label'),
+    labelText: readLabelText(element),
+    alt: element.getAttribute('alt'),
+    title: element.getAttribute('title'),
+    text: element.textContent ?? '',
+  };
+}
+
+function readLabelledByText(element: Element): string | null {
+  const ids = element.getAttribute('aria-labelledby');
+  if (ids === null) return null;
+  const text = ids
+    .split(/\s+/)
+    .filter((id) => id.length > 0)
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ')
+    .trim();
+  return text.length > 0 ? text : null;
+}
+
+function readLabelText(element: Element): string | null {
+  if (
+    !(
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement ||
+      element instanceof HTMLTextAreaElement ||
+      element instanceof HTMLButtonElement
+    )
+  ) {
+    return null;
+  }
+  const labels = element.labels;
+  if (labels === null || labels.length === 0) return null;
+  const text = Array.from(labels)
+    .map((label) => label.textContent ?? '')
+    .join(' ')
+    .trim();
+  return text.length > 0 ? text : null;
 }
 
 function readElement(element: Element): RawElementCapture {

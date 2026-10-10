@@ -9,6 +9,7 @@ import {
   type PickerPointFacts,
   type PickerSizeFacts,
 } from './facts';
+import { assembleExtras, type RawExtrasCapture } from './extras';
 
 export interface RectLike {
   x: number;
@@ -55,6 +56,7 @@ export interface RawElementCapture {
 export interface RawCapture {
   page: RawPageCapture;
   element: RawElementCapture;
+  extras?: RawExtrasCapture;
 }
 
 export interface CaptureMeta {
@@ -157,10 +159,13 @@ export function assembleFeedback(raw: RawCapture, meta: CaptureMeta): PickerFeed
     scroll: toPointFacts(raw.element.scroll),
   };
 
+  const extras = assembleExtras(raw.extras);
+
   return {
     id: meta.id,
     capturedAt: meta.capturedAt,
     page: parsePageFacts(raw.page.url, raw.page.title),
     element,
+    ...(extras === null ? {} : { extras }),
   };
 }

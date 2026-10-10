@@ -58,6 +58,25 @@ export interface PickerFeedback {
   capturedAt: string;
   page: PickerPageFacts;
   element: PickerElementFacts;
+  extras?: PickerExtras;
+}
+
+export interface PickerScreenshotFacts {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface PickerAriaFacts {
+  role?: string;
+  name?: string;
+}
+
+export interface PickerExtras {
+  screenshot?: PickerScreenshotFacts;
+  component?: string;
+  styles?: Record<string, string>;
+  aria?: PickerAriaFacts;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,12 +146,38 @@ function isElementFacts(value: unknown): value is PickerElementFacts {
   );
 }
 
+function isScreenshotFacts(value: unknown): value is PickerScreenshotFacts {
+  return (
+    isRecord(value) &&
+    isString(value.dataUrl) &&
+    isFiniteNumber(value.width) &&
+    isFiniteNumber(value.height)
+  );
+}
+
+function isAriaFacts(value: unknown): value is PickerAriaFacts {
+  if (!isRecord(value)) return false;
+  if (value.role !== undefined && !isString(value.role)) return false;
+  if (value.name !== undefined && !isString(value.name)) return false;
+  return value.role !== undefined || value.name !== undefined;
+}
+
+export function isPickerExtras(value: unknown): value is PickerExtras {
+  if (!isRecord(value)) return false;
+  if (value.screenshot !== undefined && !isScreenshotFacts(value.screenshot)) return false;
+  if (value.component !== undefined && !isString(value.component)) return false;
+  if (value.styles !== undefined && !isStringRecord(value.styles)) return false;
+  if (value.aria !== undefined && !isAriaFacts(value.aria)) return false;
+  return true;
+}
+
 export function isPickerFeedback(value: unknown): value is PickerFeedback {
   return (
     isRecord(value) &&
     isString(value.id) &&
     isString(value.capturedAt) &&
     isPageFacts(value.page) &&
-    isElementFacts(value.element)
+    isElementFacts(value.element) &&
+    (value.extras === undefined || isPickerExtras(value.extras))
   );
 }

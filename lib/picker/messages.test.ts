@@ -9,6 +9,8 @@ import {
   notifyCaptured,
   registerPickerMessageHandler,
   requestArmPicker,
+  respondToPickerRequest,
+  setElementScreenshotter,
 } from './messages';
 
 type Tab = Browser.tabs.Tab;
@@ -64,11 +66,13 @@ describe('picker messaging', () => {
   beforeEach(() => {
     fakeBrowser.reset();
     registerPickerMessageHandler();
+    setElementScreenshotter({ captureFor: vi.fn(async () => null) });
   });
 
   afterEach(() => {
     browser.tabs.query = originalQuery;
     browser.tabs.sendMessage = originalSendMessage;
+    setElementScreenshotter(null);
   });
 
   it('arms the active tab through its content script', async () => {
@@ -131,6 +135,49 @@ describe('picker messaging', () => {
 
     expect(response).toEqual({ ok: false, error: 'The captured feedback was invalid' });
     expect(await getPendingFeedback()).toBeNull();
+  });
+
+  it('attaches a screenshot crop to the pending feedback', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+
+    await expect(notifyCaptured(sampleFeedback())).resolves.toEqual({ ok: true });
+    expect((await getPendingFeedback())?.extras?.screenshot).toEqual(shot);
+  });
+
+  it('keeps the content-script extras when the screenshot lands', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+    const item: PickerFeedback = {
+      ...sampleFeedback(),
+      extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+    };
+
+    await expect(notifyCaptured(item)).resolves.toEqual({ ok: true });
+    expect((await getPendingFeedback())?.extras).toEqual({
+      component: 'CheckoutButton',
+      aria: { role: 'button', name: 'Checkout' },
+      screenshot: shot,
+    });
+  });
+
+  it('stores the feedback without a screenshot when the capture is skipped', async () => {
+    setElementScreenshotter({ captureFor: vi.fn(async () => null) });
+    const item = sampleFeedback();
+
+    await expect(notifyCaptured(item)).resolves.toEqual({ ok: true });
+    expect(await getPendingFeedback()).toEqual(item);
+  });
+
+  it('passes the sender window to the screenshotter', async () => {
+    const captureFor = vi.fn(async () => null);
+    setElementScreenshotter({ captureFor });
+    const item = sampleFeedback();
+
+    await expect(respondToPickerRequest({ type: 'picker/captured', feedback: item }, { windowId: 7 })).resolves.toEqual({
+      ok: true,
+    });
+    expect(captureFor).toHaveBeenCalledWith(item, 7);
   });
 
   it('leaves messages for other modules alone', async () => {

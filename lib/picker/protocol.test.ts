@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { isPickerFeedback, type PickerFeedback } from './facts';
+import { isPickerFeedback, type PickerExtras, type PickerFeedback } from './facts';
 import { isArmPickerResult, isCaptureResult, isPickerMessage } from './protocol';
+
+export function sampleExtras(): PickerExtras {
+  return {
+    screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 },
+    component: 'CheckoutButton',
+    styles: { display: 'inline-block', color: 'rgb(255, 255, 255)' },
+    aria: { role: 'button', name: 'Checkout' },
+  };
+}
 
 export function sampleFeedback(): PickerFeedback {
   return {
@@ -92,6 +101,46 @@ describe('feedback validation', () => {
     expect(isPickerFeedback(feedback)).toBe(true);
     expect(isPickerFeedback({ ...feedback, id: 7 })).toBe(false);
     expect(isPickerFeedback({ ...feedback, capturedAt: null })).toBe(false);
+  });
+});
+
+describe('extras validation', () => {
+  it('accepts a feedback with a full extras set', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: sampleExtras() })).toBe(true);
+  });
+
+  it('accepts partial extras', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: { component: 'App' } })).toBe(true);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { name: 'Checkout' } } })).toBe(true);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: {} })).toBe(true);
+  });
+
+  it('rejects a screenshot without a data URL and size', () => {
+    const missingDataUrl = { screenshot: { width: 10, height: 10 } };
+    const badWidth = { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: '10', height: 10 } };
+
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: missingDataUrl })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: badWidth })).toBe(false);
+  });
+
+  it('rejects non-string style values', () => {
+    const extras = { styles: { display: 42 } };
+
+    expect(isPickerFeedback({ ...sampleFeedback(), extras })).toBe(false);
+  });
+
+  it('rejects a component that is not a string', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: { component: 42 } })).toBe(false);
+  });
+
+  it('rejects an aria pair with non-string members', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { role: 1 } } })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { name: 1 } } })).toBe(false);
+  });
+
+  it('rejects extras that are not an object', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: 'nope' })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), extras: 7 })).toBe(false);
   });
 });
 
