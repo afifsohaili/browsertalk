@@ -4,7 +4,7 @@
 
 **Blocked by:** 005 — Composer.
 
-**Status:** done
+**Status:** done · 0689dd8
 
 - [x] With per-day selected: first feedback of the day creates `Browsertalk · <project> · <date>`; later feedback reuses it (verified once against a live server, manually)
 - [x] Prompt renders per `product.md` §Prompt template, extras included when present
