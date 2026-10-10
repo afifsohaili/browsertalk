@@ -5,7 +5,7 @@ Source: pre-009 review (general + `openai/gpt-6.1-sol`, 2026-10-10; full report 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 010-01 | `ticket-01-connection-identity.md` | shipped · 281b18c | 008 |
-| 010-02 | `ticket-02-backend-onboarding.md` | ready | 010-01 |
+| 010-02 | `ticket-02-backend-onboarding.md` | shipped · e3c1053 | 010-01 |
 | 010-03 | `ticket-03-serialized-admission.md` | ready | 010-02 |
 | 010-04 | `ticket-04-capture-quota-consent.md` | ready | 010-03 |
 | 010-05 | `ticket-05-conformance.md` | ready | 010-04 |
