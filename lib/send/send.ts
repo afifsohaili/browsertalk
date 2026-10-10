@@ -91,7 +91,7 @@ export async function deliver(item: OutboxItem, options: SendOptions = {}): Prom
     const now = options.now ?? new Date();
     const sentAt = now.toISOString();
     const text = renderPrompt({ projectName: projectName(directory), item, sentAt });
-    const attachment = elementAttachment(item.facts.extras);
+    const attachment = backend.capabilities.images ? elementAttachment(item.facts.extras) : null;
 
     await backend.sendFeedback({
       sessionID: session.id,

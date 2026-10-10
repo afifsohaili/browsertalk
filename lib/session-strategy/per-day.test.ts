@@ -30,11 +30,16 @@ describe('PerDaySessionStrategy', () => {
 
     expect(session).toEqual({ id: 'ses_fake_1', title: 'Browsertalk · example · 2026-10-10' });
     expect(backend.createInputs).toEqual([
-      { directory: DIRECTORY, title: 'Browsertalk · example · 2026-10-10' },
+      {
+        directory: DIRECTORY,
+        title: 'Browsertalk · example · 2026-10-10',
+        intent: { strategyId: 'per-day', strategyKey: DAY, generation: 0 },
+      },
     ]);
     expect(await getStoredSession(CONNECTION, 'per-day', DAY)).toEqual({
       sessionID: 'ses_fake_1',
       title: 'Browsertalk · example · 2026-10-10',
+      generation: 0,
     });
   });
 
@@ -102,6 +107,7 @@ describe('PerDaySessionStrategy', () => {
     expect(await getStoredSession(CONNECTION, 'per-day', `${DIRECTORY}::2026-10-11`)).toEqual({
       sessionID: 'ses_fake_2',
       title: 'Browsertalk · example · 2026-10-11',
+      generation: 0,
     });
   });
 
@@ -124,9 +130,15 @@ describe('PerDaySessionStrategy', () => {
 
     expect(fresh.id).not.toBe(first.id);
     expect(fresh.title).toBe('Browsertalk · example · 2026-10-10');
+    expect(backend.createInputs[1]).toEqual({
+      directory: DIRECTORY,
+      title: 'Browsertalk · example · 2026-10-10',
+      intent: { strategyId: 'per-day', strategyKey: DAY, generation: 1 },
+    });
     expect(await getStoredSession(CONNECTION, 'per-day', DAY)).toEqual({
       sessionID: fresh.id,
       title: fresh.title,
+      generation: 1,
     });
 
     const next = await strategy.resolveSession({

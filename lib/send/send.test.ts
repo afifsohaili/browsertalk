@@ -5,6 +5,7 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import type {
   AgentBackend,
   AgentBackendId,
+  BackendCapabilities,
   BackendStatus,
   Project,
   SendResult,
@@ -48,10 +49,25 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+class NoImagesBackend extends FakeAgentBackend {
+  override readonly capabilities = {
+    projects: true,
+    namedCreation: true,
+    delivery: ['queue'] as const,
+    images: false,
+  };
+}
+
 class RejectingBackend implements AgentBackend {
   readonly id: AgentBackendId = 'pi';
   readonly label = 'Rejecting';
-  readonly capabilities = { projects: true };
+  readonly capabilities: BackendCapabilities = {
+    projects: false,
+    namedCreation: true,
+    delivery: ['queue'],
+    images: true,
+  };
+  readonly onboarding = null;
   readonly defaultSessionStrategy = 'per-day';
 
   async ping(): Promise<BackendStatus> {
@@ -73,7 +89,7 @@ class RejectingBackend implements AgentBackend {
 
 const rejectingBackend = new RejectingBackend();
 
-let fakeBackend = new FakeAgentBackend();
+let fakeBackend: FakeAgentBackend = new FakeAgentBackend();
 
 beforeAll(() => {
   registerAgentBackend('fake', () => fakeBackend);
@@ -150,10 +166,17 @@ describe('send pipeline', () => {
       session: { id: 'ses_fake_1', title: DAY_TITLE },
     });
 
-    expect(fakeBackend.createInputs).toEqual([{ directory: DIRECTORY, title: DAY_TITLE }]);
+    expect(fakeBackend.createInputs).toEqual([
+      {
+        directory: DIRECTORY,
+        title: DAY_TITLE,
+        intent: { strategyId: 'per-day', strategyKey: DAY_KEY, generation: 0 },
+      },
+    ]);
     expect(await getStoredSession(FAKE_KEY, 'per-day', DAY_KEY)).toEqual({
       sessionID: 'ses_fake_1',
       title: DAY_TITLE,
+      generation: 0,
     });
 
     const sent = fakeBackend.sent[0];
@@ -213,6 +236,22 @@ describe('send pipeline', () => {
         description: 'Screenshot of the picked element',
       },
     ]);
+  });
+
+  it('leaves the screenshot out when the backend cannot take images', async () => {
+    fakeBackend = new NoImagesBackend();
+    const item = elementItem({
+      facts: {
+        ...elementItem().facts,
+        extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
+      },
+    });
+    await appendToOutbox(item);
+
+    await sendQueuedItem(item.id, { now: NOW });
+
+    expect(fakeBackend.sent[0]?.files).toBeUndefined();
+    expect(fakeBackend.sent[0]?.text).toContain('Comment: Checkout button is broken');
   });
 
   it('keeps the sent log capped when a send succeeds', async () => {
@@ -277,10 +316,17 @@ describe('send pipeline', () => {
 
     await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
 
-    expect(fakeBackend.createInputs).toEqual([{ directory: DIRECTORY, title: DAY_TITLE }]);
+    expect(fakeBackend.createInputs).toEqual([
+      {
+        directory: DIRECTORY,
+        title: DAY_TITLE,
+        intent: { strategyId: 'per-day', strategyKey: DAY_KEY, generation: 0 },
+      },
+    ]);
     expect(await getStoredSession(FAKE_KEY, 'per-day', DAY_KEY)).toEqual({
       sessionID: 'ses_fake_1',
       title: DAY_TITLE,
+      generation: 0,
     });
     expect(await getStoredSession(OPENCODE_KEY_B, 'per-day', DAY_KEY)).toBeNull();
     expect(fetchFn).not.toHaveBeenCalled();
@@ -334,6 +380,7 @@ describe('send pipeline', () => {
     expect(await getStoredSession(OPENCODE_KEY_A, 'per-day', DAY_KEY)).toEqual({
       sessionID: 'ses_a',
       title: DAY_TITLE,
+      generation: 0,
     });
     expect(await getStoredSession(OPENCODE_KEY_B, 'per-day', DAY_KEY)).toBeNull();
   });

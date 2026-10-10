@@ -48,7 +48,7 @@ describe('panel messaging', () => {
   });
 
   it('reads the bound target with the stored session', async () => {
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread', generation: 0 });
 
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,
@@ -100,7 +100,7 @@ describe('panel messaging', () => {
   });
 
   it('rolls the session over and continues on the fresh one', async () => {
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
 
     await expect(requestSessionRollover(ORIGIN)).resolves.toEqual({
       ok: true,
@@ -110,6 +110,7 @@ describe('panel messaging', () => {
     expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: STICKY_TITLE,
+      generation: 1,
     });
     await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
       ok: true,

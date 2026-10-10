@@ -5,17 +5,26 @@ import {
   isConnectionChanged,
   isConnectionRequest,
   isConnectionResult,
+  isOnboardingResult,
   isProjectsResult,
   type ConnectionChangedEvent,
   type ConnectionRequest,
   type ConnectionResult,
+  type OnboardingResult,
+  type OnboardingView,
   type ProjectsResult,
 } from './protocol';
-import { bindOrigin, listServerProjects, pairWithServer, pingConnection } from './service';
+import {
+  bindOrigin,
+  connectionOnboarding,
+  listServerProjects,
+  pairWithServer,
+  pingConnection,
+} from './service';
 
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 
-export type ConnectionResponse = BackendStatus | ConnectionResult | ProjectsResult;
+export type ConnectionResponse = BackendStatus | ConnectionResult | OnboardingResult | ProjectsResult;
 
 export async function respondToConnectionRequest(request: ConnectionRequest): Promise<ConnectionResponse> {
   switch (request.type) {
@@ -26,6 +35,8 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
     }
     case 'connection/status':
       return pingConnection();
+    case 'connection/onboarding':
+      return connectionOnboarding();
     case 'connection/projects':
       return listServerProjects();
     case 'connection/bind':
@@ -61,6 +72,11 @@ export async function requestConnectionStatus(): Promise<BackendStatus> {
 export async function requestPair(code: string): Promise<ConnectionResult> {
   const response = await sendSafely({ type: 'connection/pair', code });
   return isConnectionResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestOnboarding(): Promise<OnboardingView | null> {
+  const response = await sendSafely({ type: 'connection/onboarding' });
+  return isOnboardingResult(response) && response.ok ? response.onboarding : null;
 }
 
 export async function requestProjects(): Promise<ProjectsResult> {

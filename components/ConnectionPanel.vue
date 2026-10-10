@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useConnection } from '@/lib/connection/use-connection';
 
-const { status, serverUrl, pairing, pairError, pair } = useConnection();
+const { status, onboarding, pairing, pairError, pair } = useConnection();
 const code = ref('');
 
 const statusText = computed(() => {
@@ -22,12 +22,19 @@ async function submit(): Promise<void> {
       <span v-if="status" class="detail">{{ status.detail }}</span>
     </div>
 
-    <form v-if="status && !status.ok" class="pair" @submit.prevent="submit">
-      <p class="hint">
-        Run <code>opencode api post /api/pair --server {{ serverUrl }}</code> and paste the code:
+    <form v-if="status && !status.ok && onboarding" class="pair" @submit.prevent="submit">
+      <p class="hint">{{ onboarding.instructions }}</p>
+      <p v-if="onboarding.command" class="hint">
+        <code>{{ onboarding.command }}</code>
       </p>
       <div class="pair-row">
-        <input v-model="code" type="text" placeholder="Pairing code" autocomplete="off" spellcheck="false" />
+        <input
+          v-model="code"
+          type="text"
+          :placeholder="onboarding.credentialLabel"
+          autocomplete="off"
+          spellcheck="false"
+        />
         <button type="submit" :disabled="pairing || code.trim().length === 0">
           {{ pairing ? 'pairing…' : 'pair' }}
         </button>

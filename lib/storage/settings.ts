@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { isAgentBackendId, type AgentBackendId } from '@/lib/agent-backend/interface';
+import { hasAgentBackend } from '@/lib/agent-backend/registry';
 import { parseLoopbackUrl } from '@/lib/connection/endpoint';
 import { isSessionStrategyId, type SessionStrategyId } from '@/lib/session-strategy/interface';
 import { STORAGE_KEYS } from './keys';
@@ -57,7 +58,7 @@ export async function setSessionStrategyOverride(
   backendId: AgentBackendId,
   strategyId: SessionStrategyId | null,
 ): Promise<void> {
-  if (!isAgentBackendId(backendId)) throw new Error(`Unknown agent backend "${backendId}"`);
+  if (!hasAgentBackend(backendId)) throw new Error(`Unknown agent backend "${backendId}"`);
   if (strategyId !== null && !isSessionStrategyId(strategyId)) {
     throw new Error(`Unknown session strategy "${strategyId}"`);
   }

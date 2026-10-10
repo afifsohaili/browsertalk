@@ -1,21 +1,23 @@
 import type { BackendStatus, Project } from '@/lib/agent-backend/interface';
-import { redeemPairingCode } from '@/lib/agent-backend/opencode-api';
 import { connectionKey } from '@/lib/connection/identity';
 import { connectionBackend, resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
-import type { ConnectionResult, ProjectsResult } from './protocol';
+import type { ConnectionResult, OnboardingResult, ProjectsResult } from './protocol';
 
-export async function pairWithServer(code: string): Promise<ConnectionResult> {
-  const trimmed = code.trim();
-  if (trimmed.length === 0) return { ok: false, error: 'Enter a pairing code' };
-
+export async function pairWithServer(credential: string): Promise<ConnectionResult> {
   const resolved = await resolveConfiguredConnection();
   if (!resolved.ok) return { ok: false, error: resolved.error };
 
+  const onboarding = connectionBackend(resolved.connection).onboarding;
+  if (onboarding === null) return { ok: false, error: 'This backend needs no pairing' };
+
+  const trimmed = credential.trim();
+  if (trimmed.length === 0) return { ok: false, error: onboarding.emptyCredentialError };
+
   try {
-    const token = await redeemPairingCode({ baseUrl: resolved.connection.endpoint, code: trimmed });
-    await setToken(connectionKey(resolved.connection), token);
+    const { token } = await onboarding.authenticate({ credential: trimmed });
+    if (token !== null) await setToken(connectionKey(resolved.connection), token);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: describeError(error) };
@@ -32,12 +34,38 @@ export async function pingConnection(): Promise<BackendStatus> {
   }
 }
 
+export async function connectionOnboarding(): Promise<OnboardingResult> {
+  try {
+    const resolved = await resolveConfiguredConnection();
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+
+    const onboarding = connectionBackend(resolved.connection).onboarding;
+    if (onboarding === null) return { ok: true, onboarding: null };
+
+    const input = { endpoint: resolved.connection.endpoint };
+    return {
+      ok: true,
+      onboarding: {
+        instructions: onboarding.instructions(input),
+        command: onboarding.command(input),
+        credentialLabel: onboarding.credentialLabel,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: describeError(error) };
+  }
+}
+
 export async function listServerProjects(): Promise<ProjectsResult> {
   try {
     const resolved = await resolveConfiguredConnection();
     if (!resolved.ok) return { ok: false, error: resolved.error };
-    const projects: Project[] = await connectionBackend(resolved.connection).listProjects();
-    return { ok: true, projects };
+
+    const backend = connectionBackend(resolved.connection);
+    if (!backend.capabilities.projects) return { ok: true, supported: false, projects: [] };
+
+    const projects: Project[] = await backend.listProjects();
+    return { ok: true, supported: true, projects };
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }

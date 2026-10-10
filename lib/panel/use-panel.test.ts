@@ -43,8 +43,21 @@ class PanelFakeBackend extends FakeAgentBackend {
   }
 }
 
+class NoProjectsFakeBackend extends FakeAgentBackend {
+  override readonly capabilities = {
+    projects: false,
+    namedCreation: true,
+    delivery: ['queue'] as const,
+    images: true,
+  };
+
+  override async listProjects(): Promise<never> {
+    throw new Error('listProjects must not be called');
+  }
+}
+
 let fakeProjects = DEFAULT_PROJECTS;
-let fakeBackend = new PanelFakeBackend();
+let fakeBackend: FakeAgentBackend = new PanelFakeBackend();
 
 function tab(id: number, url?: string): Tab {
   return { id, url } as unknown as Tab;
@@ -109,7 +122,7 @@ describe('panel logic', () => {
   it('loads the bound target and the lists on start', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_seed', title: 'My review thread', generation: 0 });
     await appendToOutbox(item());
 
     const { panel, stop } = await loadedPanel();
@@ -165,7 +178,7 @@ describe('panel logic', () => {
     const { panel, stop } = await loadedPanel();
     expect(targetState(panel.target.value)).toBe('no-session');
 
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_later', title: 'Later thread', generation: 0 });
 
     await vi.waitFor(() => {
       expect(panel.target.value?.session).toEqual({ id: 'ses_later', title: 'Later thread' });
@@ -260,7 +273,7 @@ describe('panel logic', () => {
   it('rolls the header to the fresh session and continues on it', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
-    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread' });
+    await setStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
 
     const { panel, stop } = await loadedPanel();
     expect(panel.target.value?.session?.id).toBe('ses_old');
@@ -272,6 +285,7 @@ describe('panel logic', () => {
     expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: STICKY_TITLE,
+      generation: 1,
     });
     stop();
   });
@@ -339,8 +353,29 @@ describe('panel logic', () => {
 
       expect(panel.projectsOpen.value).toBe(true);
       expect(panel.projectsLoading.value).toBe(false);
+      expect(panel.projectsSupported.value).toBe(true);
       expect(panel.projectsError.value).toBeNull();
       expect(panel.projects.value).toEqual(DEFAULT_PROJECTS);
+      stop();
+    });
+
+    it('offers a manual binding when the backend cannot list projects', async () => {
+      fakeBackend = new NoProjectsFakeBackend();
+      stubQuery([tab(1, PAGE_URL)]);
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openProjects();
+
+      expect(panel.projectsOpen.value).toBe(true);
+      expect(panel.projectsSupported.value).toBe(false);
+      expect(panel.projects.value).toEqual([]);
+      expect(panel.projectsError.value).toBeNull();
+
+      await panel.chooseProject('/tmp/manual-project');
+
+      expect(panel.projectsOpen.value).toBe(false);
+      expect(panel.target.value).toEqual({ origin: ORIGIN, project: '/tmp/manual-project', session: null });
+      expect(await getBoundProject(KEY, ORIGIN)).toBe('/tmp/manual-project');
       stop();
     });
 
@@ -452,7 +487,11 @@ describe('panel logic', () => {
       await expect(sendQueuedItem('ob_bind_send')).resolves.toMatchObject({ ok: true });
 
       expect(fakeBackend.createInputs).toEqual([
-        { directory: '/tmp/other-project', title: 'Browsertalk · other-project' },
+        {
+          directory: '/tmp/other-project',
+          title: 'Browsertalk · other-project',
+          intent: { strategyId: 'sticky', strategyKey: '/tmp/other-project', generation: 0 },
+        },
       ]);
       expect(fakeBackend.sent[0]?.sessionID).toBe('ses_fake_1');
       expect(fakeBackend.sent[0]?.text).toContain('## Browser feedback — other-project');

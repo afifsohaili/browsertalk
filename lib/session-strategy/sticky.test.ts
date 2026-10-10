@@ -28,10 +28,17 @@ describe('StickySessionStrategy', () => {
     });
 
     expect(session).toEqual({ id: 'ses_fake_1', title: 'Browsertalk · example' });
-    expect(backend.createInputs).toEqual([{ directory: DIRECTORY, title: 'Browsertalk · example' }]);
+    expect(backend.createInputs).toEqual([
+      {
+        directory: DIRECTORY,
+        title: 'Browsertalk · example',
+        intent: { strategyId: 'sticky', strategyKey: DIRECTORY, generation: 0 },
+      },
+    ]);
     expect(await getStoredSession(CONNECTION, 'sticky', DIRECTORY)).toEqual({
       sessionID: 'ses_fake_1',
       title: 'Browsertalk · example',
+      generation: 0,
     });
   });
 
@@ -98,6 +105,7 @@ describe('StickySessionStrategy', () => {
     expect(await getStoredSession(CONNECTION, 'sticky', DIRECTORY)).toEqual({
       sessionID: fresh.id,
       title: fresh.title,
+      generation: 1,
     });
 
     const next = await strategy.resolveSession({
@@ -109,7 +117,7 @@ describe('StickySessionStrategy', () => {
     expect(next).toEqual(fresh);
   });
 
-  it('keeps the stored title on reuse, so a rename survives', async () => {
+  it('reuses the stored title when the backend cannot refresh it', async () => {
     const backend = new FakeAgentBackend();
     const strategy = new StickySessionStrategy();
 
@@ -119,7 +127,11 @@ describe('StickySessionStrategy', () => {
       directory: DIRECTORY,
       now: at(10),
     });
-    await setStoredSession(CONNECTION, 'sticky', DIRECTORY, { sessionID: created.id, title: 'My review thread' });
+    await setStoredSession(CONNECTION, 'sticky', DIRECTORY, {
+      sessionID: created.id,
+      title: 'My review thread',
+      generation: 0,
+    });
 
     const reused = await strategy.resolveSession({
       backend,

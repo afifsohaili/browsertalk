@@ -166,6 +166,7 @@ describe('OpenCodeBackend.createSession', () => {
       new OpenCodeBackend().createSession({
         directory: '/home/afif/example',
         title: 'Browsertalk · example · 2026-10-10',
+        intent: { strategyId: 'per-day', strategyKey: '/home/afif/example::2026-10-10', generation: 0 },
       }),
     ).resolves.toEqual({ id: 'ses_abc', title: 'Browsertalk · example · 2026-10-10' });
 
@@ -178,9 +179,13 @@ describe('OpenCodeBackend.createSession', () => {
     const fetchFn = vi.fn<FetchLike>();
     setOpenCodeFetch(fetchFn);
 
-    await expect(new OpenCodeBackend().createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
-      'Not paired',
-    );
+    await expect(
+      new OpenCodeBackend().createSession({
+        directory: '/d',
+        title: 'T',
+        intent: { strategyId: 'per-day', strategyKey: '/d::2026-10-10', generation: 0 },
+      }),
+    ).rejects.toThrow('Not paired');
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -189,10 +194,45 @@ describe('OpenCodeBackend.createSession', () => {
     const fetchFn = vi.fn<FetchLike>();
     setOpenCodeFetch(fetchFn);
 
-    await expect(new OpenCodeBackend().createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
-      'The server must be on this machine',
-    );
+    await expect(
+      new OpenCodeBackend().createSession({
+        directory: '/d',
+        title: 'T',
+        intent: { strategyId: 'per-day', strategyKey: '/d::2026-10-10', generation: 0 },
+      }),
+    ).rejects.toThrow('The server must be on this machine');
     expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('OpenCodeBackend.onboarding', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('exchanges the credential through the configured endpoint', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ token: 'tok_new' }));
+    const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    await expect(onboarding.authenticate({ credential: 'ABC123' })).resolves.toEqual({ token: 'tok_new' });
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/auth/connect/ABC123`);
+  });
+
+  it('names the pairing command with the configured endpoint', () => {
+    const onboarding = new OpenCodeBackend().onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    expect(onboarding.credentialLabel).toBe('Pairing code');
+    expect(onboarding.emptyCredentialError).toBe('Enter a pairing code');
+    expect(onboarding.instructions({ endpoint: BASE })).toBe('Run this on the server, then paste the code:');
+    expect(onboarding.command({ endpoint: 'http://127.0.0.1:4096' })).toBe(
+      'opencode api post /api/pair --server http://127.0.0.1:4096',
+    );
   });
 });
 

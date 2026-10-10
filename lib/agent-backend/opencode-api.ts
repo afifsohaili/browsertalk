@@ -1,4 +1,5 @@
 import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { BackendError } from './interface';
 import type { FeedbackAttachment, Project, SendResult, SessionCreateInput, SessionRef } from './interface';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -7,6 +8,8 @@ const AUTH_USERNAME = 'opencode';
 const UNEXPECTED_RESPONSE = 'The opencode server sent an unexpected response';
 const SESSION_NOT_FOUND = 'The session does not exist on the opencode server';
 const REDIRECT_REJECTED = 'The opencode server redirected the request; refusing to follow it';
+const BUSY = 'The session is busy';
+const AMBIGUOUS_ADMISSION = 'The server accepted the request, but its response could not be read';
 
 export class OpenCodeError extends Error {
   readonly status: number | null;
@@ -95,6 +98,7 @@ export class OpenCodeApi {
 
     const body = await this.post(`/api/session/${encodeURIComponent(input.sessionID)}/prompt`, payload, {
       notFoundMessage: SESSION_NOT_FOUND,
+      ambiguousAdmission: true,
     });
     return { messageID: readString(readRecord(body, 'data'), 'id') };
   }
@@ -113,7 +117,7 @@ export class OpenCodeApi {
   private post(
     path: string,
     payload: Record<string, unknown>,
-    options: { notFoundMessage?: string } = {},
+    options: { notFoundMessage?: string; ambiguousAdmission?: boolean } = {},
   ): Promise<unknown> {
     return requestJson({
       method: 'POST',
@@ -127,6 +131,7 @@ export class OpenCodeApi {
       fetchFn: this.config.fetchFn,
       unauthorizedMessage: 'Pairing token rejected',
       notFoundMessage: options.notFoundMessage,
+      ambiguousAdmission: options.ambiguousAdmission,
     });
   }
 }
@@ -164,6 +169,7 @@ interface JsonRequest {
   fetchFn?: FetchLike;
   unauthorizedMessage: string;
   notFoundMessage?: string;
+  ambiguousAdmission?: boolean;
 }
 
 async function requestJson(input: JsonRequest): Promise<unknown> {
@@ -187,10 +193,13 @@ async function requestJson(input: JsonRequest): Promise<unknown> {
     throw new OpenCodeError(REDIRECT_REJECTED, { status: response.status });
   }
   if (response.status === 401) {
-    throw new OpenCodeError(input.unauthorizedMessage, { status: response.status });
+    throw new BackendError('unauthorized', input.unauthorizedMessage);
   }
   if (response.status === 404 && input.notFoundMessage !== undefined) {
-    throw new OpenCodeError(input.notFoundMessage, { status: response.status });
+    throw new BackendError('missing-session', input.notFoundMessage);
+  }
+  if (response.status === 409) {
+    throw new BackendError('busy', BUSY);
   }
   if (!response.ok) {
     throw new OpenCodeError(`The opencode server returned HTTP ${response.status}`, {
@@ -201,6 +210,9 @@ async function requestJson(input: JsonRequest): Promise<unknown> {
   try {
     return await response.json();
   } catch (cause) {
+    if (input.ambiguousAdmission === true) {
+      throw new BackendError('ambiguous-admission', AMBIGUOUS_ADMISSION, { cause });
+    }
     throw new OpenCodeError(UNEXPECTED_RESPONSE, { cause });
   }
 }

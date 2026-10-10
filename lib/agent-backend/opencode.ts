@@ -1,6 +1,8 @@
 import { resolveConfiguredConnection } from '@/lib/connection/resolve';
 import type {
   AgentBackend,
+  BackendCapabilities,
+  BackendOnboarding,
   BackendStatus,
   FeedbackSendInput,
   Project,
@@ -8,7 +10,7 @@ import type {
   SessionCreateInput,
   SessionRef,
 } from './interface';
-import { OpenCodeApi, OpenCodeError, type FetchLike } from './opencode-api';
+import { OpenCodeApi, OpenCodeError, redeemPairingCode, type FetchLike } from './opencode-api';
 
 export interface OpenCodeBackendConfig {
   baseUrl?: string;
@@ -21,8 +23,28 @@ export const NOT_PAIRED = 'Not paired';
 export class OpenCodeBackend implements AgentBackend {
   readonly id = 'opencode';
   readonly label = 'opencode';
-  readonly capabilities = { projects: true };
+  readonly capabilities: BackendCapabilities = {
+    projects: true,
+    namedCreation: true,
+    delivery: ['queue', 'steer'],
+    images: true,
+  };
   readonly defaultSessionStrategy = 'per-day';
+  readonly onboarding: BackendOnboarding = {
+    credentialLabel: 'Pairing code',
+    emptyCredentialError: 'Enter a pairing code',
+    instructions: () => 'Run this on the server, then paste the code:',
+    command: ({ endpoint }) => `opencode api post /api/pair --server ${endpoint}`,
+    authenticate: async (input) => {
+      const { baseUrl } = await this.resolve();
+      const token = await redeemPairingCode({
+        baseUrl,
+        code: input.credential,
+        fetchFn: this.config.fetchFn,
+      });
+      return { token };
+    },
+  };
 
   constructor(private readonly config: OpenCodeBackendConfig = {}) {}
 

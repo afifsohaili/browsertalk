@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { backendErrorCode } from './interface';
 import {
   OpenCodeApi,
   redeemPairingCode,
@@ -8,6 +9,7 @@ import {
 } from './opencode-api';
 
 const BASE = 'http://127.0.0.1:15001';
+const INTENT = { strategyId: 'per-day', strategyKey: '/d::2026-10-10', generation: 0 } as const;
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -268,7 +270,7 @@ describe('OpenCodeApi.createSession', () => {
     );
     const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
 
-    await expect(api.createSession({ directory: '/home/afif/example', title: 'T' })).resolves.toEqual({
+    await expect(api.createSession({ directory: '/home/afif/example', title: 'T', intent: INTENT })).resolves.toEqual({
       id: 'ses_abc',
       title: 'Browsertalk · example · 2026-10-10',
     });
@@ -293,7 +295,7 @@ describe('OpenCodeApi.createSession', () => {
       fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'ses_abc' } })),
     });
 
-    await expect(api.createSession({ directory: '/home/afif/example', title: 'Fallback' })).resolves.toEqual(
+    await expect(api.createSession({ directory: '/home/afif/example', title: 'Fallback', intent: INTENT })).resolves.toEqual(
       { id: 'ses_abc', title: 'Fallback' },
     );
   });
@@ -305,7 +307,7 @@ describe('OpenCodeApi.createSession', () => {
       fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: {} })),
     });
 
-    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
+    await expect(api.createSession({ directory: '/d', title: 'T', intent: INTENT })).rejects.toThrow(
       'The opencode server sent an unexpected response',
     );
   });
@@ -317,7 +319,7 @@ describe('OpenCodeApi.createSession', () => {
       fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)),
     });
 
-    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow('Pairing token rejected');
+    await expect(api.createSession({ directory: '/d', title: 'T', intent: INTENT })).rejects.toThrow('Pairing token rejected');
   });
 
   it('reports an unreachable server with its URL', async () => {
@@ -329,7 +331,7 @@ describe('OpenCodeApi.createSession', () => {
       }),
     });
 
-    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
+    await expect(api.createSession({ directory: '/d', title: 'T', intent: INTENT })).rejects.toThrow(
       `Cannot reach the opencode server at ${BASE}`,
     );
   });
@@ -410,5 +412,106 @@ describe('OpenCodeApi.sendPrompt', () => {
     await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })).resolves.toEqual({
       messageID: null,
     });
+  });
+});
+
+describe('OpenCodeApi error codes', () => {
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('maps a rejected token to unauthorized', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'stale',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)),
+    });
+
+    const error = await api.info().catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('unauthorized');
+    expect((error as Error).message).toBe('Pairing token rejected');
+  });
+
+  it('maps a wrong or expired pairing code to unauthorized', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)));
+
+    const error = await redeemPairingCode({ baseUrl: BASE, code: 'WRONG' }).catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('unauthorized');
+    expect((error as Error).message).toBe('That pairing code is wrong or expired');
+  });
+
+  it('maps a session the server does not have to missing-session', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'SessionNotFoundError' }, 404)),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('missing-session');
+    expect((error as Error).message).toBe('The session does not exist on the opencode server');
+  });
+
+  it('maps a busy session to busy', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'SessionBusyError' }, 409)),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('busy');
+    expect((error as Error).message).toBe('The session is busy');
+  });
+
+  it('maps an unreadable admission response to ambiguous-admission', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => textResponse('<html>ok</html>')),
+    });
+
+    const error = await api
+      .sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBe('ambiguous-admission');
+  });
+
+  it('keeps a 2xx parse failure on other operations unexpected, not ambiguous', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => textResponse('<html>ok</html>')),
+    });
+
+    const error = await api
+      .createSession({ directory: '/d', title: 'T', intent: INTENT })
+      .catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBeNull();
+    expect((error as Error).message).toBe('The opencode server sent an unexpected response');
+  });
+
+  it('reports no code for an unreachable server', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    });
+
+    const error = await api.info().catch((cause: unknown) => cause);
+
+    expect(backendErrorCode(error)).toBeNull();
   });
 });

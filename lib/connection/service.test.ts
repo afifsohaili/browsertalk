@@ -2,15 +2,48 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import { FakeAgentBackend } from '@/lib/agent-backend/fake';
+import type { BackendOnboarding } from '@/lib/agent-backend/interface';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { getToken, setToken } from '@/lib/storage/auth';
 import { getOriginBindings } from '@/lib/storage/projects';
 import { setSettings } from '@/lib/storage/settings';
-import { bindOrigin, listServerProjects, pairWithServer, pingConnection } from './service';
+import { bindOrigin, connectionOnboarding, listServerProjects, pairWithServer, pingConnection } from './service';
 
 const BASE = 'http://127.0.0.1:15001';
 const KEY = `opencode@${BASE}`;
 const KEY_4096 = 'opencode@http://127.0.0.1:4096';
+
+class NoProjectsBackend extends FakeAgentBackend {
+  override readonly capabilities = {
+    projects: false,
+    namedCreation: false,
+    delivery: ['queue'] as const,
+    images: false,
+  };
+
+  override async listProjects(): Promise<never> {
+    throw new Error('listProjects must not be called');
+  }
+}
+
+class BridgeBackend extends FakeAgentBackend {
+  readonly credentials: string[] = [];
+
+  override readonly onboarding: BackendOnboarding = {
+    credentialLabel: 'Bridge token',
+    emptyCredentialError: 'Enter the bridge token',
+    instructions: ({ endpoint }) => `Paste the bridge token for ${endpoint}`,
+    command: () => null,
+    authenticate: async (input) => {
+      this.credentials.push(input.credential);
+      return { token: `tok_${input.credential}` };
+    },
+  };
+}
+
+const bridge = new BridgeBackend();
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -29,9 +62,15 @@ function infoFetch(version = '2.0.24'): ReturnType<typeof vi.fn<FetchLike>> {
 
 registerBuiltinBackends();
 
+beforeAll(() => {
+  registerAgentBackend('no-projects', () => new NoProjectsBackend());
+  registerAgentBackend('bridge', () => bridge);
+});
+
 describe('pairWithServer', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+    bridge.credentials.length = 0;
   });
 
   afterEach(() => {
@@ -112,6 +151,78 @@ describe('pairWithServer', () => {
     await expect(pairWithServer('   ')).resolves.toEqual({ ok: false, error: 'Enter a pairing code' });
     expect(fetchFn).not.toHaveBeenCalled();
   });
+
+  it('dispatches the credential exchange to the selected backend', async () => {
+    await setSettings({ backendId: 'bridge' });
+
+    await expect(pairWithServer(' bridge-tok ')).resolves.toEqual({ ok: true });
+
+    expect(bridge.credentials).toEqual(['bridge-tok']);
+    expect(await getToken(`bridge@${BASE}`)).toBe('tok_bridge-tok');
+  });
+
+  it('uses the backend empty-credential copy', async () => {
+    await setSettings({ backendId: 'bridge' });
+
+    await expect(pairWithServer('   ')).resolves.toEqual({ ok: false, error: 'Enter the bridge token' });
+    expect(bridge.credentials).toEqual([]);
+  });
+
+  it('reports a backend that needs no pairing', async () => {
+    await setSettings({ backendId: 'fake' });
+
+    await expect(pairWithServer('anything')).resolves.toEqual({
+      ok: false,
+      error: 'This backend needs no pairing',
+    });
+  });
+});
+
+describe('connectionOnboarding', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('renders the opencode pairing command for the configured endpoint', async () => {
+    await setSettings({ serverUrl: 'http://127.0.0.1:4096' });
+
+    await expect(connectionOnboarding()).resolves.toEqual({
+      ok: true,
+      onboarding: {
+        instructions: 'Run this on the server, then paste the code:',
+        command: 'opencode api post /api/pair --server http://127.0.0.1:4096',
+        credentialLabel: 'Pairing code',
+      },
+    });
+  });
+
+  it('renders backend-specific copy when the backend defines its own onboarding', async () => {
+    await setSettings({ backendId: 'bridge' });
+
+    await expect(connectionOnboarding()).resolves.toEqual({
+      ok: true,
+      onboarding: {
+        instructions: `Paste the bridge token for ${BASE}`,
+        command: null,
+        credentialLabel: 'Bridge token',
+      },
+    });
+  });
+
+  it('reports no onboarding for a backend that needs no credential', async () => {
+    await setSettings({ backendId: 'fake' });
+
+    await expect(connectionOnboarding()).resolves.toEqual({ ok: true, onboarding: null });
+  });
+
+  it('refuses a stored non-loopback server URL', async () => {
+    await browser.storage.local.set({ 'settings.serverUrl': 'https://example.com' });
+
+    await expect(connectionOnboarding()).resolves.toEqual({
+      ok: false,
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+    });
+  });
 });
 
 describe('pingConnection', () => {
@@ -184,6 +295,7 @@ describe('listServerProjects', () => {
 
     await expect(listServerProjects()).resolves.toEqual({
       ok: true,
+      supported: true,
       projects: [{ id: 'proj_1', name: 'example', directory: '/home/afif/example' }],
     });
   });
@@ -192,7 +304,13 @@ describe('listServerProjects', () => {
     await setToken(KEY, 'tok_live');
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse([])));
 
-    await expect(listServerProjects()).resolves.toEqual({ ok: true, projects: [] });
+    await expect(listServerProjects()).resolves.toEqual({ ok: true, supported: true, projects: [] });
+  });
+
+  it('reports unsupported discovery without asking the backend to list', async () => {
+    await setSettings({ backendId: 'no-projects' });
+
+    await expect(listServerProjects()).resolves.toEqual({ ok: true, supported: false, projects: [] });
   });
 
   it('returns an error when not paired', async () => {

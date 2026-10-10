@@ -1,11 +1,11 @@
 import { getCurrentScope, onScopeDispose, ref, type Ref } from 'vue';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
-import { DEFAULT_SERVER_URL, getSettings } from '@/lib/storage/settings';
-import { onConnectionChanged, requestConnectionStatus, requestPair } from './messages';
+import { onConnectionChanged, requestConnectionStatus, requestOnboarding, requestPair } from './messages';
+import type { OnboardingView } from './protocol';
 
 export interface Connection {
   status: Ref<BackendStatus | null>;
-  serverUrl: Ref<string>;
+  onboarding: Ref<OnboardingView | null>;
   pairing: Ref<boolean>;
   pairError: Ref<string | null>;
   pair: (code: string) => Promise<boolean>;
@@ -14,12 +14,14 @@ export interface Connection {
 
 export function useConnection(): Connection {
   const status = ref<BackendStatus | null>(null);
-  const serverUrl = ref(DEFAULT_SERVER_URL);
+  const onboarding = ref<OnboardingView | null>(null);
   const pairing = ref(false);
   const pairError = ref<string | null>(null);
 
   async function refresh(): Promise<void> {
-    status.value = await requestConnectionStatus();
+    const [nextStatus, nextOnboarding] = await Promise.all([requestConnectionStatus(), requestOnboarding()]);
+    status.value = nextStatus;
+    onboarding.value = nextOnboarding;
   }
 
   async function pair(code: string): Promise<boolean> {
@@ -43,9 +45,6 @@ export function useConnection(): Connection {
   if (getCurrentScope()) onScopeDispose(stop);
 
   void refresh();
-  void getSettings().then((settings) => {
-    serverUrl.value = settings.serverUrl;
-  });
 
-  return { status, serverUrl, pairing, pairError, pair, refresh };
+  return { status, onboarding, pairing, pairError, pair, refresh };
 }

@@ -45,6 +45,7 @@ export interface Panel {
   error: Ref<string | null>;
   projectsOpen: Ref<boolean>;
   projectsLoading: Ref<boolean>;
+  projectsSupported: Ref<boolean>;
   projects: Ref<Project[]>;
   projectsError: Ref<string | null>;
   binding: Ref<boolean>;
@@ -67,6 +68,7 @@ export function usePanel(): Panel {
   const error = ref<string | null>(null);
   const projectsOpen = ref(false);
   const projectsLoading = ref(false);
+  const projectsSupported = ref(true);
   const projects = ref<Project[]>([]);
   const projectsError = ref<string | null>(null);
   const binding = ref(false);
@@ -178,6 +180,7 @@ export function usePanel(): Panel {
       projectsError.value = result.error;
       return;
     }
+    projectsSupported.value = result.supported;
     projects.value = result.projects;
   }
 
@@ -250,6 +253,7 @@ export function usePanel(): Panel {
     error,
     projectsOpen,
     projectsLoading,
+    projectsSupported,
     projects,
     projectsError,
     binding,

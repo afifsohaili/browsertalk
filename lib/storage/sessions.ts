@@ -4,6 +4,7 @@ import { STORAGE_KEYS } from './keys';
 export interface StoredSession {
   sessionID: string;
   title: string;
+  generation: number;
 }
 
 export async function getStoredSession(
@@ -42,7 +43,11 @@ export function readSession(
   const value = asRecord(entry);
   if (typeof value.sessionID !== 'string' || value.sessionID.length === 0) return null;
   if (typeof value.title !== 'string') return null;
-  return { sessionID: value.sessionID, title: value.title };
+  return { sessionID: value.sessionID, title: value.title, generation: readGeneration(value.generation) };
+}
+
+function readGeneration(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

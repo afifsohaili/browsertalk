@@ -64,15 +64,31 @@ describe('useConnection', () => {
     scope.stop();
   });
 
-  it('exposes the configured server URL for the pairing hint', async () => {
-    await setSettings({ serverUrl: 'http://127.0.0.1:4096' });
+  it('exposes the backend onboarding copy for the pairing hint', async () => {
+    const scope = effectScope();
+    const connection = scope.run(() => useConnection())!;
+
+    await vi.waitFor(() => {
+      expect(connection.onboarding.value).toEqual({
+        instructions: 'Run this on the server, then paste the code:',
+        command: `opencode api post /api/pair --server http://127.0.0.1:15001`,
+        credentialLabel: 'Pairing code',
+      });
+    });
+
+    scope.stop();
+  });
+
+  it('reports no onboarding for a backend that needs no credential', async () => {
+    await setSettings({ backendId: 'fake' });
 
     const scope = effectScope();
     const connection = scope.run(() => useConnection())!;
 
     await vi.waitFor(() => {
-      expect(connection.serverUrl.value).toBe('http://127.0.0.1:4096');
+      expect(connection.status.value).toEqual({ ok: true, detail: 'fake backend' });
     });
+    expect(connection.onboarding.value).toBeNull();
 
     scope.stop();
   });

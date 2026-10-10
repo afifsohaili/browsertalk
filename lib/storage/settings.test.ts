@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import type { AgentBackendId } from '@/lib/agent-backend/interface';
 import type { SessionStrategyId } from '@/lib/session-strategy/interface';
 import {
@@ -9,6 +10,10 @@ import {
   setSessionStrategyOverride,
   setSettings,
 } from './settings';
+
+beforeAll(() => {
+  registerBuiltinBackends();
+});
 
 describe('settings storage', () => {
   beforeEach(() => {
@@ -47,7 +52,7 @@ describe('settings storage', () => {
   });
 
   it('falls back to the defaults for junk values', async () => {
-    await browser.storage.local.set({ 'settings.backendId': 'nope', 'settings.serverUrl': 42 });
+    await browser.storage.local.set({ 'settings.backendId': 42, 'settings.serverUrl': 42 });
 
     expect(await getSettings()).toEqual({
       backendId: DEFAULT_BACKEND_ID,
@@ -56,12 +61,18 @@ describe('settings storage', () => {
     });
   });
 
-  it('reads per-backend strategy overrides and drops junk entries', async () => {
+  it('keeps an unknown stored backend id honest instead of rewriting it', async () => {
+    await browser.storage.local.set({ 'settings.backendId': 'from-a-newer-version' });
+
+    expect((await getSettings()).backendId).toBe('from-a-newer-version');
+  });
+
+  it('reads per-backend strategy overrides and drops junk strategy entries', async () => {
     await browser.storage.local.set({
       'settings.sessionStrategy': { opencode: 'sticky', pi: 'nonsense', other: 'per-day', fake: 42 },
     });
 
-    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky' });
+    expect((await getSettings()).sessionStrategy).toEqual({ opencode: 'sticky', other: 'per-day' });
   });
 
   it('persists a strategy override map', async () => {

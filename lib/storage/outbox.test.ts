@@ -169,7 +169,10 @@ describe('outbox item guard', () => {
   it('accepts an item with a captured destination and rejects a broken one', () => {
     expect(isOutboxItem({ ...pageItem('hi'), destination: DESTINATION })).toBe(true);
     expect(isOutboxItem(pageItem('hi'))).toBe(true);
-    expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, backendId: 'nope' } })).toBe(false);
+    expect(
+      isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, backendId: 'from-a-newer-version' } }),
+    ).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, backendId: '' } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, endpoint: '' } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), destination: { ...DESTINATION, directory: 7 } })).toBe(false);
     expect(isOutboxItem({ ...pageItem('hi'), destination: 'nonsense' })).toBe(false);

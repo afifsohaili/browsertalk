@@ -1,5 +1,7 @@
 import type {
   AgentBackend,
+  BackendCapabilities,
+  BackendOnboarding,
   BackendStatus,
   FeedbackSendInput,
   Project,
@@ -8,10 +10,23 @@ import type {
   SessionRef,
 } from './interface';
 
+const DEFAULT_CAPABILITIES: BackendCapabilities = {
+  projects: true,
+  namedCreation: true,
+  delivery: ['queue', 'steer'],
+  images: true,
+};
+
+export interface FakeAgentBackendOptions {
+  capabilities?: BackendCapabilities;
+  onboarding?: BackendOnboarding | null;
+}
+
 export class FakeAgentBackend implements AgentBackend {
   readonly id = 'fake';
   readonly label = 'Fake';
-  readonly capabilities = { projects: true };
+  readonly capabilities: BackendCapabilities;
+  readonly onboarding: BackendOnboarding | null;
   readonly defaultSessionStrategy = 'per-day';
 
   readonly sent: FeedbackSendInput[] = [];
@@ -19,6 +34,11 @@ export class FakeAgentBackend implements AgentBackend {
   readonly createInputs: SessionCreateInput[] = [];
 
   private nextID = 1;
+
+  constructor(options: FakeAgentBackendOptions = {}) {
+    this.capabilities = options.capabilities ?? DEFAULT_CAPABILITIES;
+    this.onboarding = options.onboarding ?? null;
+  }
 
   async ping(): Promise<BackendStatus> {
     return { ok: true, detail: 'fake backend' };

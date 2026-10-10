@@ -11,6 +11,10 @@ export function registerAgentBackend(id: AgentBackendId, factory: AgentBackendFa
   factories.set(id, factory);
 }
 
+export function hasAgentBackend(id: string): boolean {
+  return factories.has(id);
+}
+
 export function getAgentBackend(id: AgentBackendId, config?: BackendConnectionConfig): AgentBackend {
   const factory = factories.get(id);
   if (!factory) {

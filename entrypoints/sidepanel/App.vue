@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ArmPickerButton from '@/components/ArmPickerButton.vue';
 import CommentOnPageButton from '@/components/CommentOnPageButton.vue';
 import ConsentGate from '@/components/ConsentGate.vue';
@@ -30,6 +30,7 @@ const {
   newSession,
   projectsOpen,
   projectsLoading,
+  projectsSupported,
   projects,
   projectsError,
   binding,
@@ -37,6 +38,18 @@ const {
   closeProjects,
   chooseProject,
 } = usePanel();
+
+const manualDirectory = ref('');
+
+const manualName = computed(() => {
+  const directory = manualDirectory.value.trim();
+  return directory.length === 0 ? '—' : projectName(directory);
+});
+
+async function bindManual(): Promise<void> {
+  await chooseProject(manualDirectory.value);
+  if (!projectsOpen.value) manualDirectory.value = '';
+}
 
 const state = computed(() => targetState(target.value));
 
@@ -101,25 +114,51 @@ const sessionText = computed(() => {
     </section>
 
     <section v-if="projectsOpen" class="projects">
-      <p v-if="projectsLoading" class="empty">Loading projects…</p>
-      <p v-else-if="projectsError" class="projects-error">{{ projectsError }}</p>
-      <p v-else-if="projects.length === 0" class="empty">No projects on the server.</p>
-      <ul v-else class="project-list">
-        <li v-for="project in projects" :key="project.directory">
-          <button
-            type="button"
-            class="project-choice"
-            :class="{ current: project.directory === target?.project }"
-            :disabled="binding"
-            @click="chooseProject(project.directory)"
-          >
-            <span class="project-name">{{ project.name }}</span>
-            <span class="project-dir">{{ project.directory }}</span>
-          </button>
-        </li>
-      </ul>
+      <template v-if="!projectsSupported">
+        <p class="hint">
+          This backend does not list projects. Enter the project directory to bind {{ target?.origin }}:
+        </p>
+        <form class="manual-bind" @submit.prevent="bindManual">
+          <input
+            v-model="manualDirectory"
+            type="text"
+            placeholder="/path/to/project"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p class="manual-name">Name: {{ manualName }}</p>
+          <button type="submit" :disabled="binding || manualDirectory.trim().length === 0">Bind</button>
+        </form>
+        <p v-if="projectsError" class="projects-error">{{ projectsError }}</p>
+      </template>
+      <template v-else>
+        <p v-if="projectsLoading" class="empty">Loading projects…</p>
+        <p v-else-if="projectsError" class="projects-error">{{ projectsError }}</p>
+        <p v-else-if="projects.length === 0" class="empty">No projects on the server.</p>
+        <ul v-else class="project-list">
+          <li v-for="project in projects" :key="project.directory">
+            <button
+              type="button"
+              class="project-choice"
+              :class="{ current: project.directory === target?.project }"
+              :disabled="binding"
+              @click="chooseProject(project.directory)"
+            >
+              <span class="project-name">{{ project.name }}</span>
+              <span class="project-dir">{{ project.directory }}</span>
+            </button>
+          </li>
+        </ul>
+      </template>
       <div class="projects-actions">
-        <button v-if="!projectsLoading" type="button" :disabled="binding" @click="openProjects">Refresh</button>
+        <button
+          v-if="projectsSupported && !projectsLoading"
+          type="button"
+          :disabled="binding"
+          @click="openProjects"
+        >
+          Refresh
+        </button>
         <button type="button" @click="closeProjects">Close</button>
       </div>
     </section>
@@ -181,6 +220,37 @@ const sessionText = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  color: light-dark(#636366, #aeaeb2);
+}
+
+.manual-bind {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manual-bind input {
+  padding: 6px 8px;
+  border: 1px solid light-dark(#d1d1d6, #3a3a3c);
+  border-radius: 8px;
+  background: light-dark(#ffffff, #2c2c2e);
+  color: inherit;
+  font: inherit;
+}
+
+.manual-bind button {
+  text-align: center;
+}
+
+.manual-name {
+  margin: 0;
+  font-size: 10px;
+  color: light-dark(#8e8e93, #98989d);
 }
 
 .projects-error {

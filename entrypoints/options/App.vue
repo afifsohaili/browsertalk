@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
-import { isAgentBackendId, type AgentBackendId } from '@/lib/agent-backend/interface';
+import { hasAgentBackend } from '@/lib/agent-backend/registry';
+import type { AgentBackendId } from '@/lib/agent-backend/interface';
 import { isSessionStrategyId } from '@/lib/session-strategy/interface';
 import { useSettingsPage } from '@/lib/settings/use-settings-page';
 
@@ -21,7 +22,7 @@ const urlSaved = ref(false);
 
 function onBackendChange(event: Event): void {
   const value = (event.target as HTMLSelectElement).value;
-  if (isAgentBackendId(value)) void saveBackendId(value);
+  if (hasAgentBackend(value)) void saveBackendId(value);
 }
 
 function onOverrideChange(backend: AgentBackendId, event: Event): void {

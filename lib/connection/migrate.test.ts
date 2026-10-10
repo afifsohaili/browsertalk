@@ -35,7 +35,10 @@ describe('migrateLegacyConnectionStorage', () => {
 
     expect(await getToken(KEY)).toBe('tok_legacy');
     expect(await getBoundProject(KEY, 'https://example.com')).toBe('/home/afif/example');
-    expect(await getStoredSession(KEY, 'per-day', '/home/afif/example::2026-10-09')).toEqual(LEGACY_REF);
+    expect(await getStoredSession(KEY, 'per-day', '/home/afif/example::2026-10-09')).toEqual({
+      ...LEGACY_REF,
+      generation: 0,
+    });
 
     const raw = await browser.storage.local.get(null);
     expect(raw['auth.token']).toBeUndefined();
@@ -88,6 +91,7 @@ describe('migrateLegacyConnectionStorage', () => {
     expect(await getStoredSession(KEY, 'per-day', '/home/afif/example::2026-10-09')).toEqual({
       sessionID: 'ses_scoped',
       title: 'new',
+      generation: 0,
     });
 
     const raw = await browser.storage.local.get(null);

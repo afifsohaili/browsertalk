@@ -9,6 +9,7 @@ import {
   registerConnectionHandler,
   requestBind,
   requestConnectionStatus,
+  requestOnboarding,
   requestPair,
   requestProjects,
 } from './messages';
@@ -87,8 +88,23 @@ describe('connection messaging', () => {
 
     await expect(requestProjects()).resolves.toEqual({
       ok: true,
+      supported: true,
       projects: [{ id: 'p1', name: 'x', directory: '/home/afif/x' }],
     });
+  });
+
+  it('delivers the backend onboarding copy with the endpoint baked in', async () => {
+    await expect(requestOnboarding()).resolves.toEqual({
+      instructions: 'Run this on the server, then paste the code:',
+      command: `opencode api post /api/pair --server ${BASE}`,
+      credentialLabel: 'Pairing code',
+    });
+  });
+
+  it('falls back to no onboarding when the background is not there', async () => {
+    fakeBrowser.reset();
+
+    await expect(requestOnboarding()).resolves.toBeNull();
   });
 
   it('surfaces a project list failure honestly', async () => {
