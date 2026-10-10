@@ -35,10 +35,17 @@ export interface SessionRef {
   title: string;
 }
 
+export interface FeedbackAttachment {
+  uri: string;
+  name?: string;
+  description?: string;
+}
+
 export interface FeedbackSendInput {
   sessionID: string;
   text: string;
   delivery: DeliveryMode;
+  files?: FeedbackAttachment[];
 }
 
 export interface SendResult {

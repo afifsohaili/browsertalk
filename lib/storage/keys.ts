@@ -15,4 +15,5 @@ export const STORAGE_KEYS = {
     feedback: 'pending.feedback',
   },
   outbox: 'outbox',
+  sent: 'sent',
 } as const;

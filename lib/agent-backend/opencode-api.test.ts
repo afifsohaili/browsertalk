@@ -173,3 +173,162 @@ describe('OpenCodeApi.listProjects', () => {
     await expect(api.listProjects()).rejects.toThrow('The opencode server sent an unexpected response');
   });
 });
+
+describe('OpenCodeApi.createSession', () => {
+  it('posts the title and location, and returns the created ref', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({
+        data: {
+          id: 'ses_abc',
+          projectID: 'proj_1',
+          title: 'Browsertalk · example · 2026-10-10',
+          time: { created: 1, updated: 1 },
+        },
+      }),
+    );
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await expect(api.createSession({ directory: '/home/afif/example', title: 'T' })).resolves.toEqual({
+      id: 'ses_abc',
+      title: 'Browsertalk · example · 2026-10-10',
+    });
+
+    const call = fetchFn.mock.calls[0];
+    expect(call?.[0]).toBe(`${BASE}/api/session`);
+    expect(call?.[1]?.method).toBe('POST');
+    expect(call?.[1]?.headers).toEqual({
+      Authorization: 'Basic b3BlbmNvZGU6dG9rX2xpdmU=',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      title: 'T',
+      location: { directory: '/home/afif/example' },
+    });
+  });
+
+  it('falls back to the requested title when the server omits one', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'ses_abc' } })),
+    });
+
+    await expect(api.createSession({ directory: '/home/afif/example', title: 'Fallback' })).resolves.toEqual(
+      { id: 'ses_abc', title: 'Fallback' },
+    );
+  });
+
+  it('rejects a response without a session id', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: {} })),
+    });
+
+    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
+      'The opencode server sent an unexpected response',
+    );
+  });
+
+  it('reports a rejected token', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'stale',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)),
+    });
+
+    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow('Pairing token rejected');
+  });
+
+  it('reports an unreachable server with its URL', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => {
+        throw new TypeError('fetch failed');
+      }),
+    });
+
+    await expect(api.createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
+      `Cannot reach the opencode server at ${BASE}`,
+    );
+  });
+});
+
+describe('OpenCodeApi.sendPrompt', () => {
+  it('posts text, queue delivery, and files, and returns the message id', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({ data: { id: 'msg_1', sessionID: 'ses_x', type: 'user' } }),
+    );
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await expect(
+      api.sendPrompt({
+        sessionID: 'ses_x',
+        text: 'hello',
+        delivery: 'queue',
+        files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
+      }),
+    ).resolves.toEqual({ messageID: 'msg_1' });
+
+    const call = fetchFn.mock.calls[0];
+    expect(call?.[0]).toBe(`${BASE}/api/session/ses_x/prompt`);
+    expect(call?.[1]?.method).toBe('POST');
+    expect(call?.[1]?.headers).toEqual({
+      Authorization: 'Basic b3BlbmNvZGU6dG9rX2xpdmU=',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      text: 'hello',
+      delivery: 'queue',
+      files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
+    });
+  });
+
+  it('omits the files key when there is no attachment', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'msg_1' } }));
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' });
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body))).toEqual({
+      text: 'hello',
+      delivery: 'queue',
+    });
+  });
+
+  it('passes steer through when asked', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'msg_1' } }));
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'steer' });
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body)).delivery).toBe('steer');
+  });
+
+  it('reports a session the server does not have', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () =>
+        jsonResponse({ _tag: 'SessionNotFoundError', sessionID: 'ses_x' }, 404),
+      ),
+    });
+
+    await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })).rejects.toThrow(
+      'The session does not exist on the opencode server',
+    );
+  });
+
+  it('returns a null message id when the server omits one', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: {} })),
+    });
+
+    await expect(api.sendPrompt({ sessionID: 'ses_x', text: 'hello', delivery: 'queue' })).resolves.toEqual({
+      messageID: null,
+    });
+  });
+});

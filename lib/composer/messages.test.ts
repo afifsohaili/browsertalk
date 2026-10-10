@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { PickerFeedback } from '@/lib/picker/facts';
+import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { appendToOutbox, readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import {
@@ -20,6 +21,8 @@ type Tab = Browser.tabs.Tab;
 
 const originalQuery = browser.tabs.query;
 const originalSendMessage = browser.tabs.sendMessage;
+
+let requestedSends: string[] = [];
 
 function tab(id: number, url?: string, title?: string): Tab {
   return { id, url, title } as unknown as Tab;
@@ -81,11 +84,14 @@ describe('composer messaging', () => {
   beforeEach(() => {
     fakeBrowser.reset();
     registerComposerHandler();
+    requestedSends = [];
+    setSendDispatcher((itemId) => requestedSends.push(itemId));
   });
 
   afterEach(() => {
     browser.tabs.query = originalQuery;
     browser.tabs.sendMessage = originalSendMessage;
+    resetSendDispatcher();
   });
 
   it('queues the comment with the picked feedback and clears the pending feedback', async () => {
@@ -105,6 +111,7 @@ describe('composer messaging', () => {
     });
     expect(items[0]?.facts.page).toEqual(pending.page);
     expect(items[0]?.facts.element).toEqual(pending.element);
+    expect(requestedSends).toEqual([items[0]?.id]);
     expect(await getPendingFeedback()).toBeNull();
   });
 
@@ -129,6 +136,7 @@ describe('composer messaging', () => {
     ).resolves.toEqual({ ok: false, error: 'No picked element to comment on' });
 
     expect(await readOutbox()).toEqual([]);
+    expect(requestedSends).toEqual([]);
   });
 
   it('queues a page comment with just the page facts and clears any stale pick', async () => {
@@ -147,6 +155,7 @@ describe('composer messaging', () => {
       query: [{ name: 'step', value: '2' }],
       title: 'Cart',
     });
+    expect(requestedSends).toEqual([item?.id]);
     expect(await getPendingFeedback()).toBeNull();
   });
 
@@ -165,6 +174,7 @@ describe('composer messaging', () => {
         title: 'Page',
       },
     });
+    expect(requestedSends).toEqual([item?.id]);
   });
 
   it('reports URL-only clearly when there is no active page', async () => {

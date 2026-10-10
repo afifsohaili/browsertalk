@@ -45,12 +45,16 @@ export class OpenCodeBackend implements AgentBackend {
     return this.api(baseUrl, token).listProjects();
   }
 
-  createSession(_input: SessionCreateInput): Promise<SessionRef> {
-    return this.stub('createSession');
+  async createSession(input: SessionCreateInput): Promise<SessionRef> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
+    return this.api(baseUrl, token).createSession(input);
   }
 
-  sendFeedback(_input: FeedbackSendInput): Promise<SendResult> {
-    return this.stub('sendFeedback');
+  async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
+    return this.api(baseUrl, token).sendPrompt(input);
   }
 
   private api(baseUrl: string, token: string): OpenCodeApi {
@@ -61,9 +65,5 @@ export class OpenCodeBackend implements AgentBackend {
     const baseUrl = this.config.baseUrl ?? (await getSettings()).serverUrl;
     const token = this.config.token ?? (await getToken()) ?? '';
     return { baseUrl, token };
-  }
-
-  private stub(method: string): never {
-    throw new Error(`OpenCodeBackend.${method} is not implemented yet`);
   }
 }

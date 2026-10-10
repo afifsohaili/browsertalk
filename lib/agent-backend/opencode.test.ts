@@ -113,3 +113,85 @@ describe('OpenCodeBackend.listProjects', () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 });
+
+describe('OpenCodeBackend.createSession', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('creates the session through the configured server', async () => {
+    await setToken('tok_live');
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({ data: { id: 'ses_abc', title: 'Browsertalk · example · 2026-10-10' } }),
+    );
+    setOpenCodeFetch(fetchFn);
+
+    await expect(
+      new OpenCodeBackend().createSession({
+        directory: '/home/afif/example',
+        title: 'Browsertalk · example · 2026-10-10',
+      }),
+    ).resolves.toEqual({ id: 'ses_abc', title: 'Browsertalk · example · 2026-10-10' });
+
+    const call = fetchFn.mock.calls[0];
+    expect(call?.[0]).toBe(`${BASE}/api/session`);
+    expect(call?.[1]?.method).toBe('POST');
+  });
+
+  it('fails with a clear error when not paired', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(new OpenCodeBackend().createSession({ directory: '/d', title: 'T' })).rejects.toThrow(
+      'Not paired',
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('OpenCodeBackend.sendFeedback', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('sends the prompt with queue delivery and the attachment', async () => {
+    await setToken('tok_live');
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'msg_1' } }));
+    setOpenCodeFetch(fetchFn);
+
+    await expect(
+      new OpenCodeBackend().sendFeedback({
+        sessionID: 'ses_abc',
+        text: '## Browser feedback — example',
+        delivery: 'queue',
+        files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
+      }),
+    ).resolves.toEqual({ messageID: 'msg_1' });
+
+    const call = fetchFn.mock.calls[0];
+    expect(call?.[0]).toBe(`${BASE}/api/session/ses_abc/prompt`);
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      text: '## Browser feedback — example',
+      delivery: 'queue',
+      files: [{ uri: 'data:image/png;base64,AAAA', name: 'element.png', description: 'Element screenshot' }],
+    });
+  });
+
+  it('fails with a clear error when not paired', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(
+      new OpenCodeBackend().sendFeedback({ sessionID: 'ses_abc', text: 'x', delivery: 'queue' }),
+    ).rejects.toThrow('Not paired');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});

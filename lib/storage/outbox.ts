@@ -22,6 +22,7 @@ export interface OutboxItem {
   capturedAt: string;
   status: 'queued';
   facts: OutboxFacts;
+  error?: string;
 }
 
 export function isOutboxItem(value: unknown): value is OutboxItem {
@@ -30,6 +31,7 @@ export function isOutboxItem(value: unknown): value is OutboxItem {
   if (typeof value.comment !== 'string') return false;
   if (typeof value.capturedAt !== 'string') return false;
   if (value.status !== 'queued') return false;
+  if (value.error !== undefined && typeof value.error !== 'string') return false;
   return isOutboxFacts(value.facts);
 }
 
@@ -50,6 +52,18 @@ export async function readOutbox(): Promise<OutboxItem[]> {
 export async function appendToOutbox(item: OutboxItem): Promise<void> {
   const items = await readOutbox();
   await browser.storage.local.set({ [STORAGE_KEYS.outbox]: [...items, item] });
+}
+
+export async function removeFromOutbox(id: string): Promise<void> {
+  const items = await readOutbox();
+  await browser.storage.local.set({ [STORAGE_KEYS.outbox]: items.filter((item) => item.id !== id) });
+}
+
+export async function setOutboxItemError(id: string, error: string): Promise<void> {
+  const items = await readOutbox();
+  await browser.storage.local.set({
+    [STORAGE_KEYS.outbox]: items.map((item) => (item.id === id ? { ...item, error } : item)),
+  });
 }
 
 export async function countOutbox(): Promise<number> {

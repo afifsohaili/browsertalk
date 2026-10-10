@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { PickerFeedback } from '@/lib/picker/facts';
-import { appendToOutbox, countOutbox, isOutboxItem, readOutbox, type OutboxItem } from './outbox';
+import { appendToOutbox, countOutbox, isOutboxItem, readOutbox, removeFromOutbox, setOutboxItemError, type OutboxItem } from './outbox';
 
 function pageItem(comment: string): OutboxItem {
   return {
@@ -144,5 +144,54 @@ describe('outbox item guard', () => {
     };
 
     expect(isOutboxItem(item)).toBe(true);
+  });
+
+  it('accepts an item carrying a send error and rejects a broken one', () => {
+    expect(isOutboxItem({ ...pageItem('hi'), error: 'Not paired' })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), error: 7 })).toBe(false);
+  });
+});
+
+describe('outbox mutations', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('removes one item by id and keeps the rest in order', async () => {
+    await appendToOutbox(pageItem('first'));
+    await appendToOutbox(pageItem('second'));
+    await appendToOutbox(pageItem('third'));
+
+    await removeFromOutbox('ob_second');
+
+    expect((await readOutbox()).map((item) => item.comment)).toEqual(['first', 'third']);
+  });
+
+  it('no-ops when the id is not in the outbox', async () => {
+    await appendToOutbox(pageItem('first'));
+
+    await removeFromOutbox('ob_missing');
+
+    expect((await readOutbox()).map((item) => item.comment)).toEqual(['first']);
+  });
+
+  it('records a send error on one item without touching the others', async () => {
+    await appendToOutbox(pageItem('first'));
+    await appendToOutbox(pageItem('second'));
+
+    await setOutboxItemError('ob_second', 'The opencode server returned HTTP 500');
+
+    expect(await readOutbox()).toEqual([
+      pageItem('first'),
+      { ...pageItem('second'), error: 'The opencode server returned HTTP 500' },
+    ]);
+  });
+
+  it('replaces an older error on a retried item', async () => {
+    await appendToOutbox({ ...pageItem('first'), error: 'old error' });
+
+    await setOutboxItemError('ob_first', 'new error');
+
+    expect((await readOutbox())[0]?.error).toBe('new error');
   });
 });

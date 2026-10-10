@@ -1,7 +1,9 @@
 import { browser } from 'wxt/browser';
+import { requestSend } from '@/lib/send/trigger';
 import { clearPendingFeedback, getPendingFeedback } from '@/lib/storage/pending';
 import { appendToOutbox, countOutbox } from '@/lib/storage/outbox';
 import { buildElementOutboxItem, buildPageOutboxItem } from './assemble';
+import { broadcastOutboxChanged } from './broadcast';
 import {
   isComposerOpenResult,
   isComposerQueueResult,
@@ -14,7 +16,6 @@ import {
   type ComposerQueueRequest,
   type ComposerQueueResult,
   type ComposerRequest,
-  type OutboxChangedEvent,
   type OutboxCountResult,
 } from './protocol';
 
@@ -53,16 +54,19 @@ export function registerComposerHandler(): void {
 async function queueComment(request: ComposerQueueRequest): Promise<ComposerQueueResult> {
   const meta = { id: crypto.randomUUID(), now: new Date().toISOString() };
 
+  let item;
   if (request.mode === 'element') {
     const pending = await getPendingFeedback();
     if (pending === null) return { ok: false, error: NO_PICKED_ELEMENT };
-    await appendToOutbox(buildElementOutboxItem(pending, request.comment, meta));
+    item = buildElementOutboxItem(pending, request.comment, meta);
   } else {
-    await appendToOutbox(buildPageOutboxItem(request.page, request.comment, meta));
+    item = buildPageOutboxItem(request.page, request.comment, meta);
   }
 
+  await appendToOutbox(item);
   await clearPendingFeedback();
   broadcastOutboxChanged();
+  requestSend(item.id);
   return { ok: true, outboxCount: await countOutbox() };
 }
 
@@ -80,6 +84,7 @@ async function queueUrlOnly(): Promise<ComposerQueueResult> {
   });
   await appendToOutbox(item);
   broadcastOutboxChanged();
+  requestSend(item.id);
   return { ok: true, outboxCount: await countOutbox() };
 }
 
@@ -99,14 +104,7 @@ export async function openComposerOnTab(tabId: number): Promise<ComposerOpenResu
   }
 }
 
-export function broadcastOutboxChanged(): void {
-  const message: OutboxChangedEvent = { type: 'outbox/changed' };
-  try {
-    void browser.runtime.sendMessage(message).catch(() => {});
-  } catch {
-    /* no surface is open */
-  }
-}
+export { broadcastOutboxChanged } from './broadcast';
 
 export async function requestOpenComposer(): Promise<ComposerOpenResult> {
   const response = await sendSafely({ type: 'composer/open' });
