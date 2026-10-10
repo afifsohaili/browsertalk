@@ -1,3 +1,5 @@
+import { getToken } from '@/lib/storage/auth';
+import { getSettings } from '@/lib/storage/settings';
 import type {
   AgentBackend,
   BackendStatus,
@@ -7,27 +9,39 @@ import type {
   SessionCreateInput,
   SessionRef,
 } from './interface';
-
-export const DEFAULT_SERVER_URL = 'http://127.0.0.1:15001';
+import { OpenCodeApi, OpenCodeError, type FetchLike } from './opencode-api';
 
 export interface OpenCodeBackendConfig {
-  baseUrl: string;
-  token: string;
+  baseUrl?: string;
+  token?: string;
+  fetchFn?: FetchLike;
 }
+
+export const NOT_PAIRED = 'Not paired';
 
 export class OpenCodeBackend implements AgentBackend {
   readonly id = 'opencode';
   readonly label = 'opencode';
   readonly capabilities = { projects: true };
 
-  constructor(public readonly config: OpenCodeBackendConfig) {}
+  constructor(private readonly config: OpenCodeBackendConfig = {}) {}
 
-  ping(): Promise<BackendStatus> {
-    return this.stub('ping');
+  async ping(): Promise<BackendStatus> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) return { ok: false, detail: NOT_PAIRED };
+
+    try {
+      const { version } = await this.api(baseUrl, token).info();
+      return { ok: true, detail: `opencode ${version}` };
+    } catch (error) {
+      return { ok: false, detail: error instanceof Error ? error.message : 'The connection check failed' };
+    }
   }
 
-  listProjects(): Promise<Project[]> {
-    return this.stub('listProjects');
+  async listProjects(): Promise<Project[]> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
+    return this.api(baseUrl, token).listProjects();
   }
 
   createSession(_input: SessionCreateInput): Promise<SessionRef> {
@@ -38,9 +52,17 @@ export class OpenCodeBackend implements AgentBackend {
     return this.stub('sendFeedback');
   }
 
+  private api(baseUrl: string, token: string): OpenCodeApi {
+    return new OpenCodeApi({ baseUrl, token, fetchFn: this.config.fetchFn });
+  }
+
+  private async resolve(): Promise<{ baseUrl: string; token: string }> {
+    const baseUrl = this.config.baseUrl ?? (await getSettings()).serverUrl;
+    const token = this.config.token ?? (await getToken()) ?? '';
+    return { baseUrl, token };
+  }
+
   private stub(method: string): never {
-    throw new Error(
-      `OpenCodeBackend.${method} is not implemented yet (phase 1) — server ${this.config.baseUrl}`,
-    );
+    throw new Error(`OpenCodeBackend.${method} is not implemented yet`);
   }
 }

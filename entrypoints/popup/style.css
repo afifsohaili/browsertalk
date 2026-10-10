@@ -30,15 +30,6 @@ h1 {
   font-weight: 600;
 }
 
-.status {
-  font-size: 11px;
-  color: light-dark(#8e8e93, #98989d);
-}
-
-.status.online {
-  color: #34c759;
-}
-
 .actions {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
+import ConnectionPanel from '@/components/ConnectionPanel.vue';
 
-const connected = ref(false);
 const projectName = ref('—');
 const sessionTitle = ref('—');
 </script>
@@ -10,10 +10,9 @@ const sessionTitle = ref('—');
   <main class="panel">
     <header>
       <h1>Browsertalk</h1>
-      <span class="status" :class="{ online: connected }">
-        {{ connected ? 'connected' : 'not connected' }}
-      </span>
     </header>
+
+    <ConnectionPanel />
 
     <section class="targets">
       <div class="row"><span class="label">Project</span><span>{{ projectName }}</span></div>
@@ -35,6 +34,6 @@ const sessionTitle = ref('—');
       <p class="empty">Nothing sent yet.</p>
     </section>
 
-    <p class="note">Scaffold only — features land in phase 1.</p>
+    <p class="note">Picker, composer, and sending land in later phases.</p>
   </main>
 </template>

@@ -1,4 +1,10 @@
-export type AgentBackendId = 'opencode' | 'pi' | 'fake';
+export const AGENT_BACKEND_IDS = ['opencode', 'pi', 'fake'] as const;
+
+export type AgentBackendId = (typeof AGENT_BACKEND_IDS)[number];
+
+export function isAgentBackendId(value: unknown): value is AgentBackendId {
+  return typeof value === 'string' && (AGENT_BACKEND_IDS as readonly string[]).includes(value);
+}
 
 export type DeliveryMode = 'queue' | 'steer';
 

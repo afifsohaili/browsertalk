@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
+import ConnectionPanel from '@/components/ConnectionPanel.vue';
 
-const connected = ref(false);
 const projectName = ref('—');
 const sessionTitle = ref('—');
 const outboxCount = ref(0);
@@ -12,10 +12,9 @@ const sentCount = ref(0);
   <main class="popup">
     <header>
       <h1>opencode Browsertalk</h1>
-      <span class="status" :class="{ online: connected }">
-        {{ connected ? 'connected' : 'not connected' }}
-      </span>
     </header>
+
+    <ConnectionPanel />
 
     <div class="actions">
       <button type="button" disabled>Point at element</button>
@@ -28,6 +27,6 @@ const sentCount = ref(0);
       <span>outbox {{ outboxCount }} · sent {{ sentCount }}</span>
     </div>
 
-    <p class="note">Scaffold only — features land in phase 1.</p>
+    <p class="note">Picker, composer, and sending land in later phases.</p>
   </main>
 </template>
