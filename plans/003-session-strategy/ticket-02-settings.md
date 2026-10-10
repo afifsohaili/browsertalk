@@ -4,7 +4,7 @@
 
 **Blocked by:** 003a — Session strategy seam.
 
-**Status:** done
+**Status:** done · 85368ed
 
 - [x] Options page is reachable from the extension details and via a link in popup/panel; persists backend, server URL, strategy override
 - [x] Defaults render honestly: backend `opencode`, server URL `http://127.0.0.1:15001`, strategy = backend default
