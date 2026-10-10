@@ -16,3 +16,5 @@ Source: pre-009 review (general + `openai/gpt-6.1-sol`, 2026-10-10; report at `/
 Findings map: 1→010-02, 2→010-01, 3→010-02, 4→010-01, 5→010-04, 6→010-03, 7→010-03, 8→010-04, 9→010-04, 10→010-03, 11→010-02, 12→010-04. Coverage gaps: 1→010-05, 2–4→010-03/010-04 (TDD) + 010-05, 5→010-04.
 
 Phase tickets (001–008) stay historical; corrections are recorded here. One ticket = one conventional `fix(...)` commit.
+
+Round-2 re-verification: **pending** — `openai/gpt-6.1-sol` hit a subscription usage limit (2026-10-10). Retry when it resets. The round-2 fix set (010-06..08) addresses `verify-pre-009.md` regressions 1–8.
