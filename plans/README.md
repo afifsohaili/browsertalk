@@ -8,7 +8,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 002 | `002-connection/` | `ticket.md` | shipped · f53aada | — |
 | 003a | `003-session-strategy/` | `ticket-01-seam.md` | shipped · 588474d | 002 |
 | 003b | `003-session-strategy/` | `ticket-02-settings.md` | shipped · 85368ed | 003a |
-| 004a | `004-picker/` | `ticket-01-core.md` | ready | 003b |
+| 004a | `004-picker/` | `ticket-01-core.md` | shipped · 67d42ed | 003b |
 | 004b | `004-picker/` | `ticket-02-extras.md` | ready | 004a |
 | 005 | `005-composer/` | `ticket.md` | ready | 004b |
 | 006 | `006-send/` | `ticket.md` | ready | 005 |
