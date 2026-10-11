@@ -22,7 +22,7 @@ import { getBoundProject } from '@/lib/storage/projects';
 import { getSettings } from '@/lib/storage/settings';
 import {
   commitDeliveredItem,
-  hasQueuedOutboxItem,
+  reserveOutboxItem,
   setOutboxAdmission,
   setOutboxAttempt,
   setOutboxDestination,
@@ -48,6 +48,8 @@ const NO_PROJECT_BINDING = 'This site has no project binding';
 const MALFORMED_ADMISSION = 'The backend did not confirm the admission';
 const AMBIGUOUS_ADMISSION_ERROR =
   'The server did not confirm the feedback was admitted; retrying is safe and will not send it twice';
+export const LEGACY_ATTEMPT_ERROR =
+  'Browsertalk did not record the original send details for this feedback — discard it and queue it again';
 
 let routing: Promise<unknown> = Promise.resolve();
 const connectionQueues = new Map<string, Promise<unknown>>();
@@ -105,6 +107,7 @@ async function deliver(
 
 async function admit(item: OutboxItem, destination: OutboxDestination, options: SendOptions): Promise<SessionRef> {
   if (item.admission !== undefined) return commitAdmitted(item, item.admission);
+  if (item.attempt !== undefined && item.attempt.admissionInput === undefined) throw new Error(LEGACY_ATTEMPT_ERROR);
 
   const key = connectionKeyOf(destination);
   const token = await getToken(key);
@@ -113,8 +116,8 @@ async function admit(item: OutboxItem, destination: OutboxDestination, options: 
   const attempt = await freezeAdmissionInput(item, destination, backend, now);
   const input = attempt.admissionInput;
 
-  if (!(await hasQueuedOutboxItem(item.id))) throw new Error(NO_LONGER_IN_OUTBOX);
   if (!(await hasConsent())) throw new Error(CONSENT_REQUIRED_ERROR);
+  if (!(await reserveOutboxItem(item.id, now))) throw new Error(NO_LONGER_IN_OUTBOX);
 
   const result = await backend.sendFeedback({
     sessionID: input.sessionID,
@@ -147,7 +150,7 @@ async function freezeAdmissionInput(
   now: Date,
 ): Promise<FrozenAttempt> {
   const stored = item.attempt;
-  if (stored?.admissionInput !== undefined) {
+  if (stored !== undefined && stored.admissionInput !== undefined) {
     return { requestID: stored.requestID, sentAt: stored.sentAt, admissionInput: stored.admissionInput };
   }
 

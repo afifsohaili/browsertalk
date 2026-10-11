@@ -25,10 +25,17 @@ import { bindProject } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { setSettings } from '@/lib/storage/settings';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
-import { appendToOutbox, appendToSent, removeFromOutbox } from '@/lib/storage/writer';
+import {
+  appendToOutbox,
+  appendToSent,
+  OutboxReservedError,
+  removeFromOutbox,
+  writeStoredSession,
+} from '@/lib/storage/writer';
 import { readSent, SENT_LIMIT, type SentItem } from '@/lib/storage/sent';
+import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { onOutboxChanged } from '@/lib/composer/messages';
-import { sendQueuedItem } from './send';
+import { LEGACY_ATTEMPT_ERROR, sendQueuedItem } from './send';
 
 const NOW = new Date(2026, 9, 10, 12, 0);
 const SENT_AT = NOW.toISOString();
@@ -853,6 +860,148 @@ describe('admission reliability', () => {
     expect(fakeBackend.feedbackCalls).toHaveLength(1);
     expect(await readOutbox()).toEqual([]);
     expect(await readSent()).toHaveLength(1);
+  });
+});
+
+describe('admission reservation', () => {
+  it('transmits nothing and logs nothing when the discard lands before the reservation', async () => {
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let reads = 0;
+    let release: () => void = () => {};
+    let started: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const result = await originalGet(keys);
+      if (keys === STORAGE_KEYS.consent.status && ++reads === 2) {
+        started();
+        await gate;
+      }
+      return result;
+    }) as unknown as typeof browser.storage.local.get);
+
+    const sending = sendQueuedItem(item.id, { now: NOW });
+    await entered;
+    await removeFromOutbox(item.id);
+    expect(await readOutbox()).toEqual([]);
+    expect(fakeBackend.feedbackCalls).toHaveLength(0);
+    release();
+
+    await expect(sending).resolves.toEqual({ ok: false, error: 'The item is no longer in the outbox' });
+    expect(fakeBackend.feedbackCalls).toHaveLength(0);
+    expect(await readSent()).toEqual([]);
+    getSpy.mockRestore();
+  });
+
+  it('refuses a discard after the reservation and still logs the sent summary', async () => {
+    const gated = new GatedSendBackend();
+    fakeBackend = gated;
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    const sending = sendQueuedItem(item.id, { now: NOW });
+    await vi.waitFor(() => {
+      expect(gated.started).toHaveLength(1);
+    });
+
+    await expect(removeFromOutbox(item.id)).rejects.toBeInstanceOf(OutboxReservedError);
+    const reserved = (await readOutbox())[0];
+    expect(reserved?.reservedAt).toBe(SENT_AT);
+
+    gated.release();
+    await expect(sending).resolves.toEqual({ ok: true, session: { id: 'ses_fake_1', title: DAY_TITLE } });
+    expect(gated.feedbackCalls).toHaveLength(1);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
+  });
+});
+
+describe('legacy attempts', () => {
+  it('blocks an ambiguous legacy retry instead of reusing its request id against a new session', async () => {
+    await fakeBackend.sendFeedback({
+      requestID: 'legacy-request',
+      sessionID: 'original-session',
+      text: 'original-text',
+      delivery: 'queue',
+    });
+    await writeStoredSession(FAKE_KEY, 'per-day', DAY_KEY, { sessionID: 'ses_new', title: DAY_TITLE, generation: 1 });
+    const item = elementItem({
+      attempt: { requestID: 'legacy-request', sentAt: '2026-10-10T08:00:00.000Z' },
+    });
+    await appendToOutbox(item);
+
+    const outcome = await sendQueuedItem(item.id, { now: NOW });
+
+    expect(outcome).toEqual({ ok: false, error: LEGACY_ATTEMPT_ERROR });
+    expect(fakeBackend.feedbackCalls.map((call) => call.requestID)).toEqual(['legacy-request']);
+    expect(fakeBackend.sent.map((call) => call.sessionID)).toEqual(['original-session']);
+    const stored = (await readOutbox())[0];
+    expect(stored?.attempt).toEqual({ requestID: 'legacy-request', sentAt: '2026-10-10T08:00:00.000Z' });
+    expect(stored?.admission).toBeUndefined();
+    expect(stored?.error).toBe(LEGACY_ATTEMPT_ERROR);
+    expect(await readSent()).toEqual([]);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({ ok: false, error: LEGACY_ATTEMPT_ERROR });
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+    expect(await readSent()).toEqual([]);
+  });
+
+  it('recovers a blocked legacy attempt only by discard and re-queue', async () => {
+    const legacy = elementItem({
+      attempt: { requestID: 'legacy-request', sentAt: '2026-10-10T08:00:00.000Z' },
+    });
+    await appendToOutbox(legacy);
+    await sendQueuedItem(legacy.id, { now: NOW });
+
+    await removeFromOutbox(legacy.id);
+    expect(await readOutbox()).toEqual([]);
+
+    const fresh = elementItem({ id: 'ob_2', comment: 'Fixed' });
+    await appendToOutbox(fresh);
+    await expect(sendQueuedItem(fresh.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls[0]?.requestID).not.toBe('legacy-request');
+    expect((await readSent())[0]?.session.id).toBe('ses_fake_1');
+  });
+
+  it('keeps a definite-failure retry on the frozen session after a rollover and logs that session', async () => {
+    fakeBackend = new FailsOnceBackend();
+    const item = elementItem();
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: false,
+      error: 'The fake server hiccuped',
+    });
+    const frozen = (await readOutbox())[0]?.attempt?.admissionInput;
+    expect(frozen).toMatchObject({ sessionID: 'ses_fake_1', sessionTitle: DAY_TITLE, delivery: 'queue' });
+
+    await rolloverStoredSession({
+      backend: fakeBackend,
+      connectionKey: FAKE_KEY,
+      strategyId: 'per-day',
+      strategyKey: DAY_KEY,
+      directory: DIRECTORY,
+      title: DAY_TITLE,
+    });
+    const rolled = await getStoredSession(FAKE_KEY, 'per-day', DAY_KEY);
+    expect(rolled?.sessionID).not.toBe(frozen?.sessionID);
+    const createsBeforeRetry = fakeBackend.createInputs.length;
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls.map((call) => call.sessionID)).toEqual([frozen?.sessionID]);
+    expect(fakeBackend.createInputs).toHaveLength(createsBeforeRetry);
+    expect((await readSent())[0]?.session).toEqual({ id: frozen?.sessionID, title: DAY_TITLE });
+    expect(await readOutbox()).toEqual([]);
   });
 });
 

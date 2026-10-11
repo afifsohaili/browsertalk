@@ -10,7 +10,7 @@ import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { bindProject } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
-import { appendToOutbox, writeStoredSession } from '@/lib/storage/writer';
+import { appendToOutbox, reserveOutboxItem, writeStoredSession } from '@/lib/storage/writer';
 import { setSettings } from '@/lib/storage/settings';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent } from '@/lib/storage/sent';
@@ -242,6 +242,17 @@ describe('panel messaging', () => {
 
     expect((await readOutbox()).map((entry) => entry.id)).toEqual(['ob_keep']);
     expect(broadcasts).toContainEqual({ type: 'outbox/changed' });
+  });
+
+  it('refuses to discard an item while it is being sent', async () => {
+    await appendToOutbox(item());
+    await reserveOutboxItem('ob_1', new Date('2026-10-10T09:30:00.000Z'));
+
+    await expect(requestOutboxDiscard('ob_1')).resolves.toEqual({
+      ok: false,
+      error: 'This feedback is being sent and cannot be discarded',
+    });
+    expect((await readOutbox()).map((entry) => entry.id)).toEqual(['ob_1']);
   });
 
   it('falls back honestly when the background is not there', async () => {

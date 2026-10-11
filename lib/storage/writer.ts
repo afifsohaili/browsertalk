@@ -31,19 +31,36 @@ export function appendToOutbox(item: OutboxItem): Promise<void> {
   });
 }
 
+export class OutboxReservedError extends Error {
+  constructor() {
+    super('This feedback is being sent and cannot be discarded');
+    this.name = 'OutboxReservedError';
+  }
+}
+
 export function removeFromOutbox(id: string): Promise<void> {
   return enqueueStorageWrite(async () => {
     const items = await readOutbox();
-    await browser.storage.local.set({ [STORAGE_KEYS.outbox]: items.filter((item) => item.id !== id) });
+    const item = items.find((entry) => entry.id === id);
+    if (item?.reservedAt !== undefined) throw new OutboxReservedError();
+    await browser.storage.local.set({ [STORAGE_KEYS.outbox]: items.filter((entry) => entry.id !== id) });
   });
 }
 
-export function hasQueuedOutboxItem(id: string): Promise<boolean> {
-  return enqueueStorageWrite(async () => (await readOutbox()).some((item) => item.id === id));
+export function reserveOutboxItem(id: string, now: Date = new Date()): Promise<boolean> {
+  return enqueueStorageWrite(async () => {
+    const items = await readOutbox();
+    if (!items.some((item) => item.id === id)) return false;
+    const reservedAt = now.toISOString();
+    await browser.storage.local.set({
+      [STORAGE_KEYS.outbox]: items.map((item) => (item.id === id ? { ...item, reservedAt } : item)),
+    });
+    return true;
+  });
 }
 
 export function setOutboxItemError(id: string, error: string): Promise<void> {
-  return updateOutboxItem(id, (item) => ({ ...item, error }));
+  return updateOutboxItem(id, (item) => ({ ...item, error, reservedAt: undefined }));
 }
 
 export function setOutboxDestination(id: string, destination: OutboxDestination): Promise<void> {

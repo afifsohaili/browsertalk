@@ -158,6 +158,11 @@ describe('outbox item guard', () => {
     expect(isOutboxItem({ ...pageItem('hi'), error: 7 })).toBe(false);
   });
 
+  it('accepts an item carrying an admission reservation and rejects a broken one', () => {
+    expect(isOutboxItem({ ...pageItem('hi'), reservedAt: '2026-10-10T09:30:00.000Z' })).toBe(true);
+    expect(isOutboxItem({ ...pageItem('hi'), reservedAt: 7 })).toBe(false);
+  });
+
   it('accepts an item with a captured destination and rejects a broken one', () => {
     expect(isOutboxItem({ ...pageItem('hi'), destination: DESTINATION })).toBe(true);
     expect(isOutboxItem(pageItem('hi'))).toBe(true);

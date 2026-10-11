@@ -9,10 +9,12 @@ import {
   appendToOutbox,
   appendToSent,
   commitDeliveredItem,
-  hasQueuedOutboxItem,
+  OutboxReservedError,
   removeFromOutbox,
+  reserveOutboxItem,
   setOutboxAdmission,
   setOutboxAttempt,
+  setOutboxItemError,
   writeStoredSession,
 } from './writer';
 
@@ -69,17 +71,38 @@ describe('serialized storage writer', () => {
     expect((await readOutbox()).map((item) => item.comment)).toEqual(['b', 'c', 'd', 'f', 'g']);
   });
 
-  it('checks queued existence on the writer queue so a discard cannot interleave', async () => {
+  it('reserves a queued item on the writer queue', async () => {
     await appendToOutbox(pageItem('first'));
-    expect(await hasQueuedOutboxItem('ob_first')).toBe(true);
+
+    await expect(reserveOutboxItem('ob_first', new Date('2026-10-10T09:30:00.000Z'))).resolves.toBe(true);
+
+    expect((await readOutbox())[0]?.reservedAt).toBe('2026-10-10T09:30:00.000Z');
+    await expect(reserveOutboxItem('ob_missing')).resolves.toBe(false);
+  });
+
+  it('refuses a discard while the reservation is held, and releases it when the attempt fails', async () => {
+    await appendToOutbox(pageItem('first'));
+    await reserveOutboxItem('ob_first', new Date('2026-10-10T09:30:00.000Z'));
+
+    await expect(removeFromOutbox('ob_first')).rejects.toBeInstanceOf(OutboxReservedError);
+    expect((await readOutbox()).map((item) => item.id)).toEqual(['ob_first']);
+
+    await setOutboxItemError('ob_first', 'Not paired');
+    expect((await readOutbox())[0]?.reservedAt).toBeUndefined();
+
+    await removeFromOutbox('ob_first');
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('loses a reservation race to a discard that reached the writer first', async () => {
+    await appendToOutbox(pageItem('first'));
 
     const discard = removeFromOutbox('ob_first');
-    const check = hasQueuedOutboxItem('ob_first');
+    const reservation = reserveOutboxItem('ob_first');
 
     await discard;
-    await expect(check).resolves.toBe(false);
-    await expect(hasQueuedOutboxItem('ob_first')).resolves.toBe(false);
-    await expect(hasQueuedOutboxItem('ob_missing')).resolves.toBe(false);
+    await expect(reservation).resolves.toBe(false);
+    expect(await readOutbox()).toEqual([]);
   });
 
   it('commits the outbox removal and the sent append in one write', async () => {

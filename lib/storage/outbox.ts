@@ -60,6 +60,7 @@ export interface OutboxItem {
   attempt?: OutboxAttempt;
   admission?: OutboxAdmission;
   error?: string;
+  reservedAt?: string;
 }
 
 export function isOutboxItem(value: unknown): value is OutboxItem {
@@ -69,6 +70,7 @@ export function isOutboxItem(value: unknown): value is OutboxItem {
   if (typeof value.capturedAt !== 'string') return false;
   if (value.status !== 'queued') return false;
   if (value.error !== undefined && typeof value.error !== 'string') return false;
+  if (value.reservedAt !== undefined && typeof value.reservedAt !== 'string') return false;
   if (value.destination !== undefined && !isOutboxDestination(value.destination)) return false;
   if (value.attempt !== undefined && !isOutboxAttempt(value.attempt)) return false;
   if (value.admission !== undefined && !isOutboxAdmission(value.admission)) return false;
