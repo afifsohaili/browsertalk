@@ -210,6 +210,32 @@ describe('serialized storage writer', () => {
     expect(jsonByteSize(stored === undefined ? [] : [stored])).toBeLessThanOrEqual(MAX_OUTBOX_BYTES);
   });
 
+  it('bounds an error recorded on an item carrying its frozen admission input at the limit', async () => {
+    const seed = maxAcceptedItem();
+    await appendToOutbox(seed);
+    const attempt = {
+      requestID: 'req_1',
+      sentAt: '2026-10-10T09:00:00.000Z',
+      admissionInput: {
+        sessionID: 'ses_1',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
+        delivery: 'queue' as const,
+      },
+    };
+    await setOutboxAttempt(seed.id, attempt);
+
+    await setOutboxItemError(seed.id, 'E'.repeat(20_000));
+
+    const stored = await readOutbox();
+    expect(jsonByteSize(stored)).toBeLessThanOrEqual(MAX_OUTBOX_BYTES);
+    expect(stored[0]?.error?.startsWith('E')).toBe(true);
+    expect(stored[0]?.error?.endsWith('…')).toBe(true);
+    expect(stored[0]?.error?.length).toBeLessThan(20_000);
+    expect(stored[0]?.attempt).toEqual(attempt);
+    expect(stored[0]?.reservedAt).toBeUndefined();
+  });
+
   it('keeps every session ref when session writes interleave', async () => {
     const refA: StoredSession = { sessionID: 'ses_a', title: 'A', generation: 0 };
     const refB: StoredSession = { sessionID: 'ses_b', title: 'B', generation: 1 };
@@ -257,6 +283,58 @@ describe('serialized storage writer', () => {
     expect(jsonByteSize(history)).toBeLessThanOrEqual(MAX_SENT_BYTES);
     expect(history[0]?.comment.startsWith('x')).toBe(true);
     expect(history[0]?.comment.endsWith('…')).toBe(true);
+  });
+
+  it('bounds a lone summary whose page and session titles exceed the sent budget', async () => {
+    const huge: SentItem = {
+      ...sentItem('huge-title'),
+      session: { id: 'ses_1', title: 'S'.repeat(1_100_000) },
+      page: { title: 'T'.repeat(1_100_000), url: 'https://example.com/cart' },
+    };
+    await appendToSent(huge);
+
+    const history = await readSent();
+    expect(history).toHaveLength(1);
+    expect(jsonByteSize(history)).toBeLessThanOrEqual(MAX_SENT_BYTES);
+    expect(history[0]?.id).toBe('huge-title');
+    expect(history[0]?.sentAt).toBe(huge.sentAt);
+    expect(history[0]?.session.id).toBe('ses_1');
+    expect(history[0]?.page.url).toBe('https://example.com/cart');
+    expect(history[0]?.comment).toBe('huge-title');
+    expect(history[0]?.page.title.length).toBeLessThan(1_100_000);
+    expect(history[0]?.session.title.length).toBeLessThan(1_100_000);
+  });
+
+  it('bounds a receipt title recorded on an item accepted at the delivery-ready limit', async () => {
+    const seed = maxAcceptedItem();
+    await appendToOutbox(seed);
+    await setOutboxAttempt(seed.id, {
+      requestID: 'req_1',
+      sentAt: '2026-10-10T09:00:00.000Z',
+      admissionInput: {
+        sessionID: 'ses_1',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
+        delivery: 'queue',
+      },
+    });
+    await setOutboxAdmission(seed.id, {
+      requestID: 'req_1',
+      messageID: 'msg_1',
+      sessionID: 'ses_1',
+      sessionTitle: 'T'.repeat(20_000),
+      admittedAt: '2026-10-10T09:00:01.000Z',
+    });
+
+    const stored = await readOutbox();
+    expect(jsonByteSize(stored)).toBeLessThanOrEqual(MAX_OUTBOX_BYTES);
+    expect(stored[0]?.admission?.requestID).toBe('req_1');
+    expect(stored[0]?.admission?.messageID).toBe('msg_1');
+    expect(stored[0]?.admission?.sessionID).toBe('ses_1');
+    expect(stored[0]?.admission?.admittedAt).toBe('2026-10-10T09:00:01.000Z');
+    expect(stored[0]?.admission?.sessionTitle.startsWith('T')).toBe(true);
+    expect(stored[0]?.admission?.sessionTitle.endsWith('…')).toBe(true);
+    expect(stored[0]?.admission?.sessionTitle.length).toBeLessThan(20_000);
   });
 
   it('records the attempt and the admission on one item without touching the others', async () => {

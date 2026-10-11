@@ -429,7 +429,7 @@ export async function checkConflictingRequestReuse(h: ConformanceHarness): Promi
   if (!c.rejectsConflictingReuse) return;
   await prepareSendFlow(h);
 
-  const item = elementItem();
+  const item = c.capabilities.images ? screenshotItem() : elementItem();
   await appendToOutbox(item);
   const first = await sendQueuedItem(item.id, { now: NOW });
   expect(first).toMatchObject({ ok: true });
@@ -441,6 +441,7 @@ export async function checkConflictingRequestReuse(h: ConformanceHarness): Promi
     text: admitted?.text ?? '',
     delivery: 'queue',
     requestID: admitted?.requestID ?? '',
+    ...(admitted?.files === undefined ? {} : { files: admitted.files }),
   };
 
   const otherSession = await h.backend().createSession({
@@ -454,7 +455,18 @@ export async function checkConflictingRequestReuse(h: ConformanceHarness): Promi
     { ...base, sessionID: otherSession.id },
   ];
   if (c.capabilities.delivery.includes('steer')) conflicts.push({ ...base, delivery: 'steer' });
-  if (c.capabilities.images) conflicts.push({ ...base, files: [{ uri: SCREENSHOT, name: 'element.png' }] });
+  if (c.capabilities.images) {
+    const files = base.files ?? [];
+    expect(files).toHaveLength(1);
+    const file = files[0];
+    if (file !== undefined) {
+      conflicts.push(
+        { ...base, files: [{ ...file, uri: `${SCREENSHOT}A` }] },
+        { ...base, files: [{ ...file, name: 'renamed.png' }] },
+        { ...base, files: [{ ...file, description: 'A different attachment description' }] },
+      );
+    }
+  }
 
   for (const conflicting of conflicts) {
     const error = await h.backend().sendFeedback(conflicting).catch((cause: unknown) => cause);

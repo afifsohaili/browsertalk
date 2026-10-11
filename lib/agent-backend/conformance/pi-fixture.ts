@@ -232,7 +232,7 @@ export class PiFixtureBackend implements AgentBackend {
       streamingBehavior: input.delivery === 'queue' ? 'followUp' : 'steer',
     };
     if (input.files !== undefined && input.files.length > 0) {
-      payload.images = input.files.map((file) => ({ uri: file.uri, name: file.name }));
+      payload.images = input.files.map((file) => ({ uri: file.uri, name: file.name, description: file.description }));
     }
 
     const body = await this.request(

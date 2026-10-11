@@ -60,6 +60,25 @@ class TextOnlyDedupBackend extends FakeAgentBackend {
   }
 }
 
+class UriOnlyDedupBackend extends FakeAgentBackend {
+  private readonly fingerprints = new Map<string, string>();
+
+  override async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    const fingerprint = JSON.stringify([
+      input.sessionID,
+      input.text,
+      input.delivery,
+      (input.files ?? []).map((file) => file.uri),
+    ]);
+    const previous = this.fingerprints.get(input.requestID);
+    if (previous !== undefined && previous !== fingerprint) {
+      throw new BackendError('busy', 'This request id was already admitted with different content');
+    }
+    this.fingerprints.set(input.requestID, fingerprint);
+    return super.sendFeedback(input);
+  }
+}
+
 const BROKEN_CAPABILITIES: BackendCapabilities = {
   projects: true,
   namedCreation: true,
@@ -147,6 +166,21 @@ describe('conformance suite teeth', () => {
     );
     if (listSessionStrategies().length === 0) registerBuiltinSessionStrategies();
     registerAgentBackend('text-only-dedup', (config) => harness.backend(config));
+    harness.reset();
+
+    await expect(checkConflictingRequestReuse(harness)).rejects.toThrow();
+  });
+
+  it('fails an adapter that ignores attachment names and descriptions of a reused request id', async () => {
+    const backend = new UriOnlyDedupBackend();
+    const harness = new ConformanceHarness(
+      brokenCase('uri-only-dedup', () => backend, BROKEN_CAPABILITIES, {
+        rejectsConflictingReuse: true,
+        admissions: () => backend.sent.length,
+      }),
+    );
+    if (listSessionStrategies().length === 0) registerBuiltinSessionStrategies();
+    registerAgentBackend('uri-only-dedup', (config) => harness.backend(config));
     harness.reset();
 
     await expect(checkConflictingRequestReuse(harness)).rejects.toThrow();

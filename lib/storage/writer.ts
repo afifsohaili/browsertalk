@@ -127,12 +127,62 @@ export function writeStoredSession(
 function updateOutboxItem(id: string, update: (item: OutboxItem) => OutboxItem): Promise<void> {
   return enqueueStorageWrite(async () => {
     const items = await readOutbox();
-    const next = items.map((item) => (item.id === id ? update(item) : item));
+    const next = items.map((item) => (item.id === id ? boundOutboxMetadata(update(item), items) : item));
     await browser.storage.local.set({ [STORAGE_KEYS.outbox]: next });
   });
 }
 
-const SENT_TRUNCATION_MARKER = '…';
+const TRUNCATION_MARKER = '…';
+const TRUNCATION_MARKER_BYTES = utf8ByteLength(JSON.stringify(TRUNCATION_MARKER)) - 2;
+
+function boundOutboxMetadata(item: OutboxItem, all: readonly OutboxItem[]): OutboxItem {
+  const others = all.filter((entry) => entry.id !== item.id);
+  const fits = (candidate: OutboxItem): boolean => metadataUsedBytes(candidate, others) <= MAX_OUTBOX_BYTES;
+  if (fits(item)) return item;
+
+  const emptied = withMetadata(
+    item,
+    item.error === undefined ? undefined : '',
+    item.admission === undefined ? undefined : '',
+  );
+  if (!fits(emptied)) return emptied;
+
+  const error = boundedField(item.error, MAX_OUTBOX_BYTES - metadataUsedBytes(emptied, others));
+  let candidate = withMetadata(emptied, error, '');
+  candidate = withMetadata(
+    candidate,
+    error,
+    boundedField(item.admission?.sessionTitle, MAX_OUTBOX_BYTES - metadataUsedBytes(candidate, others)),
+  );
+  return candidate;
+}
+
+function metadataUsedBytes(item: OutboxItem, others: readonly OutboxItem[]): number {
+  return item.attempt?.admissionInput === undefined
+    ? deliveryReadySize([...others, item])
+    : jsonByteSize([...others, item]);
+}
+
+function withMetadata(item: OutboxItem, error: string | undefined, sessionTitle: string | undefined): OutboxItem {
+  const next = { ...item };
+  if (error === undefined) delete next.error;
+  else next.error = error;
+  if (next.admission !== undefined && sessionTitle !== undefined) {
+    next.admission = { ...next.admission, sessionTitle };
+  }
+  return next;
+}
+
+function boundedField(value: string | undefined, room: number): string | undefined {
+  return value === undefined ? undefined : boundedText(value, room);
+}
+
+function boundedText(value: string, maxBytes: number): string {
+  if (value === '') return '';
+  const kept = truncateJsonString(value, Math.max(maxBytes - TRUNCATION_MARKER_BYTES, 0));
+  if (kept === value) return value;
+  return maxBytes < TRUNCATION_MARKER_BYTES ? '' : `${kept}${TRUNCATION_MARKER}`;
+}
 
 function retainSent(history: SentItem[]): SentItem[] {
   let retained = history.slice(0, SENT_LIMIT).map(boundSentSummary);
@@ -142,16 +192,22 @@ function retainSent(history: SentItem[]): SentItem[] {
   return retained;
 }
 
-function boundSentSummary(item: SentItem): SentItem {
-  const available = MAX_SENT_BYTES - jsonByteSize([{ ...item, comment: '' }]);
-  const fits = truncateJsonString(item.comment, Math.max(available, 0));
-  if (fits === item.comment) return item;
+const SENT_DISPLAY_FIELD_MAX_BYTES = 512;
 
-  const markerBytes = utf8ByteLength(JSON.stringify(SENT_TRUNCATION_MARKER)) - 2;
-  if (available <= markerBytes) return { ...item, comment: '' };
-  return {
+function boundSentSummary(item: SentItem): SentItem {
+  const capped: SentItem = {
     ...item,
-    comment: `${truncateJsonString(item.comment, available - markerBytes)}${SENT_TRUNCATION_MARKER}`,
+    page: { ...item.page, title: boundedText(item.page.title, SENT_DISPLAY_FIELD_MAX_BYTES) },
+    session: { ...item.session, title: boundedText(item.session.title, SENT_DISPLAY_FIELD_MAX_BYTES) },
+  };
+  const available = MAX_SENT_BYTES - jsonByteSize([{ ...capped, comment: '' }]);
+  const fits = truncateJsonString(capped.comment, Math.max(available, 0));
+  if (fits === capped.comment) return capped;
+
+  if (available <= TRUNCATION_MARKER_BYTES) return { ...capped, comment: '' };
+  return {
+    ...capped,
+    comment: `${truncateJsonString(capped.comment, available - TRUNCATION_MARKER_BYTES)}${TRUNCATION_MARKER}`,
   };
 }
 

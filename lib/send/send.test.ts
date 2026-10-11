@@ -20,6 +20,7 @@ import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { rolloverStoredSession } from '@/lib/session-strategy/persist';
+import { parsePageFacts } from '@/lib/picker/collect';
 import { setToken } from '@/lib/storage/auth';
 import { deliveryReadySize, jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES } from '@/lib/storage/budgets';
 import { bindProject } from '@/lib/storage/projects';
@@ -252,6 +253,47 @@ describe('send pipeline', () => {
     expect(jsonByteSize(history)).toBeLessThanOrEqual(MAX_SENT_BYTES);
     expect(history[0]?.comment.length).toBeGreaterThan(0);
     expect(history[0]?.comment.length).toBeLessThan(item.comment.length);
+  });
+
+  it('bounds a backend error recorded on an item accepted at the delivery-ready budget', async () => {
+    const item = elementItem({ id: 'ob_large_error' });
+    const one = { ...item, comment: 'x' };
+    const base = deliveryReadySize([one]);
+    const perChar = deliveryReadySize([{ ...item, comment: 'xx' }]) - base;
+    item.comment = 'x'.repeat(1 + Math.floor((MAX_OUTBOX_BYTES - base) / perChar));
+    await appendToOutbox(item);
+    vi.spyOn(fakeBackend, 'sendFeedback').mockRejectedValue(new Error('E'.repeat(20_000)));
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({
+      ok: false,
+      error: expect.any(String),
+    });
+
+    const stored = await readOutbox();
+    expect(jsonByteSize(stored)).toBeLessThanOrEqual(MAX_OUTBOX_BYTES);
+    expect(stored[0]?.error?.startsWith('E')).toBe(true);
+    expect(stored[0]?.error?.endsWith('…')).toBe(true);
+    expect(stored[0]?.error?.length).toBeLessThan(20_000);
+    expect(stored[0]?.attempt?.admissionInput?.text).toContain(item.comment.slice(-64));
+    expect(stored[0]?.reservedAt).toBeUndefined();
+  });
+
+  it('bounds the sent summary of a page title larger than the sent budget', async () => {
+    const item = elementItem({ id: 'ob_title', comment: 'hello' });
+    item.facts.page = parsePageFacts('https://example.com', 'T'.repeat(1_100_000));
+    expect(deliveryReadySize([item])).toBeLessThan(MAX_OUTBOX_BYTES);
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const history = await readSent();
+    expect(history).toHaveLength(1);
+    expect(jsonByteSize(history)).toBeLessThanOrEqual(MAX_SENT_BYTES);
+    expect(history[0]?.id).toBe(item.id);
+    expect(history[0]?.session.id).toBe('ses_fake_1');
+    expect(history[0]?.page.url).toBe('https://example.com');
+    expect(history[0]?.comment).toBe('hello');
+    expect(history[0]?.page.title.length).toBeLessThan(1_100_000);
   });
 
   it('reuses the day session for a later feedback and keeps the queue order', async () => {
