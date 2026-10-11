@@ -27,6 +27,25 @@ export function outboxSize(items: readonly unknown[]): number {
   return jsonByteSize(items);
 }
 
+/** Cut a string so that its JSON string form fits `maxBytes`, never splitting a code point. */
+export function truncateJsonString(value: string, maxBytes: number): string {
+  if (jsonByteSize(value) - 2 <= maxBytes) return value;
+
+  let length = Math.min(value.length, Math.max(maxBytes, 0));
+  while (length > 0) {
+    const last = value.charCodeAt(length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) {
+      length -= 1;
+      continue;
+    }
+    const candidate = value.slice(0, length);
+    const size = jsonByteSize(candidate) - 2;
+    if (size <= maxBytes) return candidate;
+    length = Math.min(length - 1, Math.floor((length * maxBytes) / size));
+  }
+  return '';
+}
+
 const ESTIMATE_SENT_AT = '1970-01-01T00:00:00.000Z';
 const ESTIMATE_PROJECT_NAME = 'x'.repeat(255);
 

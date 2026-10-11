@@ -7,6 +7,7 @@ import {
   OUTBOX_METADATA_HEADROOM_BYTES,
   outboxSize,
   OutboxFullError,
+  truncateJsonString,
 } from './budgets';
 
 function pageItem(comment: string): OutboxItem {
@@ -48,6 +49,35 @@ describe('outbox budget helpers', () => {
     expect(isQuotaExceeded(new Error('permission denied'))).toBe(false);
     expect(isQuotaExceeded('quota')).toBe(false);
     expect(isQuotaExceeded(null)).toBe(false);
+  });
+});
+
+describe('JSON string truncation', () => {
+  it('keeps a value whose JSON form already fits', () => {
+    expect(truncateJsonString('hello', 5)).toBe('hello');
+    expect(truncateJsonString('漢', 3)).toBe('漢');
+  });
+
+  it('cuts ASCII to the byte budget', () => {
+    expect(truncateJsonString('x'.repeat(100), 10)).toBe('x'.repeat(10));
+  });
+
+  it('cuts multibyte text without splitting a character', () => {
+    const kept = truncateJsonString('漢'.repeat(10), 10);
+
+    expect(kept).toBe('漢'.repeat(3));
+    expect(JSON.stringify(kept).length - 2).toBeLessThanOrEqual(10);
+  });
+
+  it('counts JSON escape bytes, not raw characters', () => {
+    const kept = truncateJsonString('\n'.repeat(10), 4);
+
+    expect(kept).toBe('\n\n');
+    expect(JSON.stringify(kept).length - 2).toBeLessThanOrEqual(4);
+  });
+
+  it('truncates to nothing under a zero budget', () => {
+    expect(truncateJsonString('hello', 0)).toBe('');
   });
 });
 

@@ -45,7 +45,7 @@ export class PiFixtureBridge {
 
   private readonly sessions = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
-  private readonly admittedInputs = new Map<string, { sessionID: string; text: string }>();
+  private readonly admittedInputs = new Map<string, string>();
 
   get admissionCount(): number {
     return this.admitted.size;
@@ -115,9 +115,8 @@ export class PiFixtureBridge {
     const requestID = String(body.requestID);
     const delivery = String(body.streamingBehavior);
     const text = String(body.text ?? '');
-    const attachments = Array.isArray(body.images)
-      ? body.images.map((image) => String((image as { uri?: unknown }).uri ?? ''))
-      : [];
+    const images = Array.isArray(body.images) ? body.images : [];
+    const attachments = images.map((image) => String((image as { uri?: unknown }).uri ?? ''));
 
     const rejection = this.rejectNextSend;
     if (rejection !== null) {
@@ -128,7 +127,7 @@ export class PiFixtureBridge {
     }
 
     const previous = this.admittedInputs.get(requestID);
-    if (previous !== undefined && (previous.sessionID !== sessionID || previous.text !== text)) {
+    if (previous !== undefined && previous !== JSON.stringify([sessionID, text, delivery, images])) {
       this.calls.push({ operation: 'send', endpoint, credential, redirect, sessionID, requestID, delivery, admitted: false });
       return jsonResponse({ message: 'This request id was already admitted with different content' }, 409);
     }
@@ -136,7 +135,7 @@ export class PiFixtureBridge {
     const known = this.admitted.get(requestID);
     if (known === undefined) {
       this.admitted.set(requestID, `pi.msg.${requestID}`);
-      this.admittedInputs.set(requestID, { sessionID, text });
+      this.admittedInputs.set(requestID, JSON.stringify([sessionID, text, delivery, images]));
     }
     const delivered = !(this.loseNextReceipt && known === undefined);
     if (!delivered) this.loseNextReceipt = false;

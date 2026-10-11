@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeAgentBackend } from '../fake';
+import { BackendError } from '../interface';
 import type {
   BackendCapabilities,
   FeedbackSendInput,
@@ -43,6 +44,20 @@ class UnnamedBackend extends FakeAgentBackend {
     delivery: ['queue'],
     images: true,
   };
+}
+
+class TextOnlyDedupBackend extends FakeAgentBackend {
+  private readonly fingerprints = new Map<string, string>();
+
+  override async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
+    const fingerprint = `${input.sessionID}\u0000${input.text}`;
+    const previous = this.fingerprints.get(input.requestID);
+    if (previous !== undefined && previous !== fingerprint) {
+      throw new BackendError('busy', 'This request id was already admitted with different content');
+    }
+    this.fingerprints.set(input.requestID, fingerprint);
+    return super.sendFeedback(input);
+  }
 }
 
 const BROKEN_CAPABILITIES: BackendCapabilities = {
@@ -117,6 +132,21 @@ describe('conformance suite teeth', () => {
     );
     if (listSessionStrategies().length === 0) registerBuiltinSessionStrategies();
     registerAgentBackend('silent-dedup', () => backend);
+    harness.reset();
+
+    await expect(checkConflictingRequestReuse(harness)).rejects.toThrow();
+  });
+
+  it('fails an adapter that compares only the text of a reused request id', async () => {
+    const backend = new TextOnlyDedupBackend();
+    const harness = new ConformanceHarness(
+      brokenCase('text-only-dedup', () => backend, BROKEN_CAPABILITIES, {
+        rejectsConflictingReuse: true,
+        admissions: () => backend.feedbackCalls.length,
+      }),
+    );
+    if (listSessionStrategies().length === 0) registerBuiltinSessionStrategies();
+    registerAgentBackend('text-only-dedup', (config) => harness.backend(config));
     harness.reset();
 
     await expect(checkConflictingRequestReuse(harness)).rejects.toThrow();

@@ -54,7 +54,7 @@ export function describeAdapterConformance(adapter: AdapterConformanceCase): voi
     it('applies the requested title where naming is supported', () => checkNaming(harness));
     it('resolves on admission, not on turn completion', () => checkAdmissionOnly(harness));
     it('commits an admission without a backend message id', () => checkNullMessageID(harness));
-    it('rejects a request id reused with different content', () => checkConflictingRequestReuse(harness));
+    it('rejects a request id reused with any diverging immutable input', () => checkConflictingRequestReuse(harness));
     it('keeps feedback on its captured endpoint and credential', () => checkTransportSecurity(harness));
     it('resumes an admitted-but-lost feedback without a second admission', () => checkAdmissionReceipts(harness));
     it('blocks delivery without consent and delivers once consent returns', () => checkConsentTiming(harness));

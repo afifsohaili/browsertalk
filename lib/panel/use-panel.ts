@@ -78,6 +78,7 @@ export function usePanel(): Panel {
   let targetConnection: ConnectionIdentity | null = null;
   let targetGeneration = 0;
   let projectsGeneration = 0;
+  let refreshPromise: Promise<void> | null = null;
 
   async function run(action: () => Promise<void>): Promise<void> {
     error.value = null;
@@ -150,16 +151,17 @@ export function usePanel(): Panel {
   }
 
   async function newSession(): Promise<void> {
-    const current = target.value;
-    const connection = targetConnection;
-    if (current === null || current.origin === null || connection === null) {
-      error.value = NO_PAGE_TO_TARGET;
-      return;
-    }
-    const { origin, project } = current;
-
     rollingOver.value = true;
     await run(async () => {
+      await waitForRefreshedTarget();
+      const current = target.value;
+      const connection = targetConnection;
+      if (current === null || current.origin === null || connection === null) {
+        error.value = NO_PAGE_TO_TARGET;
+        return;
+      }
+      const { origin, project } = current;
+
       const result = await requestSessionRollover(origin, connection);
       if (target.value?.origin !== origin || targetConnection === null || !sameConnection(targetConnection, connection)) {
         return;
@@ -183,6 +185,7 @@ export function usePanel(): Panel {
   }
 
   async function openProjects(): Promise<void> {
+    await waitForRefreshedTarget();
     const current = target.value;
     const connection = targetConnection;
     if (current === null || current.origin === null || connection === null) {
@@ -232,7 +235,23 @@ export function usePanel(): Panel {
   }
 
   function reloadTarget(): void {
-    void run(refreshTarget);
+    refreshPromise = run(refreshTarget);
+    void refreshPromise;
+  }
+
+  async function waitForRefreshedTarget(): Promise<void> {
+    while (targetConnection === null && refreshPromise !== null) {
+      const pending = refreshPromise;
+      await pending;
+      if (refreshPromise === pending) return;
+    }
+  }
+
+  function invalidateTarget(): void {
+    targetGeneration += 1;
+    target.value = null;
+    targetConnection = null;
+    closeProjects();
   }
 
   function reloadLists(): void {
@@ -243,9 +262,10 @@ export function usePanel(): Panel {
     const keys = Object.keys(changes);
     const connectionChanged =
       keys.includes(STORAGE_KEYS.settings.backendId) || keys.includes(STORAGE_KEYS.settings.serverUrl);
-    if (connectionChanged) closeProjects();
-    if (
-      connectionChanged ||
+    if (connectionChanged) {
+      invalidateTarget();
+      reloadTarget();
+    } else if (
       keys.includes(STORAGE_KEYS.sessions) ||
       keys.includes(STORAGE_KEYS.projects.byOrigin) ||
       keys.includes(STORAGE_KEYS.settings.sessionStrategy)

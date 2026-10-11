@@ -13,7 +13,7 @@ import { readSent } from '@/lib/storage/sent';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { setSettings, setSessionStrategyOverride, getSettings } from '@/lib/storage/settings';
 import { appendToOutbox } from '@/lib/storage/writer';
-import { backendErrorCode, isProject } from '../interface';
+import { backendErrorCode, isProject, type FeedbackSendInput } from '../interface';
 import { isSessionStrategyId } from '@/lib/session-strategy/interface';
 import { hasAgentBackend, listAgentBackends } from '../registry';
 import { CONFORMANCE_ENDPOINT, type ConformanceHarness } from './harness';
@@ -436,18 +436,35 @@ export async function checkConflictingRequestReuse(h: ConformanceHarness): Promi
 
   const admitted = h.seam.admitted[0];
   expect(admitted).toBeDefined();
+  const base: FeedbackSendInput = {
+    sessionID: admitted?.sessionID ?? '',
+    text: admitted?.text ?? '',
+    delivery: 'queue',
+    requestID: admitted?.requestID ?? '',
+  };
 
-  const error = await h
-    .backend()
-    .sendFeedback({
-      sessionID: admitted?.sessionID ?? '',
-      text: `${admitted?.text ?? ''}\n\n(conflicting reuse)`,
-      delivery: 'queue',
-      requestID: admitted?.requestID ?? '',
-    })
-    .catch((cause: unknown) => cause);
+  const otherSession = await h.backend().createSession({
+    directory: DIRECTORY,
+    title: DAY_TITLE,
+    intent: { ...INTENT, generation: 1 },
+  });
 
-  expect(backendErrorCode(error)).not.toBeNull();
+  const conflicts: FeedbackSendInput[] = [
+    { ...base, text: `${base.text}\n\n(conflicting reuse)` },
+    { ...base, sessionID: otherSession.id },
+  ];
+  if (c.capabilities.delivery.includes('steer')) conflicts.push({ ...base, delivery: 'steer' });
+  if (c.capabilities.images) conflicts.push({ ...base, files: [{ uri: SCREENSHOT, name: 'element.png' }] });
+
+  for (const conflicting of conflicts) {
+    const error = await h.backend().sendFeedback(conflicting).catch((cause: unknown) => cause);
+    expect(backendErrorCode(error)).not.toBeNull();
+    expect(c.admissions()).toBe(1);
+    expect(await readSent()).toHaveLength(1);
+  }
+
+  const replay = await h.backend().sendFeedback(base);
+  expect(replay.admitted).toBe(true);
   expect(c.admissions()).toBe(1);
   expect(await readSent()).toHaveLength(1);
 }

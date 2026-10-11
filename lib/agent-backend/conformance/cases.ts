@@ -67,7 +67,12 @@ class FakeScenarioAdapter implements AgentBackend {
       );
     }
 
-    const fingerprint = `${input.sessionID}\u0000${input.text}`;
+    const fingerprint = JSON.stringify([
+      input.sessionID,
+      input.text,
+      input.delivery,
+      (input.files ?? []).map((file) => [file.uri, file.name ?? null, file.description ?? null]),
+    ]);
     const previous = this.admittedInputs.get(input.requestID);
     if (previous !== undefined && previous !== fingerprint) {
       throw new BackendError('busy', 'The fake backend already admitted this request id with different content');
@@ -156,7 +161,7 @@ class OpenCodeServerSim {
 
   private readonly sessions = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
-  private readonly admittedInputs = new Map<string, { sessionID: string; text: string }>();
+  private readonly admittedInputs = new Map<string, string>();
   private nextSession = 1;
 
   get admissionCount(): number {
@@ -242,7 +247,7 @@ class OpenCodeServerSim {
     }
 
     const previous = this.admittedInputs.get(requestID);
-    if (previous !== undefined && (previous.sessionID !== sessionID || previous.text !== text)) {
+    if (previous !== undefined && previous !== JSON.stringify([sessionID, text, delivery, files])) {
       this.calls.push({ operation: 'send', endpoint, credential, redirect, sessionID, requestID, delivery, attachmentURIs, admitted: false });
       return jsonResponse({ _tag: 'PromptConflictError' }, 409);
     }
@@ -250,7 +255,7 @@ class OpenCodeServerSim {
     const known = this.admitted.get(requestID);
     if (known === undefined) {
       this.admitted.set(requestID, `msg_sim_${requestID}`);
-      this.admittedInputs.set(requestID, { sessionID, text });
+      this.admittedInputs.set(requestID, JSON.stringify([sessionID, text, delivery, files]));
     }
     const delivered = !(this.loseNextReceipt && known === undefined);
     if (!delivered) this.loseNextReceipt = false;

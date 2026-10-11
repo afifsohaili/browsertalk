@@ -249,6 +249,16 @@ describe('serialized storage writer', () => {
     expect(Buffer.byteLength(JSON.stringify(history), 'utf8')).toBeLessThanOrEqual(MAX_SENT_BYTES);
   });
 
+  it('bounds a lone oversized summary by trimming its comment to the sent budget', async () => {
+    await appendToSent({ ...sentItem('huge'), comment: 'x'.repeat(1_100_000) });
+
+    const history = await readSent();
+    expect(history.map((item) => item.id)).toEqual(['huge']);
+    expect(jsonByteSize(history)).toBeLessThanOrEqual(MAX_SENT_BYTES);
+    expect(history[0]?.comment.startsWith('x')).toBe(true);
+    expect(history[0]?.comment.endsWith('…')).toBe(true);
+  });
+
   it('records the attempt and the admission on one item without touching the others', async () => {
     await appendToOutbox(pageItem('first'));
     await appendToOutbox(pageItem('second'));

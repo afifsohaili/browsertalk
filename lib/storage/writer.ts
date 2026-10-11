@@ -1,5 +1,13 @@
 import { browser } from 'wxt/browser';
-import { deliveryReadySize, jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES, OutboxFullError } from './budgets';
+import {
+  deliveryReadySize,
+  jsonByteSize,
+  MAX_OUTBOX_BYTES,
+  MAX_SENT_BYTES,
+  OutboxFullError,
+  truncateJsonString,
+  utf8ByteLength,
+} from './budgets';
 import { STORAGE_KEYS } from './keys';
 import {
   readOutbox,
@@ -124,12 +132,27 @@ function updateOutboxItem(id: string, update: (item: OutboxItem) => OutboxItem):
   });
 }
 
+const SENT_TRUNCATION_MARKER = '…';
+
 function retainSent(history: SentItem[]): SentItem[] {
-  let retained = history.slice(0, SENT_LIMIT);
+  let retained = history.slice(0, SENT_LIMIT).map(boundSentSummary);
   while (retained.length > 1 && jsonByteSize(retained) > MAX_SENT_BYTES) {
     retained = retained.slice(0, -1);
   }
   return retained;
+}
+
+function boundSentSummary(item: SentItem): SentItem {
+  const available = MAX_SENT_BYTES - jsonByteSize([{ ...item, comment: '' }]);
+  const fits = truncateJsonString(item.comment, Math.max(available, 0));
+  if (fits === item.comment) return item;
+
+  const markerBytes = utf8ByteLength(JSON.stringify(SENT_TRUNCATION_MARKER)) - 2;
+  if (available <= markerBytes) return { ...item, comment: '' };
+  return {
+    ...item,
+    comment: `${truncateJsonString(item.comment, available - markerBytes)}${SENT_TRUNCATION_MARKER}`,
+  };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

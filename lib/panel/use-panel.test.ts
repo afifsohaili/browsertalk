@@ -402,6 +402,88 @@ describe('panel logic', () => {
     stop();
   });
 
+  it('waits for the refreshed target instead of rolling over the stale connection', async () => {
+    stubQuery([tab(1, PAGE_URL)]);
+    await bindProject(KEY, ORIGIN, DIRECTORY);
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 0 });
+
+    const { panel, stop } = await loadedPanel();
+    expect(panel.target.value?.session?.id).toBe('ses_old');
+
+    let release: () => void = () => {};
+    let entered: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    browser.tabs.query = vi.fn(async () => {
+      entered();
+      await gate;
+      return [tab(1, PAGE_URL)];
+    }) as unknown as typeof browser.tabs.query;
+
+    await setSettings({ serverUrl: ENDPOINT_B });
+    await started;
+    expect(panel.target.value).toBeNull();
+
+    let settled = false;
+    const rolling = panel.newSession().then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    expect(fakeBackend.createInputs).toHaveLength(0);
+
+    release();
+    await rolling;
+
+    expect(fakeBackend.createInputs).toHaveLength(0);
+    expect(panel.target.value?.origin).toBe(ORIGIN);
+    expect(panel.target.value?.project).toBeNull();
+    expect(panel.error.value).toBe('This site has no project binding');
+    stop();
+  });
+
+  it('waits for the refreshed target before opening the project list', async () => {
+    stubQuery([tab(1, PAGE_URL)]);
+    const { panel, stop } = await loadedPanel();
+
+    let release: () => void = () => {};
+    let entered: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    browser.tabs.query = vi.fn(async () => {
+      entered();
+      await gate;
+      return [tab(1, PAGE_URL)];
+    }) as unknown as typeof browser.tabs.query;
+
+    await setSettings({ serverUrl: ENDPOINT_B });
+    await started;
+    expect(panel.target.value).toBeNull();
+
+    let settled = false;
+    const opening = panel.openProjects().then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    expect(panel.projectsOpen.value).toBe(false);
+
+    release();
+    await opening;
+
+    expect(panel.projectsOpen.value).toBe(true);
+    expect(panel.projects.value).toEqual(DEFAULT_PROJECTS);
+    stop();
+  });
+
   it('reports a rollover failure without fake success', async () => {
     stubQuery([tab(1, PAGE_URL)]);
     await bindProject(KEY, ORIGIN, DIRECTORY);
