@@ -12,9 +12,12 @@ Source: pre-009 review (general + `openai/gpt-6.1-sol`, 2026-10-10; report at `/
 | 010-06 | `ticket-06-admission-integrity.md` | shipped · c9430aa | 010-05 |
 | 010-07 | `ticket-07-byte-budgets-serialization.md` | shipped · 18e21b2 | 010-06 |
 | 010-08 | `ticket-08-migration-selection.md` | shipped · 5a181e4 | 010-07 |
+| 010-09 | `ticket-09-admission-reservation.md` | ready | 010-08 |
+| 010-10 | `ticket-10-migration-frozen-pending.md` | ready | 010-09 |
+| 010-11 | `ticket-11-sent-bound-target-gate.md` | ready | 010-10 |
 
 Findings map: 1→010-02, 2→010-01, 3→010-02, 4→010-01, 5→010-04, 6→010-03, 7→010-03, 8→010-04, 9→010-04, 10→010-03, 11→010-02, 12→010-04. Coverage gaps: 1→010-05, 2–4→010-03/010-04 (TDD) + 010-05, 5→010-04.
 
 Phase tickets (001–008) stay historical; corrections are recorded here. One ticket = one conventional `fix(...)` commit.
 
-Round-2 re-verification: **pending** — `openai/gpt-6.1-sol` hit a subscription usage limit (2026-10-10). Retry when it resets. The round-2 fix set (010-06..08) addresses `verify-pre-009.md` regressions 1–8.
+Round-2 re-verification: **done** (`/tmp/opencode/verify2-pre-009.md`) — 3 of 8 regressions closed, 5 partially closed, 7 remaining issues (3 major, 4 moderate) all locally reproduced with probes. Round-3 fix set 010-09..11 addresses them; the seven reproduction probes get re-run after the fixes.
