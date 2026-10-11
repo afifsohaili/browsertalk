@@ -21,6 +21,7 @@ import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/con
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { rolloverStoredSession } from '@/lib/session-strategy/persist';
 import { setToken } from '@/lib/storage/auth';
+import { deliveryReadySize, MAX_OUTBOX_BYTES } from '@/lib/storage/budgets';
 import { bindProject } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { setSettings } from '@/lib/storage/settings';
@@ -221,6 +222,22 @@ describe('send pipeline', () => {
       },
     ]);
     expect(events).toContain('changed');
+  });
+
+  it('sends a comment accepted at the delivery-ready budget', async () => {
+    const item = elementItem({ id: 'ob_large' });
+    const one = { ...item, comment: 'x' };
+    const base = deliveryReadySize([one]);
+    const perChar = deliveryReadySize([{ ...item, comment: 'xx' }]) - base;
+    item.comment = 'x'.repeat(1 + Math.floor((MAX_OUTBOX_BYTES - base) / perChar));
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    expect(fakeBackend.feedbackCalls).toHaveLength(1);
+    expect(fakeBackend.feedbackCalls[0]?.text.includes(item.comment)).toBe(true);
+    expect(await readOutbox()).toEqual([]);
+    expect(await readSent()).toHaveLength(1);
   });
 
   it('reuses the day session for a later feedback and keeps the queue order', async () => {

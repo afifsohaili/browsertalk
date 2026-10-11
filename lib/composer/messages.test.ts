@@ -4,7 +4,7 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { CONSENT_REQUIRED_ERROR, acceptConsent } from '@/lib/consent/consent';
 import type { PickerFeedback } from '@/lib/picker/facts';
 import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
-import { MAX_OUTBOX_BYTES, outboxSize } from '@/lib/storage/budgets';
+import { deliveryReadySize, MAX_OUTBOX_BYTES } from '@/lib/storage/budgets';
 import { bindProject } from '@/lib/storage/projects';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
@@ -107,8 +107,10 @@ function storedItem(): OutboxItem {
 
 function fillOutbox(headroom: number): OutboxItem {
   const seed = storedItem();
-  const overhead = outboxSize([{ ...seed, comment: '' }]);
-  seed.comment = 'x'.repeat(MAX_OUTBOX_BYTES - overhead - headroom);
+  const one = { ...seed, comment: 'x' };
+  const base = deliveryReadySize([one]);
+  const perChar = deliveryReadySize([{ ...seed, comment: 'xx' }]) - base;
+  seed.comment = 'x'.repeat(1 + Math.floor((MAX_OUTBOX_BYTES - headroom - base) / perChar));
   return seed;
 }
 
@@ -372,7 +374,7 @@ describe('composer messaging', () => {
 
   describe('when storage cannot take the screenshot', () => {
     it('queues the feedback without the screenshot on a full outbox', async () => {
-      await appendToOutbox(fillOutbox(2_000));
+      await appendToOutbox(fillOutbox(10_000));
       const pending: PickerFeedback = {
         ...sampleFeedback(),
         extras: {

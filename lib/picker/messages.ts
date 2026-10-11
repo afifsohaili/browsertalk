@@ -1,6 +1,5 @@
 import { browser } from 'wxt/browser';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
-import { isQuotaExceeded } from '@/lib/storage/budgets';
 import { clearPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
@@ -72,12 +71,11 @@ async function persistPendingCapture(
   feedback: PickerFeedback,
   screenshot: PickerScreenshotFacts | null,
 ): Promise<void> {
-  try {
-    await setPendingFeedback(tabId, withScreenshot(feedback, screenshot));
-  } catch (error) {
-    if (screenshot === null || !isQuotaExceeded(error)) throw error;
+  if (screenshot === null) {
     await setPendingFeedback(tabId, feedback);
+    return;
   }
+  await setPendingFeedback(tabId, withScreenshot(feedback, screenshot), feedback);
 }
 
 async function isSenderTabVisible(tabId: number, windowId: number | undefined): Promise<boolean> {

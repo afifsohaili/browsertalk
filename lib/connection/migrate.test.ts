@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { getToken } from '@/lib/storage/auth';
@@ -153,6 +153,36 @@ describe('migrateLegacyConnectionStorage', () => {
 
     const raw = await browser.storage.local.get(null);
     expect((raw.sessions as Record<string, unknown>).opencode).toBeUndefined();
+  });
+
+  it('never lets a rejected legacy removal hand the credential to another endpoint', async () => {
+    await seedLegacy();
+    await browser.storage.local.set({ 'auth.tokens': { [KEY]: 'tok_scoped' } });
+
+    const removal = vi
+      .spyOn(browser.storage.local, 'remove')
+      .mockRejectedValueOnce(new Error('synthetic storage error'));
+    await expect(migrateLegacyConnectionStorage()).rejects.toThrow('synthetic storage error');
+    removal.mockRestore();
+
+    await browser.storage.local.set({ 'settings.serverUrl': 'http://127.0.0.1:15002' });
+    await migrateLegacyConnectionStorage();
+
+    const otherKey = 'opencode@http://127.0.0.1:15002';
+    expect(await getToken(otherKey)).toBeNull();
+    expect(await getBoundProject(otherKey, 'https://example.com')).toBeNull();
+    expect(await getStoredSession(otherKey, 'per-day', '/home/afif/example::2026-10-09')).toBeNull();
+
+    expect(await getToken(KEY)).toBe('tok_scoped');
+    expect(await getBoundProject(KEY, 'https://example.com')).toBe('/home/afif/example');
+    expect(await getStoredSession(KEY, 'per-day', '/home/afif/example::2026-10-09')).toEqual({
+      ...LEGACY_REF,
+      generation: 0,
+    });
+
+    const raw = await browser.storage.local.get(null);
+    expect(raw['auth.token']).toBeUndefined();
+    expect(raw['migration.owner']).toEqual({ backendId: 'opencode', endpoint: BASE });
   });
 
   it('does nothing when there is no legacy data', async () => {

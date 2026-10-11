@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import { isPickerFeedback, type PickerFeedback } from '@/lib/picker/facts';
+import { isQuotaExceeded } from './budgets';
 import { STORAGE_KEYS } from './keys';
 
 const tails = new Map<number, Promise<unknown>>();
@@ -8,9 +9,18 @@ export function pendingFeedbackKey(tabId: number): string {
   return `${STORAGE_KEYS.pending.feedback}.${tabId}`;
 }
 
-export function setPendingFeedback(tabId: number, feedback: PickerFeedback): Promise<void> {
+export function setPendingFeedback(
+  tabId: number,
+  feedback: PickerFeedback,
+  fallback?: PickerFeedback,
+): Promise<void> {
   return enqueuePendingMutation(tabId, async () => {
-    await browser.storage.session.set({ [pendingFeedbackKey(tabId)]: feedback });
+    try {
+      await browser.storage.session.set({ [pendingFeedbackKey(tabId)]: feedback });
+    } catch (error) {
+      if (fallback === undefined || !isQuotaExceeded(error)) throw error;
+      await browser.storage.session.set({ [pendingFeedbackKey(tabId)]: fallback });
+    }
   });
 }
 

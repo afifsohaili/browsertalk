@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
-import { getPendingFeedback } from '@/lib/storage/pending';
+import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import type { PickerFeedback } from './facts';
 import {
   armPickerOnActiveTab,
@@ -230,6 +230,38 @@ describe('picker messaging', () => {
     await expect(captured(sampleFeedback(), 1)).rejects.toThrow('quota exceeded');
 
     expect(await getPendingFeedback(1)).toBeNull();
+    setSpy.mockRestore();
+  });
+
+  it('never overwrites a newer capture when an older screenshot write hits the quota', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+    const originalSet = browser.storage.session.set.bind(browser.storage.session);
+    let release: () => void = () => {};
+    let started: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const setSpy = vi
+      .spyOn(browser.storage.session, 'set')
+      .mockImplementationOnce(async () => {
+        started();
+        await gate;
+        throw new Error('QUOTA_BYTES quota exceeded');
+      })
+      .mockImplementation(originalSet);
+
+    const oldCapture = captured(sampleFeedback(), 1);
+    await entered;
+    const replacement = setPendingFeedback(1, { ...sampleFeedback(), id: 'fb_new' });
+    release();
+    await replacement;
+
+    await expect(oldCapture).resolves.toEqual({ ok: true });
+    expect((await getPendingFeedback(1))?.id).toBe('fb_new');
     setSpy.mockRestore();
   });
 

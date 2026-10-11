@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
-import { MAX_OUTBOX_BYTES, MAX_SENT_BYTES, outboxSize, OutboxFullError } from './budgets';
+import { renderPrompt } from '@/lib/send/prompt';
+import { deliveryReadySize, jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES, outboxSize, OutboxFullError } from './budgets';
 import { getStoredSession, type StoredSession } from './sessions';
 import { readOutbox, type OutboxItem } from './outbox';
 import { readSent, type SentItem } from './sent';
@@ -43,6 +44,15 @@ function sentItem(id: string): SentItem {
     session: { id: 'ses_1', title: 'Browsertalk · example · 2026-10-10' },
     page: { title: 'Cart', url: 'https://example.com/cart' },
   };
+}
+
+function maxAcceptedItem(): OutboxItem {
+  const seed = pageItem('seed');
+  const one = { ...seed, comment: 'x' };
+  const base = deliveryReadySize([one]);
+  const perChar = deliveryReadySize([{ ...seed, comment: 'xx' }]) - base;
+  seed.comment = 'x'.repeat(1 + Math.floor((MAX_OUTBOX_BYTES - base) / perChar));
+  return seed;
 }
 
 describe('serialized storage writer', () => {
@@ -139,14 +149,21 @@ describe('serialized storage writer', () => {
     expect((await readOutbox()).map((item) => item.comment)).toEqual(['after']);
   });
 
-  it('rejects an append that would push the outbox past its byte budget', async () => {
-    const seed = pageItem('seed');
-    const overhead = outboxSize([{ ...seed, comment: '' }]);
-    seed.comment = 'x'.repeat(MAX_OUTBOX_BYTES - overhead - 10);
+  it('rejects a comment that cannot fit its own frozen admission input', async () => {
+    const huge = pageItem('huge');
+    huge.comment = 'x'.repeat(2_600_000);
+
+    expect(outboxSize([huge])).toBeLessThan(MAX_OUTBOX_BYTES);
+    await expect(appendToOutbox(huge)).rejects.toBeInstanceOf(OutboxFullError);
+    expect(await readOutbox()).toEqual([]);
+  });
+
+  it('rejects an append that would push the delivery-ready outbox past its byte budget', async () => {
+    const seed = maxAcceptedItem();
     await appendToOutbox(seed);
 
     await expect(appendToOutbox(pageItem('overflow'))).rejects.toBeInstanceOf(OutboxFullError);
-    expect((await readOutbox()).map((item) => item.comment)).toEqual([seed.comment]);
+    expect((await readOutbox()).map((item) => item.id)).toEqual([seed.id]);
   });
 
   it('rejects an append whose multibyte text exceeds the budget in bytes', async () => {
@@ -160,25 +177,37 @@ describe('serialized storage writer', () => {
     expect(await readOutbox()).toEqual([]);
   });
 
-  it('rejects a metadata update that would push the outbox past its byte budget', async () => {
-    const seed = pageItem('seed');
-    const overhead = outboxSize([{ ...seed, comment: '' }]);
-    seed.comment = 'x'.repeat(MAX_OUTBOX_BYTES - overhead - 10);
+  it('leaves room for the frozen input and receipt metadata of an item accepted at the limit', async () => {
+    const seed = maxAcceptedItem();
     await appendToOutbox(seed);
-
     const attempt = {
       requestID: 'req_1',
       sentAt: '2026-10-10T09:00:00.000Z',
       admissionInput: {
         sessionID: 'ses_1',
         sessionTitle: 'Browsertalk · example · 2026-10-10',
-        text: 'x'.repeat(200),
+        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
         delivery: 'queue' as const,
       },
     };
 
-    await expect(setOutboxAttempt('ob_seed', attempt)).rejects.toBeInstanceOf(OutboxFullError);
-    expect((await readOutbox())[0]?.attempt).toBeUndefined();
+    await expect(setOutboxAttempt(seed.id, attempt)).resolves.toBeUndefined();
+    await expect(
+      setOutboxAdmission(seed.id, {
+        requestID: 'req_1',
+        messageID: 'msg_1',
+        sessionID: 'ses_1',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        admittedAt: '2026-10-10T09:00:01.000Z',
+      }),
+    ).resolves.toBeUndefined();
+    await expect(setOutboxItemError(seed.id, 'The server rejected the prompt')).resolves.toBeUndefined();
+
+    const stored = (await readOutbox())[0];
+    expect(stored?.attempt).toEqual(attempt);
+    expect(stored?.admission?.messageID).toBe('msg_1');
+    expect(stored?.error).toBe('The server rejected the prompt');
+    expect(jsonByteSize(stored === undefined ? [] : [stored])).toBeLessThanOrEqual(MAX_OUTBOX_BYTES);
   });
 
   it('keeps every session ref when session writes interleave', async () => {

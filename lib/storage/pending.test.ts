@@ -124,4 +124,38 @@ describe('pending feedback storage', () => {
     expect(stored[key]).toEqual(feedback('fb_b'));
     expect((await getPendingFeedback(1))?.id).toBe('fb_b');
   });
+
+  it('applies a quota fallback before a replacement queued behind it', async () => {
+    const key = pendingFeedbackKey(1);
+    const stored: Record<string, unknown> = {};
+    let calls = 0;
+    let release: () => void = () => {};
+    let started: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const session = browser.storage.session as unknown as {
+      set: (items: Record<string, unknown>) => Promise<void>;
+    };
+    vi.spyOn(session, 'set').mockImplementation(async (items) => {
+      calls += 1;
+      if (calls === 1) {
+        started();
+        await gate;
+        throw new Error('QUOTA_BYTES quota exceeded');
+      }
+      Object.assign(stored, items);
+    });
+
+    const first = setPendingFeedback(1, feedback('fb_with_shot'), feedback('fb_without_shot'));
+    await entered;
+    const replacement = setPendingFeedback(1, feedback('fb_new'));
+    release();
+    await Promise.all([first, replacement]);
+
+    expect(stored[key]).toEqual(feedback('fb_new'));
+  });
 });

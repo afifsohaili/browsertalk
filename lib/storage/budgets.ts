@@ -1,5 +1,10 @@
+import { elementAttachment } from '@/lib/send/attachments';
+import { renderPrompt } from '@/lib/send/prompt';
+import type { OutboxItem } from './outbox';
+
 export const MAX_OUTBOX_BYTES = 5_000_000;
 export const MAX_SENT_BYTES = 1_000_000;
+export const OUTBOX_METADATA_HEADROOM_BYTES = 4_096;
 
 export class OutboxFullError extends Error {
   constructor() {
@@ -20,6 +25,26 @@ export function jsonByteSize(value: unknown): number {
 
 export function outboxSize(items: readonly unknown[]): number {
   return jsonByteSize(items);
+}
+
+const ESTIMATE_SENT_AT = '1970-01-01T00:00:00.000Z';
+const ESTIMATE_PROJECT_NAME = 'x'.repeat(255);
+
+export function deliveryReadySize(items: readonly OutboxItem[]): number {
+  const overhead = items.reduce((total, item) => total + itemDeliveryOverhead(item), 0);
+  return jsonByteSize(items) + overhead;
+}
+
+function itemDeliveryOverhead(item: OutboxItem): number {
+  let bytes = OUTBOX_METADATA_HEADROOM_BYTES;
+  if (item.attempt?.admissionInput !== undefined) return bytes;
+
+  const text = renderPrompt({ projectName: ESTIMATE_PROJECT_NAME, item, sentAt: ESTIMATE_SENT_AT });
+  bytes += utf8ByteLength(JSON.stringify(text));
+
+  const attachment = elementAttachment(item.facts.extras);
+  if (attachment !== null) bytes += utf8ByteLength(JSON.stringify([attachment]));
+  return bytes;
 }
 
 export function isQuotaExceeded(error: unknown): boolean {

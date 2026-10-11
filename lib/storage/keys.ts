@@ -15,6 +15,9 @@ export const STORAGE_KEYS = {
     byOrigin: 'projects.byOrigin',
   },
   sessions: 'sessions',
+  migration: {
+    owner: 'migration.owner',
+  },
   pending: {
     feedback: 'pending.feedback',
   },

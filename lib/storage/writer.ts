@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES, outboxSize, OutboxFullError } from './budgets';
+import { deliveryReadySize, jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES, OutboxFullError } from './budgets';
 import { STORAGE_KEYS } from './keys';
 import {
   readOutbox,
@@ -26,7 +26,7 @@ export function appendToOutbox(item: OutboxItem): Promise<void> {
   return enqueueStorageWrite(async () => {
     const items = await readOutbox();
     const next = [...items, item];
-    if (outboxSize(next) > MAX_OUTBOX_BYTES) throw new OutboxFullError();
+    if (deliveryReadySize(next) > MAX_OUTBOX_BYTES) throw new OutboxFullError();
     await browser.storage.local.set({ [STORAGE_KEYS.outbox]: next });
   });
 }
@@ -120,7 +120,6 @@ function updateOutboxItem(id: string, update: (item: OutboxItem) => OutboxItem):
   return enqueueStorageWrite(async () => {
     const items = await readOutbox();
     const next = items.map((item) => (item.id === id ? update(item) : item));
-    if (outboxSize(next) > MAX_OUTBOX_BYTES) throw new OutboxFullError();
     await browser.storage.local.set({ [STORAGE_KEYS.outbox]: next });
   });
 }

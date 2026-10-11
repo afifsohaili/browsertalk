@@ -1,19 +1,66 @@
 import { browser } from 'wxt/browser';
+import type { AgentBackendId } from '@/lib/agent-backend/interface';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import type { OriginBindings } from '@/lib/storage/projects';
 import { getSettings } from '@/lib/storage/settings';
 import { parseLoopbackUrl } from './endpoint';
-import { connectionKey } from './identity';
+import { connectionKey, type ConnectionIdentity } from './identity';
+import { isConnectionIdentity } from './protocol';
 
 export async function migrateLegacyConnectionStorage(): Promise<void> {
+  const owner = await readMigrationOwner();
+  if (owner.state === 'owner') {
+    await migrateForConnection(owner.connection);
+    return;
+  }
+  if (owner.state === 'unreadable') return;
+
   const { backendId, serverUrl } = await getSettings();
   const parsed = parseLoopbackUrl(serverUrl);
   if (!parsed.ok) return;
 
-  const key = connectionKey({ backendId, endpoint: parsed.endpoint });
+  const connection: ConnectionIdentity = { backendId, endpoint: parsed.endpoint };
+  if (!(await hasLegacyConnectionData(backendId))) return;
+
+  await browser.storage.local.set({ [STORAGE_KEYS.migration.owner]: connection });
+  await migrateForConnection(connection);
+}
+
+async function migrateForConnection(connection: ConnectionIdentity): Promise<void> {
+  const key = connectionKey(connection);
   await migrateLegacyToken(key);
   await migrateLegacyBindings(key);
-  await migrateLegacySessions(key, backendId);
+  await migrateLegacySessions(key, connection.backendId);
+}
+
+type MigrationOwner =
+  | { state: 'none' }
+  | { state: 'unreadable' }
+  | { state: 'owner'; connection: ConnectionIdentity };
+
+async function readMigrationOwner(): Promise<MigrationOwner> {
+  const stored = await browser.storage.local.get(STORAGE_KEYS.migration.owner);
+  const value = stored[STORAGE_KEYS.migration.owner];
+  if (value === undefined) return { state: 'none' };
+  if (isConnectionIdentity(value)) return { state: 'owner', connection: value };
+  return { state: 'unreadable' };
+}
+
+async function hasLegacyConnectionData(backendId: AgentBackendId): Promise<boolean> {
+  const stored = await browser.storage.local.get([
+    STORAGE_KEYS.auth.token,
+    STORAGE_KEYS.projects.byOrigin,
+    STORAGE_KEYS.sessions,
+  ]);
+
+  const legacyToken = stored[STORAGE_KEYS.auth.token];
+  if (typeof legacyToken === 'string' && legacyToken.length > 0) return true;
+
+  const bindings = asRecord(stored[STORAGE_KEYS.projects.byOrigin]);
+  if (Object.values(bindings).some((entry) => typeof entry === 'string')) return true;
+
+  const sessions = asRecord(stored[STORAGE_KEYS.sessions]);
+  return Object.keys(asRecord(sessions[backendId])).length > 0;
 }
 
 async function migrateLegacyToken(key: string): Promise<void> {
