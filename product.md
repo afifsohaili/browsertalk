@@ -48,7 +48,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 ## Workflow
 
 1. Browse and test. Something looks wrong.
-2. Arm the picker — panel button, popup, `Alt+Shift+F`, or right-click.
+2. Arm the picker — panel button, `Alt+Shift+F`, or right-click.
 3. Hover: elements highlight with a tag/class label.
 4. Click the element. The composer opens next to it.
 5. Type the comment. Send. The feedback lands in the session picked by the active session strategy.
@@ -118,7 +118,7 @@ Defaults: opencode → per-day. The seam must abstract the six axes found in res
 
 ```
 ┌ Chrome ──────────────────────────────────────────────────────────┐
-│ popup · side panel (Vue 3)      UI, outbox, sent                │
+│ side panel (Vue 3)              UI, outbox, sent                │
 │ options page                    backend · server · strategy     │
 │ picker.content.ts               element picking + facts         │
 │ background                      router · registries · auth      │
@@ -185,7 +185,6 @@ Pairing code creation requires an authenticated client, so the user runs one com
 | `storage` | Settings, token, outbox, mappings |
 | `sidePanel` | The primary surface |
 | `contextMenus` | Right-click → comment on element |
-| `activeTab` | Gesture-scoped access when arming from the popup |
 | `<all_urls>` (host) | Picker on any dev site; element screenshots |
 | `commands.arm-picker` | `Alt+Shift+F` shortcut |
 

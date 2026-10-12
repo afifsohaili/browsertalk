@@ -2,12 +2,11 @@
 
 Chrome extension that sends browser feedback straight into an opencode session bound to the right project. You browse, point at or describe what looks wrong, and the feedback lands in opencode with the facts the agent needs to find the code.
 
-Status: feature-complete through phase 007; phase 008 prepares the public Chrome Web Store release (submission pending — see `CHROMEWEBSTORE.md`). Phase tracking lives in `plans/`.
+Status: MVP complete through phase 011 (pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
 
 ## Surfaces
 
-- **Side panel** — primary. Current target (project + session), outbox, sent list, "+ new session".
-- **Toolbar popup** — quick actions, connection status, open panel.
+- **Side panel** — primary; opens on toolbar icon click. Current target (project + session), outbox, sent list, "+ new session".
 - **In-page overlay** — picker highlight and inline composer.
 - **Context menu / `Alt+Shift+F`** — arm the picker without opening the panel.
 - **Options page** — backend, server URL, session-strategy override.
@@ -16,7 +15,7 @@ Status: feature-complete through phase 007; phase 008 prepares the public Chrome
 
 ```
 ┌ Chrome ──────────────────────────────────────────────────────────┐
-│ popup · side panel (Vue 3)      UI, outbox, sent                │
+│ side panel (Vue 3)              UI, outbox, sent                │
 │ options page                    backend · server · strategy     │
 │ picker.content.ts               element picking + facts         │
 │ background                      router · registries · auth      │
