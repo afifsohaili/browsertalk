@@ -33,7 +33,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Token | The credential stored after pairing; used as the auth header |
 | Server URL | Base URL of the opencode server. Default `http://127.0.0.1:15001` |
 | Delivery | How a feedback enters a busy session: `queue` (wait for idle) or `steer` (interrupt). Default `queue` |
-| Surfaces | The UI entry points: side panel, popup, overlay, context menu, shortcut, options page |
+| Surfaces | The UI entry points: side panel, overlay, context menu, shortcut, options page |
 
 ## Code names
 

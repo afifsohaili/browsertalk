@@ -6,6 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'opencode Browsertalk',
     description: 'Send browser feedback straight into opencode sessions.',
+    action: { default_title: 'Open Browsertalk panel' },
     permissions: ['storage', 'sidePanel', 'contextMenus'],
     host_permissions: ['<all_urls>'],
     commands: {

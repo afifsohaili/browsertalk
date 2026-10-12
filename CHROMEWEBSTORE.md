@@ -85,7 +85,7 @@ Check all three (all true for this extension):
 >
 > 1. Install opencode from https://opencode.ai and start its server on the default URL: `opencode serve --port 15001`
 > 2. In another terminal, create a pairing code: `opencode api post /api/pair --server http://127.0.0.1:15001`
-> 3. Open the extension's side panel or toolbar popup. First run shows the feedback disclosure; click Accept. Paste the pairing code into the connection form and click Pair — the status shows "connected". (If pairing fails, set the server URL in the options page to the URL opencode printed.)
+> 3. Click the extension's toolbar icon to open the side panel. First run shows the feedback disclosure; click Accept. Paste the pairing code into the connection form and click Pair — the status shows "connected". (If pairing fails, set the server URL in the options page to the URL opencode printed.)
 > 4. Visit any page, then click "Point at element" (or press Alt+Shift+F, or right-click → "Browsertalk: point at element"). Hover highlights elements; click one, type a comment, press Queue (or Enter).
 > 5. The feedback appears in the side panel's Outbox and is delivered to the opencode server. Right-click → "Browsertalk: point at element" exercises the context-menu entry point.
 >

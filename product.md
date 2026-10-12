@@ -40,8 +40,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 
 | Surface | Role |
 |---|---|
-| Side panel | Primary. Target display, outbox, sent list, "+ new session" |
-| Toolbar popup | Quick actions, connection status, open panel |
+| Side panel | Primary. The toolbar icon opens it. Target display, outbox, sent list, "+ new session" |
 | In-page overlay | Picker highlight + inline composer |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
 | Options page | Settings: backend, server URL, session-strategy override (phase 003) |

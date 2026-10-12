@@ -1,3 +1,4 @@
+import { browser } from 'wxt/browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend';
 import { registerComposerHandler } from '@/lib/composer/messages';
 import { migrateLegacyConnectionStorage } from '@/lib/connection/migrate';
@@ -15,4 +16,10 @@ export default defineBackground(async () => {
   registerPickerTriggers();
   registerComposerHandler();
   registerPanelHandler();
+
+  try {
+    await browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  } catch (error) {
+    console.warn('Browsertalk: side panel behavior setup failed', error);
+  }
 });
