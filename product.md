@@ -15,7 +15,7 @@ Today the loop is manual. You read the element out of DevTools, copy the page UR
 | Identify element | eyeball + DevTools | hover, click |
 | Capture facts | copy by hand | automatic |
 | Choose project | remember it yourself | bound per origin |
-| Choose session | create one yourself | reused per session strategy |
+| Choose session | create one yourself | reused per session strategy, or picked from the project's list |
 | Paste into opencode | manual | one click |
 
 ## User
@@ -40,7 +40,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 
 | Surface | Role |
 |---|---|
-| Side panel | Primary. The toolbar icon opens it. Target display, outbox, sent list, "+ new session" |
+| Side panel | Primary. The toolbar icon opens it. Target display with the session chooser, outbox, sent list |
 | In-page overlay | Picker highlight + inline composer |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
 | Options page | Settings: backend, server URL, session-strategy override (phase 003) |
@@ -51,7 +51,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 2. Arm the picker — panel button, `Alt+Shift+F`, or right-click.
 3. Hover: elements highlight with a tag/class label.
 4. Click the element. The composer opens next to it.
-5. Type the comment. Send. The feedback lands in the session picked by the active session strategy.
+5. Type the comment. Send. The feedback lands in the session picked by the active session strategy — or the one adopted in the session chooser.
 
 ## What gets captured
 
@@ -111,7 +111,7 @@ Strategies that ship:
 Defaults: opencode → per-day. The seam must abstract the six axes found in research — identity/addressing, named creation, reuse mechanics, listing, busy/delivery, channel lifetime. Per-backend constraints: `plans/003-session-strategy/research-agent-sessions.md`.
 
 - First feedback creates or reuses the session per the active strategy.
-- "+ new session" in the panel replaces the current session with a fresh one and continues on it.
+- The session chooser in the panel lists the project's sessions: "+ new session" creates a fresh one and continues on it; picking an existing one adopts it into the active strategy slot, and every later send routes there.
 - Delivery is `queue`: the prompt waits until the agent is idle. `steer` stays reachable later; no decision yet.
 
 ## Architecture
@@ -138,7 +138,7 @@ The seam lives in `lib/agent-backend/`:
 
 | File | Role |
 |---|---|
-| `interface.ts` | The contract: `AgentBackend` with `ping` / `listProjects` / `createSession` / `sendFeedback` |
+| `interface.ts` | The contract: `AgentBackend` with `ping` / `listProjects` / `createSession` / `sendFeedback`; optional `listSessions` / `getSession` for picking existing sessions |
 | `registry.ts` | `registerAgentBackend` / `getAgentBackend` / `listAgentBackends`; fails fast with the known list |
 | `opencode.ts` | opencode adapter (stub in phase 001) |
 | `fake.ts` | In-memory test double |
@@ -158,6 +158,7 @@ opencode endpoints the adapter will use (verified against a live 2.0.24 server):
 | Projects | `GET /api/project` |
 | Session | `POST /api/session` with `{ title, location: { directory } }` |
 | Sessions | `GET /api/session` — list; filters `directory`, `search`, `parentID`, `cursor` |
+| Session refresh | `GET /api/session/{id}` — 404 when the session is gone |
 | Prompt | `POST /api/session/{id}/prompt` with `{ text, delivery }` |
 | Events (later) | `GET /api/event` |
 

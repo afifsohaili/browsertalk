@@ -359,6 +359,178 @@ describe('OpenCodeApi.createSession', () => {
   });
 });
 
+describe('OpenCodeApi.listSessions', () => {
+  it('lists root sessions of a directory, newest first, and maps them', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({
+        data: [
+          { id: 'ses_new', title: 'Newest', time: { created: 2, updated: 2 } },
+          { id: 'ses_old', title: 'Older', time: { created: 1, updated: 1 } },
+        ],
+        cursor: { previous: 'p', next: 'n' },
+      }),
+    );
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await expect(api.listSessions({ directory: '/home/afif/example', rootsOnly: true })).resolves.toEqual([
+      { id: 'ses_new', title: 'Newest' },
+      { id: 'ses_old', title: 'Older' },
+    ]);
+
+    const call = fetchFn.mock.calls[0];
+    expect(call?.[0]).toBe(`${BASE}/api/session?directory=%2Fhome%2Fafif%2Fexample&parentID=null&order=desc`);
+    expect(call?.[1]?.method).toBe('GET');
+    expect(call?.[1]?.headers).toEqual({ Authorization: 'Basic b3BlbmNvZGU6dG9rX2xpdmU=' });
+  });
+
+  it('passes the search term through and omits the roots filter when not asked', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: [] }));
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await api.listSessions({ search: 'cart' });
+
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/session?search=cart&order=desc`);
+  });
+
+  it('skips child sessions even when the server returns them', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () =>
+        jsonResponse({
+          data: [
+            { id: 'ses_root', title: 'Root' },
+            { id: 'ses_child', title: 'Child', parentID: 'ses_root' },
+          ],
+        }),
+      ),
+    });
+
+    await expect(api.listSessions({ directory: '/d', rootsOnly: true })).resolves.toEqual([
+      { id: 'ses_root', title: 'Root' },
+    ]);
+  });
+
+  it('falls back to the session id when the server omits or empties the title', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () =>
+        jsonResponse({ data: [{ id: 'ses_untitled', title: '' }, { id: 'ses_bare' }] }),
+      ),
+    });
+
+    await expect(api.listSessions({})).resolves.toEqual([
+      { id: 'ses_untitled', title: 'ses_untitled' },
+      { id: 'ses_bare', title: 'ses_bare' },
+    ]);
+  });
+
+  it('returns an empty list when the project has no sessions', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: [], cursor: {} })),
+    });
+
+    await expect(api.listSessions({ directory: '/d' })).resolves.toEqual([]);
+  });
+
+  it('rejects a body without a data array', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ sessions: [] })),
+    });
+
+    await expect(api.listSessions({})).rejects.toThrow('The opencode server sent an unexpected response');
+  });
+
+  it('rejects an entry without an id', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: [{ title: 'no id' }] })),
+    });
+
+    await expect(api.listSessions({})).rejects.toThrow('The opencode server sent an unexpected response');
+  });
+
+  it('reports a rejected token', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'stale',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)),
+    });
+
+    await expect(api.listSessions({})).rejects.toThrow('Pairing token rejected');
+  });
+});
+
+describe('OpenCodeApi.getSession', () => {
+  it('reads one session by id', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({ data: { id: 'ses_abc', title: 'Renamed in the TUI', time: { created: 1, updated: 2 } } }),
+    );
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await expect(api.getSession('ses_abc')).resolves.toEqual({ id: 'ses_abc', title: 'Renamed in the TUI' });
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/session/ses_abc`);
+    expect(fetchFn.mock.calls[0]?.[1]?.method).toBe('GET');
+  });
+
+  it('encodes the session id', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'ses a/b' } }));
+    const api = new OpenCodeApi({ baseUrl: BASE, token: 'tok_live', fetchFn });
+
+    await api.getSession('ses a/b');
+
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/session/ses%20a%2Fb`);
+  });
+
+  it('returns null when the session no longer exists', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () =>
+        jsonResponse({ _tag: 'SessionNotFoundError', sessionID: 'ses_gone' }, 404),
+      ),
+    });
+
+    await expect(api.getSession('ses_gone')).resolves.toBeNull();
+  });
+
+  it('falls back to the session id when the title is missing', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: { id: 'ses_bare' } })),
+    });
+
+    await expect(api.getSession('ses_bare')).resolves.toEqual({ id: 'ses_bare', title: 'ses_bare' });
+  });
+
+  it('rejects a response without a session id', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'tok_live',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ data: {} })),
+    });
+
+    await expect(api.getSession('ses_abc')).rejects.toThrow('The opencode server sent an unexpected response');
+  });
+
+  it('reports a rejected token', async () => {
+    const api = new OpenCodeApi({
+      baseUrl: BASE,
+      token: 'stale',
+      fetchFn: vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)),
+    });
+
+    await expect(api.getSession('ses_abc')).rejects.toThrow('Pairing token rejected');
+  });
+});
+
 describe('OpenCodeApi.sendPrompt', () => {
   it('posts text, queue delivery, and files, and returns the message id', async () => {
     const fetchFn = vi.fn<FetchLike>(async () =>

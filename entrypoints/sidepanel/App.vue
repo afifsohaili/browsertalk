@@ -38,6 +38,15 @@ const {
   openProjects,
   closeProjects,
   chooseProject,
+  sessionsOpen,
+  sessionsLoading,
+  sessionsSupported,
+  sessions,
+  sessionsError,
+  adopting,
+  openSessions,
+  closeSessions,
+  chooseSession,
 } = usePanel();
 
 const manualDirectory = ref('');
@@ -95,13 +104,16 @@ const sessionText = computed(() => {
       <div class="row">
         <span class="label">Project</span>
         <span class="value project-value" :title="target?.project ?? undefined">{{ projectText }}</span>
-        <button v-if="bound" type="button" class="change-project" title="Change project" @click="openProjects">
+        <button v-if="bound" type="button" class="change-target" title="Change project" @click="openProjects">
           change
         </button>
       </div>
       <div class="row">
         <span class="label">Session</span>
         <span class="value session-value" :title="target?.session?.title ?? undefined">{{ sessionText }}</span>
+        <button v-if="bound" type="button" class="change-target" title="Change session" @click="openSessions">
+          change
+        </button>
       </div>
       <button v-if="state === 'unbound'" type="button" class="choose-project" @click="openProjects">
         Choose project
@@ -109,9 +121,6 @@ const sessionText = computed(() => {
       <p v-if="target?.session" class="session-id" :data-session-id="target.session.id">
         {{ target.session.id }}
       </p>
-      <button type="button" class="new-session" :disabled="!bound || rollingOver" @click="newSession">
-        {{ rollingOver ? 'Starting…' : '+ new session' }}
-      </button>
     </section>
 
     <section v-if="projectsOpen" class="projects">
@@ -130,28 +139,28 @@ const sessionText = computed(() => {
           <p class="manual-name">Name: {{ manualName }}</p>
           <button type="submit" :disabled="binding || manualDirectory.trim().length === 0">Bind</button>
         </form>
-        <p v-if="projectsError" class="projects-error">{{ projectsError }}</p>
+        <p v-if="projectsError" class="list-error">{{ projectsError }}</p>
       </template>
       <template v-else>
         <p v-if="projectsLoading" class="empty">Loading projects…</p>
-        <p v-else-if="projectsError" class="projects-error">{{ projectsError }}</p>
+        <p v-else-if="projectsError" class="list-error">{{ projectsError }}</p>
         <p v-else-if="projects.length === 0" class="empty">No projects on the server.</p>
-        <ul v-else class="project-list">
+        <ul v-else class="choice-list">
           <li v-for="project in projects" :key="project.directory">
             <button
               type="button"
-              class="project-choice"
+              class="choice"
               :class="{ current: project.directory === target?.project }"
               :disabled="binding"
               @click="chooseProject(project.directory)"
             >
-              <span class="project-name">{{ project.name }}</span>
-              <span class="project-dir">{{ project.directory }}</span>
+              <span class="choice-name">{{ project.name }}</span>
+              <span class="choice-dir">{{ project.directory }}</span>
             </button>
           </li>
         </ul>
       </template>
-      <div class="projects-actions">
+      <div class="list-actions">
         <button
           v-if="projectsSupported && !projectsLoading"
           type="button"
@@ -161,6 +170,38 @@ const sessionText = computed(() => {
           Refresh
         </button>
         <button type="button" @click="closeProjects">Close</button>
+      </div>
+    </section>
+
+    <section v-if="sessionsOpen" class="sessions">
+      <button type="button" class="session-new" :disabled="rollingOver" @click="newSession">
+        {{ rollingOver ? 'Starting…' : '+ new session' }}
+      </button>
+      <p v-if="sessionsLoading" class="empty">Loading sessions…</p>
+      <p v-else-if="sessionsError" class="list-error">{{ sessionsError }}</p>
+      <template v-else>
+        <p v-if="!sessionsSupported" class="hint">This backend does not list sessions.</p>
+        <p v-else-if="sessions.length === 0" class="empty">No sessions for this project yet.</p>
+        <ul v-else class="choice-list">
+          <li v-for="session in sessions" :key="session.id">
+            <button
+              type="button"
+              class="choice"
+              :class="{ current: session.id === target?.session?.id }"
+              :disabled="adopting"
+              @click="chooseSession(session)"
+            >
+              <span class="choice-name">{{ session.title }}</span>
+              <span class="choice-dir choice-mono">{{ session.id }}</span>
+            </button>
+          </li>
+        </ul>
+      </template>
+      <div class="list-actions">
+        <button v-if="sessionsSupported && !sessionsLoading" type="button" :disabled="adopting" @click="openSessions">
+          Refresh
+        </button>
+        <button type="button" @click="closeSessions">Close</button>
       </div>
     </section>
 
@@ -208,7 +249,7 @@ const sessionText = computed(() => {
 </template>
 
 <style scoped>
-.change-project {
+.change-target {
   padding: 2px 6px;
   font-size: 10px;
   color: light-dark(#636366, #aeaeb2);
@@ -218,7 +259,8 @@ const sessionText = computed(() => {
   text-align: center;
 }
 
-.projects {
+.projects,
+.sessions {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -255,14 +297,14 @@ const sessionText = computed(() => {
   color: light-dark(#8e8e93, #98989d);
 }
 
-.projects-error {
+.list-error {
   margin: 0;
   font-size: 11px;
   color: #ff3b30;
   overflow-wrap: anywhere;
 }
 
-.project-list {
+.choice-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -271,41 +313,44 @@ const sessionText = computed(() => {
   list-style: none;
 }
 
-.project-choice {
+.choice {
   display: flex;
   flex-direction: column;
   gap: 2px;
   width: 100%;
 }
 
-.project-choice.current {
+.choice.current {
   border-color: #34c759;
 }
 
-.project-name {
+.choice-name {
   font-size: 12px;
 }
 
-.project-dir {
+.choice-dir {
   font-size: 10px;
   color: light-dark(#8e8e93, #98989d);
   overflow-wrap: anywhere;
 }
 
-.projects-actions {
+.choice-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.list-actions {
   display: flex;
   gap: 6px;
 }
 
-.projects-actions button {
+.list-actions button {
   flex: 1;
   padding: 4px 8px;
   font-size: 11px;
   text-align: center;
 }
 
-.new-session {
-  margin-top: 2px;
+.session-new {
   text-align: center;
 }
 

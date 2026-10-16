@@ -96,6 +96,8 @@ export interface SessionRef {
 export interface SessionListQuery {
   directory?: string;
   search?: string;
+  /** Only root sessions: child/subagent sessions are excluded. */
+  rootsOnly?: boolean;
 }
 
 export interface FeedbackAttachment {

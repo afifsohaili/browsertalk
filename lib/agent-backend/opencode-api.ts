@@ -1,6 +1,13 @@
 import { parseLoopbackUrl } from '@/lib/connection/endpoint';
-import { BackendError } from './interface';
-import type { FeedbackAttachment, Project, SendResult, SessionCreateInput, SessionRef } from './interface';
+import { BackendError, backendErrorCode } from './interface';
+import type {
+  FeedbackAttachment,
+  Project,
+  SendResult,
+  SessionCreateInput,
+  SessionListQuery,
+  SessionRef,
+} from './interface';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -96,6 +103,35 @@ export class OpenCodeApi {
     return { id, title: readString(data, 'title') ?? input.title };
   }
 
+  async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
+    const params = new URLSearchParams();
+    if (query.directory !== undefined && query.directory.length > 0) params.set('directory', query.directory);
+    if (query.search !== undefined && query.search.length > 0) params.set('search', query.search);
+    if (query.rootsOnly === true) params.set('parentID', 'null');
+    params.set('order', 'desc');
+
+    const body = await this.get(`/api/session?${params.toString()}`);
+    const data = readRecord(body, 'data');
+    if (!Array.isArray(data)) throw new OpenCodeError(UNEXPECTED_RESPONSE);
+    return data.filter((item) => query.rootsOnly !== true || !hasParent(item)).map((item) => toSessionRef(item));
+  }
+
+  async getSession(sessionID: string): Promise<SessionRef | null> {
+    let body: unknown;
+    try {
+      body = await this.get(`/api/session/${encodeURIComponent(sessionID)}`, {
+        notFoundMessage: SESSION_NOT_FOUND,
+      });
+    } catch (error) {
+      if (backendErrorCode(error) === 'missing-session') return null;
+      throw error;
+    }
+    const data = readRecord(body, 'data');
+    const id = readString(data, 'id');
+    if (id === null) throw new OpenCodeError(UNEXPECTED_RESPONSE);
+    return { id, title: readString(data, 'title') ?? id };
+  }
+
   async sendPrompt(input: SendPromptInput): Promise<SendResult> {
     const payload: Record<string, unknown> = {
       id: `msg_${input.requestID}`,
@@ -113,7 +149,7 @@ export class OpenCodeApi {
     return { admitted: true, messageID };
   }
 
-  private get(path: string): Promise<unknown> {
+  private get(path: string, options: { notFoundMessage?: string } = {}): Promise<unknown> {
     return requestJson({
       method: 'GET',
       baseUrl: this.config.baseUrl,
@@ -122,6 +158,7 @@ export class OpenCodeApi {
       fetchFn: this.config.fetchFn,
       timeoutMs: this.config.timeoutMs,
       unauthorizedMessage: 'Pairing token rejected',
+      notFoundMessage: options.notFoundMessage,
     });
   }
 
@@ -163,6 +200,16 @@ export function toProject(value: unknown): Project {
 
   const name = readString(value, 'name');
   return { id, name: name ?? projectNameFromDirectory(directory), directory };
+}
+
+function toSessionRef(value: unknown): SessionRef {
+  const id = readString(value, 'id');
+  if (id === null) throw new OpenCodeError(UNEXPECTED_RESPONSE);
+  return { id, title: readString(value, 'title') ?? id };
+}
+
+function hasParent(value: unknown): boolean {
+  return readString(value, 'parentID') !== null;
 }
 
 export function projectNameFromDirectory(directory: string): string {

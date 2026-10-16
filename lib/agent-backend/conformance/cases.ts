@@ -210,6 +210,15 @@ class OpenCodeServerSim {
       return jsonResponse({ data: { id, title } });
     }
 
+    const sessionGet = /^\/api\/session\/([^/]+)$/.exec(path);
+    if (sessionGet !== null && method === 'GET') {
+      const sessionID = decodeURIComponent(sessionGet[1] ?? '');
+      this.calls.push({ operation: 'get-session', endpoint, credential, redirect, sessionID });
+      const title = this.sessions.get(sessionID);
+      if (title === undefined) return jsonResponse({ _tag: 'SessionNotFoundError', sessionID }, 404);
+      return jsonResponse({ data: { id: sessionID, title } });
+    }
+
     const prompt = /^\/api\/session\/([^/]+)\/prompt$/.exec(path);
     if (prompt !== null && method === 'POST') {
       return this.prompt(endpoint, decodeURIComponent(prompt[1] ?? ''), credential, redirect, init);

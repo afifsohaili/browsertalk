@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import type { SessionRef } from '@/lib/agent-backend/interface';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
 import type { ConnectionIdentity } from '@/lib/connection/identity';
 import { sendQueuedItem } from '@/lib/send/send';
@@ -10,19 +11,29 @@ import {
   isPanelDiscardResult,
   isPanelRequest,
   isPanelRetryResult,
+  isSessionChooseResult,
   isSessionRolloverResult,
+  isSessionsListResult,
   isTargetReadResult,
   type PanelDiscardResult,
   type PanelRequest,
   type PanelRetryResult,
+  type SessionChooseResult,
   type SessionRolloverResult,
+  type SessionsListResult,
   type TargetReadResult,
 } from './protocol';
 
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_PROJECT_BINDING = 'This site has no project binding';
 
-export type PanelResponse = TargetReadResult | PanelRetryResult | PanelDiscardResult | SessionRolloverResult;
+export type PanelResponse =
+  | TargetReadResult
+  | PanelRetryResult
+  | PanelDiscardResult
+  | SessionRolloverResult
+  | SessionsListResult
+  | SessionChooseResult;
 
 export async function respondToPanelRequest(request: PanelRequest): Promise<PanelResponse> {
   switch (request.type) {
@@ -34,6 +45,10 @@ export async function respondToPanelRequest(request: PanelRequest): Promise<Pane
       return discardOutboxItem(request.itemId);
     case 'session/rollover':
       return rolloverSession(request.origin, request.connection);
+    case 'sessions/list':
+      return listSessions(request.origin, request.connection);
+    case 'sessions/choose':
+      return chooseSession(request.origin, request.connection, request.session);
   }
 }
 
@@ -69,6 +84,20 @@ export async function requestSessionRollover(
 ): Promise<SessionRolloverResult> {
   const response = await sendSafely({ type: 'session/rollover', origin, connection });
   return isSessionRolloverResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestSessions(origin: string, connection: ConnectionIdentity): Promise<SessionsListResult> {
+  const response = await sendSafely({ type: 'sessions/list', origin, connection });
+  return isSessionsListResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestSessionChoose(
+  origin: string,
+  connection: ConnectionIdentity,
+  session: SessionRef,
+): Promise<SessionChooseResult> {
+  const response = await sendSafely({ type: 'sessions/choose', origin, connection, session });
+  return isSessionChooseResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
 async function readTarget(origin: string): Promise<TargetReadResult> {
@@ -114,6 +143,40 @@ async function rolloverSession(origin: string, connection: ConnectionIdentity): 
       strategy.rolloverSession({ backend, connectionKey, directory: project }),
     );
     return { ok: true, session };
+  } catch (error) {
+    return { ok: false, error: describeError(error) };
+  }
+}
+
+async function listSessions(origin: string, connection: ConnectionIdentity): Promise<SessionsListResult> {
+  try {
+    const { backend, connectionKey } = await resolveSessionStrategyFor(connection);
+    const project = await getBoundProject(connectionKey, origin);
+    if (project === null) return { ok: false, error: NO_PROJECT_BINDING };
+
+    const list = backend.listSessions;
+    if (list === undefined) return { ok: true, supported: false, sessions: [] };
+    const sessions = await list.call(backend, { directory: project, rootsOnly: true });
+    return { ok: true, supported: true, sessions };
+  } catch (error) {
+    return { ok: false, error: describeError(error) };
+  }
+}
+
+async function chooseSession(
+  origin: string,
+  connection: ConnectionIdentity,
+  session: SessionRef,
+): Promise<SessionChooseResult> {
+  try {
+    const { backend, strategy, connectionKey } = await resolveSessionStrategyFor(connection);
+    const project = await getBoundProject(connectionKey, origin);
+    if (project === null) return { ok: false, error: NO_PROJECT_BINDING };
+
+    const adopted = await withSessionLock(sessionLockKey(connectionKey, project), () =>
+      strategy.adoptSession({ backend, connectionKey, directory: project }, session),
+    );
+    return { ok: true, session: adopted };
   } catch (error) {
     return { ok: false, error: describeError(error) };
   }

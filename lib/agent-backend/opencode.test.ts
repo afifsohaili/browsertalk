@@ -205,6 +205,78 @@ describe('OpenCodeBackend.createSession', () => {
   });
 });
 
+describe('OpenCodeBackend.listSessions', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('lists the project sessions through the configured server', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({ data: [{ id: 'ses_abc', title: 'My review thread' }], cursor: {} }),
+    );
+    setOpenCodeFetch(fetchFn);
+
+    await expect(new OpenCodeBackend().listSessions({ directory: '/home/afif/example', rootsOnly: true })).resolves.toEqual(
+      [{ id: 'ses_abc', title: 'My review thread' }],
+    );
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(
+      `${BASE}/api/session?directory=%2Fhome%2Fafif%2Fexample&parentID=null&order=desc`,
+    );
+  });
+
+  it('fails with a clear error when not paired', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(new OpenCodeBackend().listSessions({ directory: '/d' })).rejects.toThrow('Not paired');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('OpenCodeBackend.getSession', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('reads the session through the configured server', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+    const fetchFn = vi.fn<FetchLike>(async () =>
+      jsonResponse({ data: { id: 'ses_abc', title: 'Renamed in the TUI' } }),
+    );
+    setOpenCodeFetch(fetchFn);
+
+    await expect(new OpenCodeBackend().getSession('ses_abc')).resolves.toEqual({
+      id: 'ses_abc',
+      title: 'Renamed in the TUI',
+    });
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/session/ses_abc`);
+  });
+
+  it('returns null for a session the server does not have', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'SessionNotFoundError' }, 404)));
+
+    await expect(new OpenCodeBackend().getSession('ses_gone')).resolves.toBeNull();
+  });
+
+  it('fails with a clear error when not paired', async () => {
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    await expect(new OpenCodeBackend().getSession('ses_abc')).rejects.toThrow('Not paired');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
+
 describe('OpenCodeBackend.onboarding', () => {
   beforeEach(() => {
     fakeBrowser.reset();

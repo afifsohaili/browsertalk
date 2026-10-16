@@ -20,6 +20,8 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Sticky | Strategy: one long-lived session per project until "+ new session" |
 | Per-day | Strategy: one session per (project, local date) |
 | Session title | Per-day strategy: `Browsertalk · <project> · <YYYY-MM-DD>`. Sticky keeps the human's title |
+| Session chooser | The panel list for the bound project's sessions: "+ new session" first, then existing sessions |
+| Adopt | Verb: point the active strategy slot at an existing session picked in the session chooser |
 | Project | A codebase directory opencode knows (`location.directory`) |
 | Project binding | The remembered mapping origin → project |
 | Origin | Scheme + host + port of the page. The key for a project binding |
@@ -44,6 +46,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | `OpenCodeBackend`, `FakeAgentBackend` | `lib/agent-backend/opencode.ts`, `fake.ts` |
 | `registerBuiltinBackends` | `lib/agent-backend/builtins.ts`, called from `entrypoints/background.ts` |
 | `SessionStrategy`, `SessionStrategyId` | `lib/session-strategy/interface.ts` |
+| `adoptSession`, `adoptStoredSession` | `lib/session-strategy/interface.ts`, `persist.ts` — the pick path |
 | `registerSessionStrategy`, `getSessionStrategy`, `listSessionStrategies` | `lib/session-strategy/registry.ts` |
 | `picker.content.ts` | The content script entrypoint |
 

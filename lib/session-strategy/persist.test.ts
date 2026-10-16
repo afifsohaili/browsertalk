@@ -4,7 +4,13 @@ import { FakeAgentBackend } from '@/lib/agent-backend/fake';
 import type { AgentBackend, SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { writeStoredSession } from '@/lib/storage/writer';
-import { peekStoredSession, resolveStoredSession, rolloverStoredSession, type PersistSessionInput } from './persist';
+import {
+  adoptStoredSession,
+  peekStoredSession,
+  resolveStoredSession,
+  rolloverStoredSession,
+  type PersistSessionInput,
+} from './persist';
 
 const CONNECTION = 'fake@http://127.0.0.1:15001';
 const DIRECTORY = '/home/afif/example';
@@ -30,6 +36,12 @@ class RefreshingBackend extends FakeAgentBackend {
   async getSession(sessionID: string): Promise<SessionRef | null> {
     if (this.removed.has(sessionID)) return null;
     return this.sessions.find((session) => session.id === sessionID) ?? null;
+  }
+}
+
+class UnreachableRefreshBackend extends FakeAgentBackend {
+  async getSession(): Promise<SessionRef | null> {
+    throw new Error('Cannot reach the opencode server');
   }
 }
 
@@ -198,5 +210,105 @@ describe('session persistence', () => {
       id: created.id,
       title: 'My review thread',
     });
+  });
+
+  it('adopts a picked session into the slot and keeps the generation', async () => {
+    const backend = new FakeAgentBackend();
+    const input = persistInput(backend);
+
+    await resolveStoredSession(input);
+    const adopted = await adoptStoredSession(input, { id: 'ses_else', title: 'My review thread' });
+
+    expect(adopted).toEqual({ id: 'ses_else', title: 'My review thread' });
+    expect(backend.createInputs).toHaveLength(1);
+    expect(await getStoredSession(CONNECTION, 'per-day', KEY)).toEqual({
+      sessionID: 'ses_else',
+      title: 'My review thread',
+      generation: 0,
+    });
+  });
+
+  it('adopts into an empty slot at generation zero', async () => {
+    const backend = new FakeAgentBackend();
+
+    await adoptStoredSession(persistInput(backend), { id: 'ses_else', title: 'T' });
+
+    expect(await getStoredSession(CONNECTION, 'per-day', KEY)).toEqual({
+      sessionID: 'ses_else',
+      title: 'T',
+      generation: 0,
+    });
+    expect(backend.createInputs).toEqual([]);
+  });
+
+  it('keeps a bumped generation across an adoption', async () => {
+    const backend = new FakeAgentBackend();
+    const input = persistInput(backend);
+
+    await resolveStoredSession(input);
+    await rolloverStoredSession(input);
+    await adoptStoredSession(input, { id: 'ses_else', title: 'T' });
+    await rolloverStoredSession(input);
+
+    expect(backend.createInputs[2]?.intent.generation).toBe(2);
+    expect(await getStoredSession(CONNECTION, 'per-day', KEY)).toEqual({
+      sessionID: 'ses_fake_3',
+      title: TITLE,
+      generation: 2,
+    });
+  });
+
+  it('continues on the adopted session for later feedback', async () => {
+    const backend = new FakeAgentBackend();
+    const input = persistInput(backend);
+
+    await resolveStoredSession(input);
+    await adoptStoredSession(input, { id: 'ses_else', title: 'My review thread' });
+
+    await expect(resolveStoredSession(input)).resolves.toEqual({ id: 'ses_else', title: 'My review thread' });
+    expect(backend.createInputs).toHaveLength(1);
+  });
+
+  it('peeks a renamed session title through the backend and writes it back', async () => {
+    const backend = new RefreshingBackend();
+    const input = persistInput(backend);
+
+    const created = await resolveStoredSession(input);
+    const stored = backend.sessions[0];
+    if (stored === undefined) throw new Error('expected a created session');
+    stored.title = 'Renamed in the TUI';
+
+    await expect(peekStoredSession(input)).resolves.toEqual({ id: created.id, title: 'Renamed in the TUI' });
+    expect(await getStoredSession(CONNECTION, 'per-day', KEY)).toEqual({
+      sessionID: created.id,
+      title: 'Renamed in the TUI',
+      generation: 0,
+    });
+  });
+
+  it('peeks null for a session the backend no longer has, without creating one', async () => {
+    const backend = new RefreshingBackend();
+    const input = persistInput(backend);
+
+    const created = await resolveStoredSession(input);
+    backend.removed.add(created.id);
+
+    await expect(peekStoredSession(input)).resolves.toBeNull();
+    expect(backend.createInputs).toHaveLength(1);
+  });
+
+  it('peeks the stored ref when the refresh fails, without inventing a new one', async () => {
+    const backend = new UnreachableRefreshBackend();
+    await writeStoredSession(CONNECTION, 'per-day', KEY, {
+      sessionID: 'ses_known',
+      title: 'My review thread',
+      generation: 0,
+    });
+
+    await expect(peekStoredSession(persistInput(backend))).resolves.toEqual({
+      id: 'ses_known',
+      title: 'My review thread',
+    });
+    expect(backend.createInputs).toEqual([]);
   });
 });

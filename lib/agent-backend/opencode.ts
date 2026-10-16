@@ -8,6 +8,7 @@ import type {
   Project,
   SendResult,
   SessionCreateInput,
+  SessionListQuery,
   SessionRef,
 } from './interface';
 import { OpenCodeApi, OpenCodeError, redeemPairingCode, type FetchLike } from './opencode-api';
@@ -71,6 +72,18 @@ export class OpenCodeBackend implements AgentBackend {
     const { baseUrl, token } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
     return this.api(baseUrl, token).createSession(input);
+  }
+
+  async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
+    return this.api(baseUrl, token).listSessions(query);
+  }
+
+  async getSession(sessionID: string): Promise<SessionRef | null> {
+    const { baseUrl, token } = await this.resolve();
+    if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
+    return this.api(baseUrl, token).getSession(sessionID);
   }
 
   async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {

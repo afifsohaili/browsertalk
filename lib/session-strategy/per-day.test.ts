@@ -185,4 +185,22 @@ describe('PerDaySessionStrategy', () => {
       await strategy.peekSession({ backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(0, 1, 11) }),
     ).toBeNull();
   });
+
+  it('adopts a picked session into the day slot without creating one', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new PerDaySessionStrategy();
+
+    const adopted = await strategy.adoptSession(
+      { backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(9, 30) },
+      { id: 'ses_other', title: 'My review thread' },
+    );
+
+    expect(adopted).toEqual({ id: 'ses_other', title: 'My review thread' });
+    expect(backend.createInputs).toEqual([]);
+    expect(await getStoredSession(CONNECTION, 'per-day', DAY)).toEqual({
+      sessionID: 'ses_other',
+      title: 'My review thread',
+      generation: 0,
+    });
+  });
 });

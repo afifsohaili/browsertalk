@@ -7,9 +7,17 @@ import { sameConnection, type ConnectionIdentity } from '@/lib/connection/identi
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent, type SentItem } from '@/lib/storage/sent';
-import { requestOutboxDiscard, requestOutboxRetry, requestSessionRollover, requestTargetRead } from './messages';
+import {
+  requestOutboxDiscard,
+  requestOutboxRetry,
+  requestSessionChoose,
+  requestSessionRollover,
+  requestSessions,
+  requestTargetRead,
+} from './messages';
 
 const NO_PAGE_TO_TARGET = 'No page to target';
+const NO_PROJECT_TO_TARGET = 'This site has no project binding';
 
 export interface PanelTarget {
   origin: string | null;
@@ -50,6 +58,12 @@ export interface Panel {
   projects: Ref<Project[]>;
   projectsError: Ref<string | null>;
   binding: Ref<boolean>;
+  sessionsOpen: Ref<boolean>;
+  sessionsLoading: Ref<boolean>;
+  sessionsSupported: Ref<boolean>;
+  sessions: Ref<SessionRef[]>;
+  sessionsError: Ref<string | null>;
+  adopting: Ref<boolean>;
   refresh: () => Promise<void>;
   retry: (itemId: string) => Promise<void>;
   discard: (itemId: string) => Promise<void>;
@@ -57,6 +71,9 @@ export interface Panel {
   openProjects: () => Promise<void>;
   closeProjects: () => void;
   chooseProject: (directory: string) => Promise<void>;
+  openSessions: () => Promise<void>;
+  closeSessions: () => void;
+  chooseSession: (session: SessionRef) => Promise<void>;
 }
 
 export function usePanel(): Panel {
@@ -73,11 +90,20 @@ export function usePanel(): Panel {
   const projects = ref<Project[]>([]);
   const projectsError = ref<string | null>(null);
   const binding = ref(false);
+  const sessionsOpen = ref(false);
+  const sessionsLoading = ref(false);
+  const sessionsSupported = ref(true);
+  const sessions = ref<SessionRef[]>([]);
+  const sessionsError = ref<string | null>(null);
+  const adopting = ref(false);
   let projectsOrigin: string | null = null;
   let projectsConnection: ConnectionIdentity | null = null;
+  let sessionsOrigin: string | null = null;
+  let sessionsConnection: ConnectionIdentity | null = null;
   let targetConnection: ConnectionIdentity | null = null;
   let targetGeneration = 0;
   let projectsGeneration = 0;
+  let sessionsGeneration = 0;
   let refreshPromise: Promise<void> | null = null;
 
   async function run(action: () => Promise<void>): Promise<void> {
@@ -96,10 +122,12 @@ export function usePanel(): Panel {
 
     if (origin === null) {
       closeProjects();
+      closeSessions();
       target.value = { origin: null, project: null, session: null };
       return;
     }
     if (projectsOpen.value && projectsOrigin !== origin) closeProjects();
+    if (sessionsOpen.value && sessionsOrigin !== origin) closeSessions();
 
     const result = await requestTargetRead(origin);
     if (generation !== targetGeneration) return;
@@ -110,6 +138,9 @@ export function usePanel(): Panel {
     }
     if (projectsOpen.value && (projectsConnection === null || !sameConnection(projectsConnection, result.connection))) {
       closeProjects();
+    }
+    if (sessionsOpen.value && (sessionsConnection === null || !sameConnection(sessionsConnection, result.connection))) {
+      closeSessions();
     }
     targetConnection = result.connection;
     target.value = { origin, project: result.target.project, session: result.target.session };
@@ -171,6 +202,7 @@ export function usePanel(): Panel {
         return;
       }
       target.value = { origin, project, session: result.session };
+      closeSessions();
     });
     rollingOver.value = false;
   }
@@ -192,6 +224,7 @@ export function usePanel(): Panel {
       error.value = NO_PAGE_TO_TARGET;
       return;
     }
+    closeSessions();
     const origin = current.origin;
     projectsOrigin = origin;
     projectsConnection = connection;
@@ -234,6 +267,70 @@ export function usePanel(): Panel {
     await run(refreshTarget);
   }
 
+  function closeSessions(): void {
+    sessionsOpen.value = false;
+    sessionsOrigin = null;
+    sessionsConnection = null;
+    sessionsLoading.value = false;
+    sessionsError.value = null;
+    sessionsGeneration += 1;
+  }
+
+  async function openSessions(): Promise<void> {
+    await waitForRefreshedTarget();
+    const current = target.value;
+    const connection = targetConnection;
+    if (current === null || current.origin === null || connection === null) {
+      error.value = NO_PAGE_TO_TARGET;
+      return;
+    }
+    if (current.project === null) {
+      error.value = NO_PROJECT_TO_TARGET;
+      return;
+    }
+    closeProjects();
+    const origin = current.origin;
+    sessionsOrigin = origin;
+    sessionsConnection = connection;
+    const generation = ++sessionsGeneration;
+
+    sessionsOpen.value = true;
+    sessionsLoading.value = true;
+    sessionsError.value = null;
+
+    const result = await requestSessions(origin, connection);
+    if (generation !== sessionsGeneration || sessionsOrigin !== origin) return;
+
+    sessionsLoading.value = false;
+    if (!result.ok) {
+      sessions.value = [];
+      sessionsError.value = result.error;
+      return;
+    }
+    sessionsSupported.value = result.supported;
+    sessions.value = result.sessions;
+  }
+
+  async function chooseSession(session: SessionRef): Promise<void> {
+    const origin = sessionsOrigin;
+    const connection = sessionsConnection;
+    if (origin === null || connection === null) {
+      error.value = NO_PAGE_TO_TARGET;
+      return;
+    }
+
+    adopting.value = true;
+    const result = await requestSessionChoose(origin, connection, session);
+    adopting.value = false;
+    if (!result.ok) {
+      sessionsError.value = result.error;
+      return;
+    }
+
+    closeSessions();
+    await run(refreshTarget);
+  }
+
   function reloadTarget(): void {
     refreshPromise = run(refreshTarget);
     void refreshPromise;
@@ -252,6 +349,7 @@ export function usePanel(): Panel {
     target.value = null;
     targetConnection = null;
     closeProjects();
+    closeSessions();
   }
 
   function reloadLists(): void {
@@ -308,6 +406,12 @@ export function usePanel(): Panel {
     projects,
     projectsError,
     binding,
+    sessionsOpen,
+    sessionsLoading,
+    sessionsSupported,
+    sessions,
+    sessionsError,
+    adopting,
     refresh,
     retry,
     discard,
@@ -315,6 +419,9 @@ export function usePanel(): Panel {
     openProjects,
     closeProjects,
     chooseProject,
+    openSessions,
+    closeSessions,
+    chooseSession,
   };
 }
 

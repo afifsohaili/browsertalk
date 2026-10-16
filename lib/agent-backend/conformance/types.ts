@@ -15,7 +15,7 @@ export interface ConformanceSeamRecord {
   pingCalls: number;
 }
 
-export type TransportOperation = 'ping' | 'list-projects' | 'pair' | 'create' | 'send';
+export type TransportOperation = 'ping' | 'list-projects' | 'pair' | 'create' | 'get-session' | 'send';
 
 export interface TransportCall {
   operation: TransportOperation;

@@ -167,4 +167,22 @@ describe('StickySessionStrategy', () => {
     ).toEqual(created);
     expect(backend.createInputs).toHaveLength(1);
   });
+
+  it('adopts a picked session into the project slot without creating one', async () => {
+    const backend = new FakeAgentBackend();
+    const strategy = new StickySessionStrategy();
+
+    const adopted = await strategy.adoptSession(
+      { backend, connectionKey: CONNECTION, directory: DIRECTORY, now: at(10) },
+      { id: 'ses_other', title: 'My review thread' },
+    );
+
+    expect(adopted).toEqual({ id: 'ses_other', title: 'My review thread' });
+    expect(backend.createInputs).toEqual([]);
+    expect(await getStoredSession(CONNECTION, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_other',
+      title: 'My review thread',
+      generation: 0,
+    });
+  });
 });

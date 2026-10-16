@@ -3,7 +3,7 @@ import { effectScope } from 'vue';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
-import type { Project, SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
+import type { Project, SessionCreateInput, SessionListQuery, SessionRef } from '@/lib/agent-backend/interface';
 import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { acceptConsent } from '@/lib/consent/consent';
@@ -45,6 +45,31 @@ const offlineFetch = async (): Promise<Response> => {
 class PanelFakeBackend extends FakeAgentBackend {
   override async listProjects(): Promise<Project[]> {
     return fakeProjects;
+  }
+}
+
+class ListingFakeBackend extends PanelFakeBackend {
+  readonly listQueries: SessionListQuery[] = [];
+  listed: SessionRef[] = [];
+
+  async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
+    this.listQueries.push(query);
+    return this.listed;
+  }
+}
+
+class GatedSessionsBackend extends ListingFakeBackend {
+  readonly startedLists: number[] = [];
+  private releases: Array<() => void> = [];
+
+  override async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
+    this.startedLists.push(1);
+    await new Promise<void>((resolve) => this.releases.push(resolve));
+    return super.listSessions(query);
+  }
+
+  releaseList(): void {
+    this.releases.shift()?.();
   }
 }
 
@@ -775,6 +800,260 @@ describe('panel logic', () => {
       expect(fakeBackend.sent[0]?.sessionID).toBe('ses_fake_1');
       expect(fakeBackend.sent[0]?.text).toContain('## Browser feedback — other-project');
       expect(await readOutbox()).toEqual([]);
+      stop();
+    });
+  });
+
+  describe('session choosing', () => {
+    it('opens the session list with the project sessions', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const listing = new ListingFakeBackend();
+      listing.listed = [
+        { id: 'ses_new', title: 'Newest thread' },
+        { id: 'ses_old', title: 'Older thread' },
+      ];
+      fakeBackend = listing;
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openSessions();
+
+      expect(panel.sessionsOpen.value).toBe(true);
+      expect(panel.sessionsLoading.value).toBe(false);
+      expect(panel.sessionsSupported.value).toBe(true);
+      expect(panel.sessionsError.value).toBeNull();
+      expect(panel.sessions.value).toEqual(listing.listed);
+      expect(listing.listQueries).toEqual([{ directory: DIRECTORY, rootsOnly: true }]);
+      stop();
+    });
+
+    it('reports a backend without session listing as unsupported', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openSessions();
+
+      expect(panel.sessionsOpen.value).toBe(true);
+      expect(panel.sessionsSupported.value).toBe(false);
+      expect(panel.sessions.value).toEqual([]);
+      expect(panel.sessionsError.value).toBeNull();
+      stop();
+    });
+
+    it('keeps the list open with the honest error when the server is unreachable', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await setSettings({ backendId: 'opencode' });
+      await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openSessions();
+
+      expect(panel.sessionsOpen.value).toBe(true);
+      expect(panel.sessionsLoading.value).toBe(false);
+      expect(panel.sessions.value).toEqual([]);
+      expect(panel.sessionsError.value).toBe('Not paired');
+      stop();
+    });
+
+    it('adopts the picked session and closes the list', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const listing = new ListingFakeBackend();
+      listing.listed = [{ id: 'ses_pick', title: 'My review thread' }];
+      fakeBackend = listing;
+      const { panel, stop } = await loadedPanel();
+      await panel.openSessions();
+
+      await panel.chooseSession({ id: 'ses_pick', title: 'My review thread' });
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.adopting.value).toBe(false);
+      expect(panel.error.value).toBeNull();
+      expect(panel.target.value).toEqual({
+        origin: ORIGIN,
+        project: DIRECTORY,
+        session: { id: 'ses_pick', title: 'My review thread' },
+      });
+      expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+        sessionID: 'ses_pick',
+        title: 'My review thread',
+        generation: 0,
+      });
+      stop();
+    });
+
+    it('creates a fresh session from the list and closes it', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      fakeBackend = new ListingFakeBackend();
+      const { panel, stop } = await loadedPanel();
+      await panel.openSessions();
+
+      await panel.newSession();
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.target.value?.session).toEqual({ id: 'ses_fake_1', title: STICKY_TITLE });
+      expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+        sessionID: 'ses_fake_1',
+        title: STICKY_TITLE,
+        generation: 1,
+      });
+      stop();
+    });
+
+    it('refuses to open the list with no active page', async () => {
+      stubQuery([tab(1, 'chrome://newtab/')]);
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openSessions();
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.error.value).toBe('No page to target');
+      stop();
+    });
+
+    it('refuses to open the list without a bound project', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      const listing = new ListingFakeBackend();
+      fakeBackend = listing;
+      const { panel, stop } = await loadedPanel();
+
+      await panel.openSessions();
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.error.value).toBe('This site has no project binding');
+      expect(listing.listQueries).toEqual([]);
+      stop();
+    });
+
+    it('closes the list when the active origin changes', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      fakeBackend = new ListingFakeBackend();
+      const { panel, stop } = await loadedPanel();
+      await panel.openSessions();
+      expect(panel.sessionsOpen.value).toBe(true);
+
+      stubQuery([tab(2, 'https://other.example.org/page')]);
+      await triggerEvent(browser.tabs.onActivated, { tabId: 2, windowId: 0 });
+
+      await vi.waitFor(() => {
+        expect(panel.sessionsOpen.value).toBe(false);
+      });
+      stop();
+    });
+
+    it('discards a delayed session list when the origin changed meanwhile', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const gated = new GatedSessionsBackend();
+      fakeBackend = gated;
+      const { panel, stop } = await loadedPanel();
+
+      const opening = panel.openSessions();
+      await vi.waitFor(() => {
+        expect(gated.startedLists).toHaveLength(1);
+      });
+
+      stubQuery([tab(2, 'https://other.example.org/page')]);
+      await triggerEvent(browser.tabs.onActivated, { tabId: 2, windowId: 0 });
+      await vi.waitFor(() => {
+        expect(panel.sessionsOpen.value).toBe(false);
+      });
+
+      gated.releaseList();
+      await opening;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.sessions.value).toEqual([]);
+      stop();
+    });
+
+    it('discards a delayed session list when the connection changed meanwhile', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const gated = new GatedSessionsBackend();
+      fakeBackend = gated;
+      const { panel, stop } = await loadedPanel();
+
+      const opening = panel.openSessions();
+      await vi.waitFor(() => {
+        expect(gated.startedLists).toHaveLength(1);
+      });
+
+      await setSettings({ serverUrl: ENDPOINT_B });
+      await vi.waitFor(() => {
+        expect(panel.sessionsOpen.value).toBe(false);
+      });
+
+      gated.releaseList();
+      await opening;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.sessions.value).toEqual([]);
+      stop();
+    });
+
+    it('waits for the refreshed target instead of opening on the stale connection', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      const { panel, stop } = await loadedPanel();
+
+      let release: () => void = () => {};
+      let entered: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      browser.tabs.query = vi.fn(async () => {
+        entered();
+        await gate;
+        return [tab(1, PAGE_URL)];
+      }) as unknown as typeof browser.tabs.query;
+
+      await setSettings({ serverUrl: ENDPOINT_B });
+      await started;
+      expect(panel.target.value).toBeNull();
+
+      let settled = false;
+      const opening = panel.openSessions().then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(settled).toBe(false);
+      expect(panel.sessionsOpen.value).toBe(false);
+
+      release();
+      await opening;
+
+      expect(panel.sessionsOpen.value).toBe(false);
+      expect(panel.error.value).toBe('This site has no project binding');
+      stop();
+    });
+
+    it('refuses to choose after the connection changed', async () => {
+      stubQuery([tab(1, PAGE_URL)]);
+      await bindProject(KEY, ORIGIN, DIRECTORY);
+      fakeBackend = new ListingFakeBackend();
+      const { panel, stop } = await loadedPanel();
+      await panel.openSessions();
+      expect(panel.sessionsOpen.value).toBe(true);
+
+      await setSettings({ serverUrl: ENDPOINT_B });
+      await vi.waitFor(() => {
+        expect(panel.sessionsOpen.value).toBe(false);
+      });
+
+      await panel.chooseSession({ id: 'ses_pick', title: 'T' });
+
+      expect(panel.error.value).toBe('No page to target');
+      expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toBeNull();
+      expect(await getStoredSession(KEY_B, 'sticky', DIRECTORY)).toBeNull();
       stop();
     });
   });

@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { FakeAgentBackend } from '@/lib/agent-backend/fake';
-import type { SessionCreateInput, SessionRef } from '@/lib/agent-backend/interface';
+import type { SessionCreateInput, SessionListQuery, SessionRef } from '@/lib/agent-backend/interface';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { acceptConsent } from '@/lib/consent/consent';
@@ -18,7 +18,9 @@ import {
   registerPanelHandler,
   requestOutboxDiscard,
   requestOutboxRetry,
+  requestSessionChoose,
   requestSessionRollover,
+  requestSessions,
   requestTargetRead,
 } from './messages';
 
@@ -31,8 +33,10 @@ const KEY = `fake@${ENDPOINT}`;
 const KEY_B = `fake@${ENDPOINT_B}`;
 const OPENCODE_KEY = `opencode@${ENDPOINT}`;
 const GATED_KEY = `gated@${ENDPOINT}`;
+const LISTING_KEY = `listing@${ENDPOINT}`;
 const FAKE_CONNECTION = { backendId: 'fake', endpoint: ENDPOINT };
 const GATED_CONNECTION = { backendId: 'gated', endpoint: ENDPOINT };
+const LISTING_CONNECTION = { backendId: 'listing', endpoint: ENDPOINT };
 
 class GatedCreateBackend extends FakeAgentBackend {
   readonly startedCreates: SessionCreateInput[] = [];
@@ -51,7 +55,18 @@ class GatedCreateBackend extends FakeAgentBackend {
   }
 }
 
+class ListingBackend extends FakeAgentBackend {
+  readonly listQueries: SessionListQuery[] = [];
+  listed: SessionRef[] = [];
+
+  async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
+    this.listQueries.push(query);
+    return this.listed;
+  }
+}
+
 let gatedBackend = new GatedCreateBackend();
+let listingBackend = new ListingBackend();
 
 function item(overrides: Partial<OutboxItem> = {}): OutboxItem {
   return {
@@ -71,12 +86,14 @@ describe('panel messaging', () => {
     registerBuiltinBackends();
     registerBuiltinSessionStrategies();
     registerAgentBackend('gated', () => gatedBackend);
+    registerAgentBackend('listing', () => listingBackend);
   });
 
   beforeEach(async () => {
     fakeBrowser.reset();
     registerPanelHandler();
     gatedBackend = new GatedCreateBackend();
+    listingBackend = new ListingBackend();
     await acceptConsent();
     await setSettings({ backendId: 'fake', sessionStrategy: { fake: 'sticky' } });
     await bindProject(KEY, ORIGIN, DIRECTORY);
@@ -228,6 +245,138 @@ describe('panel messaging', () => {
     expect(await getStoredSession(OPENCODE_KEY, 'sticky', DIRECTORY)).toBeNull();
   });
 
+  it('lists the bound project sessions and passes the project directory', async () => {
+    await setSettings({ backendId: 'listing', sessionStrategy: { listing: 'sticky' } });
+    await bindProject(LISTING_KEY, ORIGIN, DIRECTORY);
+    listingBackend.listed = [
+      { id: 'ses_new', title: 'Newest thread' },
+      { id: 'ses_old', title: 'Older thread' },
+    ];
+
+    await expect(requestSessions(ORIGIN, LISTING_CONNECTION)).resolves.toEqual({
+      ok: true,
+      supported: true,
+      sessions: [
+        { id: 'ses_new', title: 'Newest thread' },
+        { id: 'ses_old', title: 'Older thread' },
+      ],
+    });
+    expect(listingBackend.listQueries).toEqual([{ directory: DIRECTORY, rootsOnly: true }]);
+  });
+
+  it('reports a backend without listing as unsupported', async () => {
+    await expect(requestSessions(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
+      ok: true,
+      supported: false,
+      sessions: [],
+    });
+  });
+
+  it('refuses a session list for an unbound origin', async () => {
+    await expect(requestSessions('https://unbound.example.org', FAKE_CONNECTION)).resolves.toEqual({
+      ok: false,
+      error: 'This site has no project binding',
+    });
+  });
+
+  it('reports a listing failure without inventing sessions', async () => {
+    await setSettings({ backendId: 'opencode' });
+    await bindProject(OPENCODE_KEY, ORIGIN, DIRECTORY);
+
+    await expect(requestSessions(ORIGIN, { backendId: 'opencode', endpoint: ENDPOINT })).resolves.toEqual({
+      ok: false,
+      error: 'Not paired',
+    });
+  });
+
+  it('adopts the picked session and shows it as the target', async () => {
+    await expect(
+      requestSessionChoose(ORIGIN, FAKE_CONNECTION, { id: 'ses_else', title: 'My review thread' }),
+    ).resolves.toEqual({ ok: true, session: { id: 'ses_else', title: 'My review thread' } });
+
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_else',
+      title: 'My review thread',
+      generation: 0,
+    });
+    await expect(requestTargetRead(ORIGIN)).resolves.toEqual({
+      ok: true,
+      target: { project: DIRECTORY, session: { id: 'ses_else', title: 'My review thread' } },
+      connection: FAKE_CONNECTION,
+    });
+  });
+
+  it('keeps the slot generation when adopting', async () => {
+    await writeStoredSession(KEY, 'sticky', DIRECTORY, { sessionID: 'ses_old', title: 'Old thread', generation: 2 });
+
+    await expect(requestSessionChoose(ORIGIN, FAKE_CONNECTION, { id: 'ses_else', title: 'T' })).resolves.toEqual({
+      ok: true,
+      session: { id: 'ses_else', title: 'T' },
+    });
+
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_else',
+      title: 'T',
+      generation: 2,
+    });
+  });
+
+  it('refuses a choose for an unbound origin', async () => {
+    await expect(
+      requestSessionChoose('https://unbound.example.org', FAKE_CONNECTION, { id: 'ses_else', title: 'T' }),
+    ).resolves.toEqual({ ok: false, error: 'This site has no project binding' });
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toBeNull();
+  });
+
+  it('chooses on the captured connection even when the settings point elsewhere', async () => {
+    await setSettings({ serverUrl: ENDPOINT_B });
+
+    await expect(requestSessionChoose(ORIGIN, FAKE_CONNECTION, { id: 'ses_else', title: 'T' })).resolves.toEqual({
+      ok: true,
+      session: { id: 'ses_else', title: 'T' },
+    });
+
+    expect(await getStoredSession(KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_else',
+      title: 'T',
+      generation: 0,
+    });
+    expect(await getStoredSession(KEY_B, 'sticky', DIRECTORY)).toBeNull();
+  });
+
+  it('withholds a choose while the first send is resolving its session', async () => {
+    await setSettings({ backendId: 'gated', sessionStrategy: { gated: 'sticky' } });
+    await bindProject(GATED_KEY, ORIGIN, DIRECTORY);
+    await appendToOutbox(
+      item({ destination: { backendId: 'gated', endpoint: ENDPOINT, directory: DIRECTORY } }),
+    );
+
+    const send = sendQueuedItem('ob_1');
+    await vi.waitFor(() => {
+      expect(gatedBackend.startedCreates).toHaveLength(1);
+    });
+
+    let settled = false;
+    const choosing = requestSessionChoose(ORIGIN, GATED_CONNECTION, { id: 'ses_pick', title: 'T' }).then(
+      (result) => {
+        settled = true;
+        return result;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+
+    gatedBackend.releaseCreate();
+    await expect(send).resolves.toMatchObject({ ok: true });
+    await expect(choosing).resolves.toEqual({ ok: true, session: { id: 'ses_pick', title: 'T' } });
+
+    expect(await getStoredSession(GATED_KEY, 'sticky', DIRECTORY)).toEqual({
+      sessionID: 'ses_pick',
+      title: 'T',
+      generation: 0,
+    });
+  });
+
   it('discards an item through the background writer', async () => {
     await appendToOutbox(item({ id: 'ob_keep', comment: 'keep' }));
     await appendToOutbox(item({ id: 'ob_drop', comment: 'drop' }));
@@ -262,6 +411,14 @@ describe('panel messaging', () => {
     await expect(requestOutboxRetry('ob_1')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestOutboxDiscard('ob_1')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestSessionRollover(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
+      ok: false,
+      error: 'Background unavailable',
+    });
+    await expect(requestSessions(ORIGIN, FAKE_CONNECTION)).resolves.toEqual({
+      ok: false,
+      error: 'Background unavailable',
+    });
+    await expect(requestSessionChoose(ORIGIN, FAKE_CONNECTION, { id: 'ses_else', title: 'T' })).resolves.toEqual({
       ok: false,
       error: 'Background unavailable',
     });

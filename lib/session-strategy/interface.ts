@@ -21,6 +21,8 @@ export interface SessionStrategy {
   resolveSession(input: SessionStrategyInput): Promise<SessionRef>;
   rolloverSession(input: SessionStrategyInput): Promise<SessionRef>;
   peekSession(input: SessionStrategyInput): Promise<SessionRef | null>;
+  /** Point the strategy slot at an existing session picked by the user. */
+  adoptSession(input: SessionStrategyInput, session: SessionRef): Promise<SessionRef>;
 }
 
 export function projectName(directory: string): string {

@@ -7,7 +7,9 @@ export type PanelRequest =
   | { type: 'target/read'; origin: string }
   | { type: 'outbox/retry'; itemId: string }
   | { type: 'outbox/discard'; itemId: string }
-  | { type: 'session/rollover'; origin: string; connection: ConnectionIdentity };
+  | { type: 'session/rollover'; origin: string; connection: ConnectionIdentity }
+  | { type: 'sessions/list'; origin: string; connection: ConnectionIdentity }
+  | { type: 'sessions/choose'; origin: string; connection: ConnectionIdentity; session: SessionRef };
 
 export interface TargetSnapshot {
   project: string | null;
@@ -24,14 +26,28 @@ export type PanelDiscardResult = { ok: true } | { ok: false; error: string };
 
 export type SessionRolloverResult = { ok: true; session: SessionRef } | { ok: false; error: string };
 
+export type SessionsListResult =
+  | { ok: true; supported: boolean; sessions: SessionRef[] }
+  | { ok: false; error: string };
+
+export type SessionChooseResult = { ok: true; session: SessionRef } | { ok: false; error: string };
+
 export function isPanelRequest(value: unknown): value is PanelRequest {
   if (!isRecord(value)) return false;
   switch (value.type) {
     case 'target/read':
       return typeof value.origin === 'string' && value.origin.length > 0;
     case 'session/rollover':
+    case 'sessions/list':
       return (
         typeof value.origin === 'string' && value.origin.length > 0 && isConnectionIdentity(value.connection)
+      );
+    case 'sessions/choose':
+      return (
+        typeof value.origin === 'string' &&
+        value.origin.length > 0 &&
+        isConnectionIdentity(value.connection) &&
+        isSessionRef(value.session)
       );
     case 'outbox/retry':
     case 'outbox/discard':
@@ -60,6 +76,26 @@ export function isPanelDiscardResult(value: unknown): value is PanelDiscardResul
 }
 
 export function isSessionRolloverResult(value: unknown): value is SessionRolloverResult {
+  return isSessionRefResult(value);
+}
+
+export function isSessionsListResult(value: unknown): value is SessionsListResult {
+  if (!isRecord(value)) return false;
+  if (value.ok === true) {
+    return (
+      typeof value.supported === 'boolean' &&
+      Array.isArray(value.sessions) &&
+      value.sessions.every(isSessionRef)
+    );
+  }
+  return value.ok === false && typeof value.error === 'string';
+}
+
+export function isSessionChooseResult(value: unknown): value is SessionChooseResult {
+  return isSessionRefResult(value);
+}
+
+function isSessionRefResult(value: unknown): value is { ok: true; session: SessionRef } | { ok: false; error: string } {
   if (!isRecord(value)) return false;
   if (value.ok === true) return isSessionRef(value.session);
   return value.ok === false && typeof value.error === 'string';
