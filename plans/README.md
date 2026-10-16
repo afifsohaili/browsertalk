@@ -18,7 +18,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 010 | `010-hardening/` | `ticket-01..12` | shipped · 0175cb1 (round 4, final local) | 008 |
 | 009 | `009-pi-adapter/` | `ticket.md` | ready · locally unblocked; live acceptance gate | — |
 | 011 | `011-panel-first/` | `ticket.md` | shipped · 8a269ab | — |
-| 012 | `012-session-picker/` | `ticket.md` | shipped (sha recorded below) | — |
+| 012 | `012-session-picker/` | `ticket.md` | shipped · 6ac9f55 | — |
 
 Policy:
 

@@ -6,7 +6,7 @@ Owner decisions (2026-10-16 question round): adopt into the strategy slot (not a
 
 **Blocked by:** none.
 
-**Status:** done (sha recorded by the follow-up docs commit)
+**Status:** done · 6ac9f55
 
 ## Wire facts (verified live on `127.0.0.1:15001`, 2026-10-16; plus the v2 OpenAPI)
 
