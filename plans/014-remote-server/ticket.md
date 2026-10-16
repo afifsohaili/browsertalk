@@ -6,7 +6,7 @@ Owner decisions (2026-10-16 question round): enable as an opt-in (not always-on,
 
 **Blocked by:** none.
 
-**Status:** done (sha recorded by the follow-up docs commit)
+**Status:** done · 05151fa
 
 ## Checklist
 
