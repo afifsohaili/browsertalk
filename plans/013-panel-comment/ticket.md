@@ -6,7 +6,7 @@ Owner decisions (2026-10-16 question round): retire "Comment on page" and its in
 
 **Blocked by:** none.
 
-**Status:** done (sha recorded by the follow-up docs commit)
+**Status:** done · 40fb88a
 
 ## Checklist
 

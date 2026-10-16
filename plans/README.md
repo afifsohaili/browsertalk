@@ -19,7 +19,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 009 | `009-pi-adapter/` | `ticket.md` | ready · locally unblocked; live acceptance gate | — |
 | 011 | `011-panel-first/` | `ticket.md` | shipped · 8a269ab | — |
 | 012 | `012-session-picker/` | `ticket.md` | shipped · 6ac9f55 | — |
-| 013 | `013-panel-comment/` | `ticket.md` | shipped (sha recorded below) | — |
+| 013 | `013-panel-comment/` | `ticket.md` | shipped · 40fb88a | — |
 
 Policy:
 
