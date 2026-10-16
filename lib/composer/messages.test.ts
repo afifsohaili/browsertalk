@@ -9,24 +9,20 @@ import { bindProject } from '@/lib/storage/projects';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { appendToOutbox } from '@/lib/storage/writer';
-import type { ComposerQueueRequest } from './protocol';
+import type { ComposerQueueRequest, ComposerRequest } from './protocol';
 import {
   broadcastOutboxChanged,
   onOutboxChanged,
-  openComposerOnActiveTab,
-  openComposerOnTab,
   registerComposerHandler,
-  requestOpenComposer,
   requestOutboxCount,
+  requestPageComment,
   requestQueueComment,
-  requestQueueUrlOnly,
   respondToComposerRequest,
 } from './messages';
 
 type Tab = Browser.tabs.Tab;
 
 const originalQuery = browser.tabs.query;
-const originalSendMessage = browser.tabs.sendMessage;
 
 let requestedSends: string[] = [];
 
@@ -36,18 +32,6 @@ function tab(id: number, url?: string, title?: string): Tab {
 
 function stubQuery(tabs: Tab[]): void {
   browser.tabs.query = vi.fn(async () => tabs) as unknown as typeof browser.tabs.query;
-}
-
-function stubSendMessage(result: unknown): ReturnType<typeof vi.fn> {
-  const implementation =
-    result instanceof Error
-      ? async () => {
-          throw result;
-        }
-      : async () => result;
-  const mock = vi.fn(implementation);
-  browser.tabs.sendMessage = mock as unknown as typeof browser.tabs.sendMessage;
-  return mock;
 }
 
 function sampleFeedback(id = 'fb_1'): PickerFeedback {
@@ -77,20 +61,14 @@ function sampleFeedback(id = 'fb_1'): PickerFeedback {
 function elementQueue(captureID: string, comment: string): ComposerQueueRequest {
   return {
     type: 'composer/queue',
-    mode: 'element',
     comment,
     page: { url: 'https://example.com/cart', title: 'Cart' },
     captureID,
   };
 }
 
-function pageQueue(comment: string): ComposerQueueRequest {
-  return {
-    type: 'composer/queue',
-    mode: 'page',
-    comment,
-    page: { url: 'https://example.com/cart?step=2#pay', title: ' Cart ' },
-  };
+function pageComment(comment: string): ComposerRequest {
+  return { type: 'outbox/page-comment', comment };
 }
 
 function storedItem(): OutboxItem {
@@ -125,7 +103,6 @@ describe('composer messaging', () => {
 
   afterEach(() => {
     browser.tabs.query = originalQuery;
-    browser.tabs.sendMessage = originalSendMessage;
     resetSendDispatcher();
   });
 
@@ -244,11 +221,12 @@ describe('composer messaging', () => {
     expect((await getPendingFeedback(1))?.id).toBe('fb_1');
   });
 
-  it('queues a page comment with just the page facts and clears that tab stale pick', async () => {
-    await setPendingFeedback(1, sampleFeedback());
+  it('queues a page comment from the active tab and clears that tab stale pick', async () => {
+    stubQuery([tab(4, 'https://example.com/cart?step=2#pay', 'Cart')]);
+    await setPendingFeedback(4, sampleFeedback('fb_active_tab'));
     await setPendingFeedback(2, sampleFeedback('fb_other_tab'));
 
-    await expect(respondToComposerRequest(pageQueue('Layout jumps'), { tabId: 1 })).resolves.toEqual({
+    await expect(respondToComposerRequest(pageComment('Layout jumps'))).resolves.toEqual({
       ok: true,
       outboxCount: 1,
     });
@@ -263,21 +241,23 @@ describe('composer messaging', () => {
       title: 'Cart',
     });
     expect(requestedSends).toEqual([item?.id]);
-    expect(await getPendingFeedback(1)).toBeNull();
+    expect(await getPendingFeedback(4)).toBeNull();
     expect((await getPendingFeedback(2))?.id).toBe('fb_other_tab');
   });
 
-  it('queues a page comment from a surface without a sender tab', async () => {
-    await expect(requestQueueComment('Layout jumps', 'page', { url: 'https://example.com/cart', title: 'Cart' })).resolves.toEqual({
-      ok: true,
-      outboxCount: 1,
-    });
+  it('queues page comments through the registered handler, with and without a comment', async () => {
+    stubQuery([tab(4, 'https://example.com/cart', 'Cart')]);
+
+    await expect(requestPageComment('Layout jumps')).resolves.toEqual({ ok: true, outboxCount: 1 });
+    await expect(requestPageComment('')).resolves.toEqual({ ok: true, outboxCount: 2 });
+
+    expect((await readOutbox()).map((item) => item.comment)).toEqual(['Layout jumps', '']);
   });
 
   it('queues the active page URL with an empty comment', async () => {
     stubQuery([tab(4, 'https://example.com/page?q=1', 'Page')]);
 
-    await expect(requestQueueUrlOnly()).resolves.toEqual({ ok: true, outboxCount: 1 });
+    await expect(respondToComposerRequest(pageComment(''))).resolves.toEqual({ ok: true, outboxCount: 1 });
 
     const item = (await readOutbox())[0];
     expect(item?.comment).toBe('');
@@ -292,48 +272,22 @@ describe('composer messaging', () => {
     expect(requestedSends).toEqual([item?.id]);
   });
 
-  it('reports URL-only clearly when there is no active page', async () => {
+  it('reports a page comment clearly when there is no active page', async () => {
     stubQuery([]);
 
-    await expect(requestQueueUrlOnly()).resolves.toEqual({
+    await expect(respondToComposerRequest(pageComment('Layout jumps'))).resolves.toEqual({
       ok: false,
       error: 'No active page to comment on',
     });
     expect(await readOutbox()).toEqual([]);
   });
 
-  it('reports URL-only clearly when the tab URL is not readable', async () => {
+  it('reports a page comment clearly when the tab URL is not readable', async () => {
     stubQuery([tab(4)]);
 
-    await expect(requestQueueUrlOnly()).resolves.toEqual({
+    await expect(respondToComposerRequest(pageComment(''))).resolves.toEqual({
       ok: false,
       error: "Can't read this page's URL",
-    });
-  });
-
-  it('opens the composer through the active tab content script', async () => {
-    stubQuery([tab(7)]);
-    const send = stubSendMessage({ ok: true });
-
-    await expect(requestOpenComposer()).resolves.toEqual({ ok: true });
-    expect(send).toHaveBeenCalledWith(7, { type: 'composer/open' });
-  });
-
-  it('reports a page without a content script clearly', async () => {
-    stubSendMessage(new Error('Receiving end does not exist'));
-
-    await expect(openComposerOnTab(7)).resolves.toEqual({
-      ok: false,
-      error: "Can't comment on this page",
-    });
-  });
-
-  it('reports no active page clearly when opening the composer', async () => {
-    stubQuery([]);
-
-    await expect(openComposerOnActiveTab()).resolves.toEqual({
-      ok: false,
-      error: 'No active page to comment on',
     });
   });
 
@@ -356,10 +310,10 @@ describe('composer messaging', () => {
   it('falls back honestly when the background is not there', async () => {
     fakeBrowser.reset();
 
-    await expect(requestOpenComposer()).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestOutboxCount()).resolves.toEqual({ ok: false, error: 'Background unavailable' });
+    await expect(requestPageComment('Fix this')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(
-      requestQueueComment('Fix this', 'page', { url: 'https://example.com/', title: 'Example' }),
+      requestQueueComment('Fix this', { url: 'https://example.com/', title: 'Example' }, 'fb_1'),
     ).resolves.toEqual({ ok: false, error: 'Background unavailable' });
   });
 
@@ -424,7 +378,9 @@ describe('composer messaging', () => {
     });
 
     it('refuses to queue a page comment', async () => {
-      await expect(respondToComposerRequest(pageQueue('Layout jumps'), { tabId: 1 })).resolves.toEqual({
+      stubQuery([tab(4, 'https://example.com/page?q=1', 'Page')]);
+
+      await expect(respondToComposerRequest(pageComment('Layout jumps'))).resolves.toEqual({
         ok: false,
         error: CONSENT_REQUIRED_ERROR,
       });
@@ -445,10 +401,13 @@ describe('composer messaging', () => {
       expect(requestedSends).toEqual([]);
     });
 
-    it('refuses to queue the active page URL only', async () => {
+    it('refuses to queue a URL-only send from the same path', async () => {
       stubQuery([tab(4, 'https://example.com/page?q=1', 'Page')]);
 
-      await expect(requestQueueUrlOnly()).resolves.toEqual({ ok: false, error: CONSENT_REQUIRED_ERROR });
+      await expect(respondToComposerRequest(pageComment(''))).resolves.toEqual({
+        ok: false,
+        error: CONSENT_REQUIRED_ERROR,
+      });
 
       expect(await readOutbox()).toEqual([]);
       expect(requestedSends).toEqual([]);

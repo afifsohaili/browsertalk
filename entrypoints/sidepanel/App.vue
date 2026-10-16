@@ -1,10 +1,9 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
 import ArmPickerButton from '@/components/ArmPickerButton.vue';
-import CommentOnPageButton from '@/components/CommentOnPageButton.vue';
+import CommentBox from '@/components/CommentBox.vue';
 import ConsentGate from '@/components/ConsentGate.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
-import SendUrlOnlyButton from '@/components/SendUrlOnlyButton.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
 import { useConsent } from '@/lib/consent/use-consent';
 import { formatTimestamp, targetState, usePanel } from '@/lib/panel/use-panel';
@@ -205,10 +204,10 @@ const sessionText = computed(() => {
       </div>
     </section>
 
+    <CommentBox />
+
     <div class="actions">
       <ArmPickerButton />
-      <CommentOnPageButton />
-      <SendUrlOnlyButton />
     </div>
 
     <section class="outbox">

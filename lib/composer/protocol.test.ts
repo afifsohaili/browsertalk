@@ -1,44 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isComposerOpenResult,
-  isComposerQueueResult,
-  isComposerRequest,
-  isOutboxChanged,
-  isOutboxCountResult,
-} from './protocol';
+import { isComposerQueueResult, isComposerRequest, isOutboxChanged, isOutboxCountResult } from './protocol';
 
 describe('composer request guard', () => {
-  it('accepts the four request shapes', () => {
-    expect(isComposerRequest({ type: 'composer/open' })).toBe(true);
+  it('accepts the three request shapes', () => {
     expect(
       isComposerRequest({
         type: 'composer/queue',
-        mode: 'element',
         comment: 'Looks off',
         page: { url: 'https://example.com/', title: 'Example' },
         captureID: 'fb_1',
       }),
     ).toBe(true);
-    expect(
-      isComposerRequest({
-        type: 'composer/queue',
-        mode: 'page',
-        comment: 'Layout jumps',
-        page: { url: 'https://example.com/', title: 'Example' },
-      }),
-    ).toBe(true);
-    expect(isComposerRequest({ type: 'outbox/url-only' })).toBe(true);
+    expect(isComposerRequest({ type: 'outbox/page-comment', comment: 'Layout jumps' })).toBe(true);
+    expect(isComposerRequest({ type: 'outbox/page-comment', comment: '' })).toBe(true);
     expect(isComposerRequest({ type: 'outbox/count' })).toBe(true);
   });
 
   it('rejects malformed queue requests', () => {
     const page = { url: 'https://example.com/', title: 'Example' };
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 7, page, captureID: 'fb_1' })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 'x', page, captureID: '' })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'element', comment: 'x', page })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'bogus', comment: 'x', page })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'page', comment: 'x', page: { url: 1 } })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', mode: 'page', comment: 'x' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 7, page, captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: '' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page: { url: 1 }, captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'outbox/page-comment' })).toBe(false);
+    expect(isComposerRequest({ type: 'outbox/page-comment', comment: 7 })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/open' })).toBe(false);
+    expect(isComposerRequest({ type: 'outbox/url-only' })).toBe(false);
   });
 
   it('leaves other messages alone', () => {
@@ -59,17 +47,6 @@ describe('outbox changed guard', () => {
 });
 
 describe('composer result guards', () => {
-  it('accepts both composer open result shapes', () => {
-    expect(isComposerOpenResult({ ok: true })).toBe(true);
-    expect(isComposerOpenResult({ ok: false, error: 'nope' })).toBe(true);
-  });
-
-  it('rejects malformed composer open results', () => {
-    expect(isComposerOpenResult({ ok: true, error: 'nope' })).toBe(false);
-    expect(isComposerOpenResult({ ok: false })).toBe(false);
-    expect(isComposerOpenResult(undefined)).toBe(false);
-  });
-
   it('accepts both queue result shapes', () => {
     expect(isComposerQueueResult({ ok: true, outboxCount: 2 })).toBe(true);
     expect(isComposerQueueResult({ ok: true, outboxCount: 2, screenshotDropped: true })).toBe(true);

@@ -1,7 +1,6 @@
 import { browser } from 'wxt/browser';
 import { createElementSubmission } from '@/lib/composer/element-submission';
 import { requestQueueComment } from '@/lib/composer/messages';
-import { isComposerRequest } from '@/lib/composer/protocol';
 import { createComposerSession } from '@/lib/composer/session';
 import { notifyCaptured } from '@/lib/picker/messages';
 import { isPickerMessage, type ArmPickerResult } from '@/lib/picker/protocol';
@@ -12,14 +11,13 @@ export default defineContentScript({
   main() {
     const submission = createElementSubmission({
       notify: notifyCaptured,
-      send: ({ comment, page, captureID }) => requestQueueComment(comment, 'element', page, captureID),
+      send: ({ comment, page, captureID }) => requestQueueComment(comment, page, captureID),
     });
 
     const composer = createComposerSession({
-      queue: async (comment, mode) => {
+      queue: async (comment) => {
         const page = { url: window.location.href, title: document.title };
-        if (mode === 'element') return submission.submit(comment, page);
-        return requestQueueComment(comment, mode, page);
+        return submission.submit(comment, page);
       },
     });
 
@@ -31,12 +29,6 @@ export default defineContentScript({
     browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
       if (isPickerMessage(message) && message.type === 'picker/arm') {
         sendResponse({ ok: true, armed: session.toggle() } satisfies ArmPickerResult);
-        return undefined;
-      }
-
-      if (isComposerRequest(message) && message.type === 'composer/open') {
-        composer.openPage();
-        sendResponse({ ok: true });
         return undefined;
       }
 

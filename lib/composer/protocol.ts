@@ -1,7 +1,5 @@
 import { isRecord } from '@/lib/picker/facts';
 
-export type ComposerMode = 'element' | 'page';
-
 export interface ComposerPageRequest {
   url: string;
   title: string;
@@ -9,16 +7,14 @@ export interface ComposerPageRequest {
 
 export interface ComposerQueueRequest {
   type: 'composer/queue';
-  mode: ComposerMode;
   comment: string;
   page: ComposerPageRequest;
-  captureID?: string;
+  captureID: string;
 }
 
 export type ComposerRequest =
-  | { type: 'composer/open' }
   | ComposerQueueRequest
-  | { type: 'outbox/url-only' }
+  | { type: 'outbox/page-comment'; comment: string }
   | { type: 'outbox/count' };
 
 export interface OutboxChangedEvent {
@@ -26,8 +22,6 @@ export interface OutboxChangedEvent {
 }
 
 export type ComposerMessage = ComposerRequest | OutboxChangedEvent;
-
-export type ComposerOpenResult = { ok: true } | { ok: false; error: string };
 
 export type ComposerQueueResult =
   | { ok: true; outboxCount: number; screenshotDropped?: boolean }
@@ -38,16 +32,16 @@ export type OutboxCountResult = { ok: true; count: number } | { ok: false; error
 export function isComposerRequest(value: unknown): value is ComposerRequest {
   if (!isRecord(value)) return false;
   switch (value.type) {
-    case 'composer/open':
-    case 'outbox/url-only':
     case 'outbox/count':
       return true;
+    case 'outbox/page-comment':
+      return typeof value.comment === 'string';
     case 'composer/queue':
-      if (!isComposerMode(value.mode) || typeof value.comment !== 'string' || !isComposerPageRequest(value.page)) {
-        return false;
-      }
-      if (value.mode === 'element') return isCaptureID(value.captureID);
-      return value.captureID === undefined || isCaptureID(value.captureID);
+      return (
+        typeof value.comment === 'string' &&
+        isComposerPageRequest(value.page) &&
+        isCaptureID(value.captureID)
+      );
     default:
       return false;
   }
@@ -55,12 +49,6 @@ export function isComposerRequest(value: unknown): value is ComposerRequest {
 
 export function isOutboxChanged(value: unknown): value is OutboxChangedEvent {
   return isRecord(value) && value.type === 'outbox/changed';
-}
-
-export function isComposerOpenResult(value: unknown): value is ComposerOpenResult {
-  if (!isRecord(value)) return false;
-  if (value.ok === true) return value.error === undefined;
-  return value.ok === false && typeof value.error === 'string';
 }
 
 export function isComposerQueueResult(value: unknown): value is ComposerQueueResult {
@@ -76,10 +64,6 @@ export function isOutboxCountResult(value: unknown): value is OutboxCountResult 
   if (!isRecord(value)) return false;
   if (value.ok === true) return isFiniteNumber(value.count);
   return value.ok === false && typeof value.error === 'string';
-}
-
-function isComposerMode(value: unknown): value is ComposerMode {
-  return value === 'element' || value === 'page';
 }
 
 function isCaptureID(value: unknown): value is string {

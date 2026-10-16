@@ -40,8 +40,8 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 
 | Surface | Role |
 |---|---|
-| Side panel | Primary. The toolbar icon opens it. Target display with the session chooser, outbox, sent list |
-| In-page overlay | Picker highlight + inline composer |
+| Side panel | Primary. The toolbar icon opens it. Target display with the session chooser and the comment box, outbox, sent list |
+| In-page overlay | Picker highlight + inline composer (element comments) |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
 | Options page | Settings: backend, server URL, session-strategy override (phase 003) |
 
@@ -52,6 +52,8 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 3. Hover: elements highlight with a tag/class label.
 4. Click the element. The composer opens next to it.
 5. Type the comment. Send. The feedback lands in the session picked by the active session strategy — or the one adopted in the session chooser.
+
+To comment on the page as a whole instead of an element, type in the panel's comment box and send; an empty box sends the URL only.
 
 ## What gets captured
 

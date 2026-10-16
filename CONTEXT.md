@@ -13,6 +13,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Picker | The content-script mode for selecting an element. Hover highlights, click selects |
 | Arm | Verb: turn the picker on ("arm the picker", "armed") |
 | Composer | The inline box next to the selected element where the comment is typed |
+| Comment box | The panel's textarea for page-level feedback; an empty box sends the URL only |
 | Outbox | Feedback that has not been sent yet |
 | Sent | Feedback already delivered to a session, shown as a summary line |
 | Session | An agent conversation. A Browsertalk session is the feedback target: per project, per the active strategy |

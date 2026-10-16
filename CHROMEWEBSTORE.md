@@ -41,7 +41,7 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 ### Permission justifications (exact text, one per dashboard field)
 
 - **storage**: Stores the extension's own settings, the pairing token for the user's local opencode server, origin-to-project bindings, session references, the queued outbox, and recent sent summaries. All of it stays in the browser on the user's machine.
-- **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the outbox, and the sent list.
+- **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the comment box for page-level feedback, the outbox, and the sent list.
 - **contextMenus**: Adds a right-click menu item, "Browsertalk: point at element", that starts element selection on the current page.
 - **Host permission `<all_urls>`** (locked decision: keep; justify per feature):
   > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected element's facts, (2) capture the visible tab for the optional element screenshot crop, and (3) call the user's own opencode server over loopback (default http://127.0.0.1:15001). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's local server.

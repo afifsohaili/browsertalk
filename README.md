@@ -6,7 +6,7 @@ Status: MVP complete through phase 011 (pi adapter, phase 009, pending). Chrome 
 
 ## Surfaces
 
-- **Side panel** — primary; opens on toolbar icon click. Current target (project + session), session chooser, outbox, sent list.
+- **Side panel** — primary; opens on toolbar icon click. Current target (project + session), session chooser, comment box, outbox, sent list.
 - **In-page overlay** — picker highlight and inline composer.
 - **Context menu / `Alt+Shift+F`** — arm the picker without opening the panel.
 - **Options page** — backend, server URL, session-strategy override.

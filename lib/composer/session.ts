@@ -1,5 +1,5 @@
 import { createComposerController, type ComposerQueueResult as ControllerQueueResult } from './controller';
-import type { ComposerMode, ComposerQueueResult } from './protocol';
+import type { ComposerQueueResult } from './protocol';
 
 export const COMPOSER_HOST_ID = 'browsertalk-composer';
 
@@ -8,12 +8,11 @@ const HINT_TEXT = 'Enter queues · Esc dismisses';
 const SCREENSHOT_DROPPED_NOTICE = 'Queued without the screenshot — storage is full';
 
 export interface ComposerSessionOptions {
-  queue: (comment: string, mode: ComposerMode) => Promise<ComposerQueueResult>;
+  queue: (comment: string) => Promise<ComposerQueueResult>;
 }
 
 export interface ComposerSession {
   openElement: (element: Element) => void;
-  openPage: () => void;
   close: () => void;
   isOpen: () => boolean;
 }
@@ -24,22 +23,20 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   let queueButton: HTMLButtonElement | null = null;
   let errorLine: HTMLDivElement | null = null;
   let anchor: Element | null = null;
-  let mode: ComposerMode = 'page';
   let confirmationTimer: number | null = null;
   let notice: string | null = null;
 
   const controller = createComposerController({
     queue: async (comment): Promise<ControllerQueueResult> => {
-      const result = await options.queue(comment, mode);
+      const result = await options.queue(comment);
       notice = result.ok && result.screenshotDropped === true ? SCREENSHOT_DROPPED_NOTICE : null;
       return result;
     },
     onTransition: render,
   });
 
-  function open(nextMode: ComposerMode, element: Element | null): void {
+  function open(element: Element): void {
     close();
-    mode = nextMode;
     anchor = element;
     buildDom();
     controller.reset();
@@ -209,8 +206,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   }
 
   return {
-    openElement: (element) => open('element', element),
-    openPage: () => open('page', null),
+    openElement: (element) => open(element),
     close,
     isOpen: () => host !== null,
   };
