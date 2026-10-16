@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { isAgentBackendId, type AgentBackendId } from '@/lib/agent-backend/interface';
 import { hasAgentBackend } from '@/lib/agent-backend/registry';
-import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { parseServerUrl } from '@/lib/connection/endpoint';
 import { isSessionStrategyId, type SessionStrategyId } from '@/lib/session-strategy/interface';
 import { STORAGE_KEYS } from './keys';
 
@@ -13,6 +13,7 @@ export type SessionStrategyOverrides = Partial<Record<AgentBackendId, SessionStr
 export interface Settings {
   backendId: AgentBackendId;
   serverUrl: string;
+  allowRemote: boolean;
   sessionStrategy: SessionStrategyOverrides;
 }
 
@@ -20,6 +21,7 @@ export async function getSettings(): Promise<Settings> {
   const stored = await browser.storage.local.get([
     STORAGE_KEYS.settings.backendId,
     STORAGE_KEYS.settings.serverUrl,
+    STORAGE_KEYS.settings.allowRemote,
     STORAGE_KEYS.settings.sessionStrategy,
   ]);
   const backendId = stored[STORAGE_KEYS.settings.backendId];
@@ -28,6 +30,7 @@ export async function getSettings(): Promise<Settings> {
   return {
     backendId: isAgentBackendId(backendId) ? backendId : DEFAULT_BACKEND_ID,
     serverUrl: typeof serverUrl === 'string' && serverUrl.length > 0 ? serverUrl : DEFAULT_SERVER_URL,
+    allowRemote: stored[STORAGE_KEYS.settings.allowRemote] === true,
     sessionStrategy: readSessionStrategyOverrides(stored[STORAGE_KEYS.settings.sessionStrategy]),
   };
 }
@@ -35,11 +38,17 @@ export async function getSettings(): Promise<Settings> {
 export async function setSettings(patch: Partial<Settings>): Promise<void> {
   const values: Record<string, unknown> = {};
   if (patch.backendId !== undefined) values[STORAGE_KEYS.settings.backendId] = patch.backendId;
-  if (patch.serverUrl !== undefined) {
-    const parsed = parseLoopbackUrl(patch.serverUrl);
+
+  if (patch.serverUrl !== undefined || patch.allowRemote !== undefined) {
+    const current = await getSettings();
+    const allowRemote = patch.allowRemote ?? current.allowRemote;
+    const serverUrl = patch.serverUrl ?? current.serverUrl;
+    const parsed = parseServerUrl(serverUrl, { allowRemote });
     if (!parsed.ok) throw new Error(parsed.error);
-    values[STORAGE_KEYS.settings.serverUrl] = parsed.endpoint;
+    if (patch.serverUrl !== undefined) values[STORAGE_KEYS.settings.serverUrl] = parsed.endpoint;
   }
+
+  if (patch.allowRemote !== undefined) values[STORAGE_KEYS.settings.allowRemote] = patch.allowRemote;
   if (patch.sessionStrategy !== undefined) values[STORAGE_KEYS.settings.sessionStrategy] = patch.sessionStrategy;
   if (Object.keys(values).length > 0) await browser.storage.local.set(values);
 }

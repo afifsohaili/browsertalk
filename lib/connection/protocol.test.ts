@@ -50,13 +50,18 @@ describe('connection identity guard', () => {
     expect(isConnectionIdentity({ backendId: 'pi', endpoint: 'http://localhost:4096' })).toBe(true);
   });
 
-  it('rejects remote, non-canonical, or malformed identities', () => {
-    expect(isConnectionIdentity({ backendId: 'opencode', endpoint: 'https://example.com' })).toBe(false);
+  it('rejects non-canonical or malformed identities', () => {
     expect(isConnectionIdentity({ backendId: 'opencode', endpoint: 'http://127.0.0.1:15001/' })).toBe(false);
+    expect(isConnectionIdentity({ backendId: 'opencode', endpoint: 'http://user:pass@127.0.0.1:15001' })).toBe(false);
     expect(isConnectionIdentity({ backendId: '', endpoint: 'http://127.0.0.1:15001' })).toBe(false);
     expect(isConnectionIdentity({ endpoint: 'http://127.0.0.1:15001' })).toBe(false);
     expect(isConnectionIdentity({ backendId: 'opencode' })).toBe(false);
     expect(isConnectionIdentity(null)).toBe(false);
+  });
+
+  it('accepts a remote endpoint on syntax alone; the policy applies where it is used', () => {
+    expect(isConnectionIdentity({ backendId: 'opencode', endpoint: 'https://example.com' })).toBe(true);
+    expect(isConnectionIdentity({ backendId: 'opencode', endpoint: 'http://afif.tailnet.ts.net:15001' })).toBe(true);
   });
 });
 

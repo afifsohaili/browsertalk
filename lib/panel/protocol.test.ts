@@ -96,12 +96,22 @@ describe('panel result guards', () => {
       isTargetReadResult({
         ok: true,
         target: { project: null, session: null },
-        connection: { backendId: 'fake', endpoint: 'https://example.com' },
+        connection: { backendId: 'fake', endpoint: 'http://user:pass@127.0.0.1:15001' },
       }),
     ).toBe(false);
     expect(isTargetReadResult({ ok: true, connection: CONNECTION })).toBe(false);
     expect(isTargetReadResult({ ok: false })).toBe(false);
     expect(isTargetReadResult(null)).toBe(false);
+  });
+
+  it('accepts a remote endpoint on syntax alone', () => {
+    expect(
+      isTargetReadResult({
+        ok: true,
+        target: { project: null, session: null },
+        connection: { backendId: 'fake', endpoint: 'http://afif.tailnet.ts.net:15001' },
+      }),
+    ).toBe(true);
   });
 
   it('accepts both retry result shapes', () => {

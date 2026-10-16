@@ -108,7 +108,7 @@ describe('pairWithServer', () => {
 
     await expect(pairWithServer('ABC123')).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });
@@ -220,7 +220,7 @@ describe('connectionOnboarding', () => {
 
     await expect(connectionOnboarding()).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
   });
 });
@@ -270,7 +270,7 @@ describe('pingConnection', () => {
 
     await expect(pingConnection()).resolves.toEqual({
       ok: false,
-      detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });
@@ -334,7 +334,7 @@ describe('listServerProjects', () => {
 
     await expect(listServerProjects({ backendId: 'opencode', endpoint: 'https://example.com' })).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });
@@ -420,7 +420,7 @@ describe('bindOrigin', () => {
       }),
     ).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
     expect(await browser.storage.local.get('projects.byOrigin')).toEqual({});
   });

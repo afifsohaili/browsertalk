@@ -71,7 +71,7 @@ describe('OpenCodeBackend.ping', () => {
 
     await expect(new OpenCodeBackend().ping()).resolves.toEqual({
       ok: false,
-      detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });

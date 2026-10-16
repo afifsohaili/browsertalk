@@ -16,6 +16,7 @@ import { OpenCodeApi, OpenCodeError, redeemPairingCode, type FetchLike } from '.
 export interface OpenCodeBackendConfig {
   baseUrl?: string;
   token?: string | null;
+  allowRemote?: boolean;
   fetchFn?: FetchLike;
   timeoutMs?: number;
 }
@@ -38,10 +39,11 @@ export class OpenCodeBackend implements AgentBackend {
     instructions: () => 'Run this on the server, then paste the code:',
     command: ({ endpoint }) => `opencode api post /api/pair --server ${endpoint}`,
     authenticate: async (input) => {
-      const { baseUrl } = await this.resolve();
+      const { baseUrl, allowRemote } = await this.resolve();
       const token = await redeemPairingCode({
         baseUrl,
         code: input.credential,
+        allowRemote,
         fetchFn: this.config.fetchFn,
       });
       return { token };
@@ -52,10 +54,10 @@ export class OpenCodeBackend implements AgentBackend {
 
   async ping(): Promise<BackendStatus> {
     try {
-      const { baseUrl, token } = await this.resolve();
+      const { baseUrl, token, allowRemote } = await this.resolve();
       if (token.length === 0) return { ok: false, detail: NOT_PAIRED };
 
-      const { version } = await this.api(baseUrl, token).info();
+      const { version } = await this.api(baseUrl, token, allowRemote).info();
       return { ok: true, detail: `opencode ${version}` };
     } catch (error) {
       return { ok: false, detail: error instanceof Error ? error.message : 'The connection check failed' };
@@ -63,51 +65,60 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   async listProjects(): Promise<Project[]> {
-    const { baseUrl, token } = await this.resolve();
+    const { baseUrl, token, allowRemote } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
-    return this.api(baseUrl, token).listProjects();
+    return this.api(baseUrl, token, allowRemote).listProjects();
   }
 
   async createSession(input: SessionCreateInput): Promise<SessionRef> {
-    const { baseUrl, token } = await this.resolve();
+    const { baseUrl, token, allowRemote } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
-    return this.api(baseUrl, token).createSession(input);
+    return this.api(baseUrl, token, allowRemote).createSession(input);
   }
 
   async listSessions(query: SessionListQuery): Promise<SessionRef[]> {
-    const { baseUrl, token } = await this.resolve();
+    const { baseUrl, token, allowRemote } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
-    return this.api(baseUrl, token).listSessions(query);
+    return this.api(baseUrl, token, allowRemote).listSessions(query);
   }
 
   async getSession(sessionID: string): Promise<SessionRef | null> {
-    const { baseUrl, token } = await this.resolve();
+    const { baseUrl, token, allowRemote } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
-    return this.api(baseUrl, token).getSession(sessionID);
+    return this.api(baseUrl, token, allowRemote).getSession(sessionID);
   }
 
   async sendFeedback(input: FeedbackSendInput): Promise<SendResult> {
-    const { baseUrl, token } = await this.resolve();
+    const { baseUrl, token, allowRemote } = await this.resolve();
     if (token.length === 0) throw new OpenCodeError(NOT_PAIRED);
-    return this.api(baseUrl, token).sendPrompt(input);
+    return this.api(baseUrl, token, allowRemote).sendPrompt(input);
   }
 
-  private api(baseUrl: string, token: string): OpenCodeApi {
+  private api(baseUrl: string, token: string, allowRemote: boolean): OpenCodeApi {
     return new OpenCodeApi({
       baseUrl,
       token,
+      allowRemote,
       fetchFn: this.config.fetchFn,
       timeoutMs: this.config.timeoutMs,
     });
   }
 
-  private async resolve(): Promise<{ baseUrl: string; token: string }> {
+  private async resolve(): Promise<{ baseUrl: string; token: string; allowRemote: boolean }> {
     if (this.config.baseUrl !== undefined) {
-      return { baseUrl: this.config.baseUrl, token: this.config.token ?? '' };
+      return {
+        baseUrl: this.config.baseUrl,
+        token: this.config.token ?? '',
+        allowRemote: this.config.allowRemote === true,
+      };
     }
 
     const resolved = await resolveConfiguredConnection();
     if (!resolved.ok) throw new OpenCodeError(resolved.error);
-    return { baseUrl: resolved.connection.endpoint, token: resolved.connection.token ?? '' };
+    return {
+      baseUrl: resolved.connection.endpoint,
+      token: resolved.connection.token ?? '',
+      allowRemote: resolved.connection.allowRemote,
+    };
   }
 }

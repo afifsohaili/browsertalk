@@ -61,6 +61,7 @@ describe('settings page logic', () => {
     expect(await getSettings()).toEqual({
       backendId: 'fake',
       serverUrl: 'http://127.0.0.1:4096',
+      allowRemote: false,
       sessionStrategy: {},
     });
   });
@@ -81,8 +82,28 @@ describe('settings page logic', () => {
     page.serverUrl.value = 'https://example.com';
     await page.saveServerUrl();
 
-    expect(page.error.value).toBe('The server must be on this machine — use localhost, 127.0.0.1, or ::1');
+    expect(page.error.value).toBe('The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"');
     expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('saves a remote server URL once the option is on, and the option loads back', async () => {
+    const page = await loadedPage();
+    expect(page.allowRemote.value).toBe(false);
+
+    await page.saveAllowRemote(true);
+    page.serverUrl.value = 'http://afif.tailnet.ts.net:15001';
+    await page.saveServerUrl();
+
+    expect(page.error.value).toBeNull();
+    expect(page.allowRemote.value).toBe(true);
+    expect(await getSettings()).toMatchObject({
+      serverUrl: 'http://afif.tailnet.ts.net:15001',
+      allowRemote: true,
+    });
+
+    const reloaded = await loadedPage();
+    expect(reloaded.allowRemote.value).toBe(true);
+    expect(reloaded.serverUrl.value).toBe('http://afif.tailnet.ts.net:15001');
   });
 
   it('refuses a server URL with embedded credentials', async () => {

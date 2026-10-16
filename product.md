@@ -31,6 +31,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 | Session strategy | Seam: per-day + sticky, per-backend default + settings override | opencode favors per-day (findable in TUI); one-long-thread backends favor sticky. Settings UI ships with the seam (phase 003) |
 | Project routing | Origin memory + project list | Pick once per origin, remembered; `GET /api/project` feeds the list |
 | Auth | Pairing codes | No secret copied into the extension; token is revocable |
+| Remote servers | Opt-in in settings ("Allow a remote server"), off by default | Tailnet/SSH setups work without weakening the default |
 | Delivery default | `queue` | Never interrupts a running agent turn |
 | Name | opencode Browsertalk | Explicit about the opencode connection |
 | Distribution | Chrome Web Store (public) + open source | Goal set 2026-10-10; first release is public |
@@ -43,7 +44,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 | Side panel | Primary. The toolbar icon opens it. Target display with the session chooser and the comment box, outbox, sent list |
 | In-page overlay | Picker highlight + inline composer (element comments) |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
-| Options page | Settings: backend, server URL, session-strategy override (phase 003) |
+| Options page | Settings: backend, server URL, remote-server opt-in, session-strategy override |
 
 ## Workflow
 
@@ -194,13 +195,12 @@ Pairing code creation requires an authenticated client, so the user runs one com
 ## Security
 
 - The pairing token lives in extension storage only. Never in code, logs, or the page.
-- The server is loopback-only. No external network calls from the extension.
+- The server is loopback-only by default. A settings opt-in ("Allow a remote server", off by default, with a warning) accepts another machine; credentials never live in the URL either way.
 - The content script never talks to the server. The background service worker is the only client.
 
 ## Non-goals (MVP)
 
 - Firefox / Safari builds. WXT supports them; untested here.
-- Remote servers (tailscale, SSH). Loopback only.
 - Attachments beyond the element screenshot.
 - Multi-user, shared sessions.
 

@@ -22,6 +22,8 @@ export interface BackendCapabilities {
 export interface BackendConnectionConfig {
   baseUrl: string;
   token: string | null;
+  /** The "Allow a remote server" policy from settings; adapters pass it to their transport. */
+  allowRemote?: boolean;
 }
 
 export interface BackendStatus {

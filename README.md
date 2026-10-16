@@ -32,9 +32,9 @@ Status: MVP complete through phase 011 (pi adapter, phase 009, pending). Chrome 
 
 WXT + Vue 3 + TypeScript. The background service worker is the only client of the opencode server; the content script talks only to the background. Feedback routes through a session-strategy seam (`per-day` / `sticky`) and an agent-backend registry (`opencode`, `fake`). Adding a backend is one adapter file plus one registration line.
 
-## Localhost only
+## Where it connects
 
-Browsertalk talks only to the opencode server on your own computer (default `http://127.0.0.1:15001`). There are no external servers, no analytics, and no third-party sharing; all network traffic stays on loopback.
+By default Browsertalk talks only to the opencode server on your own computer (default `http://127.0.0.1:15001`). There are no external servers, no analytics, and no third-party sharing; all network traffic stays on loopback. Settings can allow a server on another machine ("Allow a remote server", off by default) — the pairing token and feedback then cross your network, so keep that link encrypted (Tailscale, SSH tunnel) or trusted.
 
 ## Privacy summary
 

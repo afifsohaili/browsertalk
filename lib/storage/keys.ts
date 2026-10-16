@@ -2,6 +2,7 @@ export const STORAGE_KEYS = {
   settings: {
     backendId: 'settings.backendId',
     serverUrl: 'settings.serverUrl',
+    allowRemote: 'settings.allowRemote',
     sessionStrategy: 'settings.sessionStrategy',
   },
   auth: {

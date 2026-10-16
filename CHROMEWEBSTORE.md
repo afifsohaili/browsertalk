@@ -25,7 +25,8 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 > - Optional element screenshot crop, detected component name, and a small ARIA/computed-style subset.
 > - Sessions per project: one per day, or sticky, configurable per backend.
 > - Queue delivery: feedback waits for the agent to be idle instead of interrupting it.
-> - Localhost only: feedback goes only to the opencode server on your own computer (default http://127.0.0.1:15001). No external servers, no analytics.
+> - Remote servers: off by default; settings can allow a server on another machine (encrypted links like Tailscale or an SSH tunnel recommended).
+> - Localhost only by default: feedback goes only to the opencode server you run (default http://127.0.0.1:15001). No external servers, no analytics.
 > - Open source (MIT).
 >
 > Requires the opencode CLI/server, running locally.
@@ -44,7 +45,7 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 - **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the comment box for page-level feedback, the outbox, and the sent list.
 - **contextMenus**: Adds a right-click menu item, "Browsertalk: point at element", that starts element selection on the current page.
 - **Host permission `<all_urls>`** (locked decision: keep; justify per feature):
-  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected element's facts, (2) capture the visible tab for the optional element screenshot crop, and (3) call the user's own opencode server over loopback (default http://127.0.0.1:15001). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's local server.
+  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected element's facts, (2) capture the visible tab for the optional element screenshot crop, and (3) call the user's own opencode server — loopback by default (http://127.0.0.1:15001), or another machine the user explicitly allows in settings (off by default). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's own server.
 
 Rationale: `activeTab` was removed from the manifest in this phase — it is unused with `<all_urls>` present (content script matches, `captureVisibleTab`, and `tabs.sendMessage` are all covered by host access), and the dashboard guidance says to delete permissions not required (research §2.1, checklist C.16).
 
@@ -79,7 +80,7 @@ Check all three (all true for this extension):
 
 ## 3. Test instructions (dashboard "Test instructions" tab, exact text)
 
-> Browsertalk requires an opencode server running on your machine; the extension talks only to 127.0.0.1.
+> Browsertalk requires an opencode server running on your machine; the extension talks only to 127.0.0.1 by default, or to another machine you explicitly allow in settings (off by default).
 >
 > Full flow:
 >
@@ -112,7 +113,7 @@ From `components/ConsentGate.vue` — the first-run gate; also used as the "Revi
 > - your comment
 > - facts about the page and element — URL, title, DOM details, optional element screenshot
 >
-> It sends them only to the opencode server on this computer that you run (default http://127.0.0.1:15001). Nothing goes to external servers. No analytics.
+> It sends them only to the opencode server you run (default http://127.0.0.1:15001; another machine only if you turn on "Allow a remote server"). Nothing goes to external servers. No analytics.
 >
 > Nothing is captured before you accept.
 >

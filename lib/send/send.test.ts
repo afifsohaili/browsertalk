@@ -574,11 +574,11 @@ describe('send pipeline', () => {
 
     await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
 
     const stored = (await readOutbox())[0];
-    expect(stored?.error).toBe('The server must be on this machine — use localhost, 127.0.0.1, or ::1');
+    expect(stored?.error).toBe('The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"');
     expect(stored?.destination).toBeUndefined();
   });
 

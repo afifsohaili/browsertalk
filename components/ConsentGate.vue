@@ -23,8 +23,9 @@ const showDisclosure = computed(() => props.status === null || reviewing.value);
         <li>facts about the page and element — URL, title, DOM details, optional element screenshot</li>
       </ul>
       <p class="lead">
-        It sends them only to the opencode server on this computer that you run (default
-        <code>http://127.0.0.1:15001</code>). Nothing goes to external servers. No analytics.
+        It sends them only to the opencode server you run (default
+        <code>http://127.0.0.1:15001</code>; another machine only if you turn on the remote-server option in
+        settings). Nothing goes to external servers. No analytics.
       </p>
       <p class="note">Nothing is captured before you accept.</p>
       <div class="decisions">

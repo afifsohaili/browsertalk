@@ -3,12 +3,18 @@ export const SERVER_URL_ERRORS = {
   invalid: 'That server URL cannot be parsed — include http:// or https://',
   protocol: 'The server URL must start with http:// or https://',
   credentials: 'Remove the username and password from the server URL',
-  remote: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+  remote:
+    'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
 } as const;
 
-export type LoopbackCheck = { ok: true; endpoint: string } | { ok: false; error: string };
+export type ServerUrlCheck = { ok: true; endpoint: string } | { ok: false; error: string };
 
-export function parseLoopbackUrl(value: string): LoopbackCheck {
+export interface ServerUrlOptions {
+  /** "Allow a remote server": accept hosts other than loopback. Credentials stay refused either way. */
+  allowRemote?: boolean;
+}
+
+export function parseServerUrl(value: string, options: ServerUrlOptions = {}): ServerUrlCheck {
   const trimmed = value.trim();
   if (trimmed.length === 0) return { ok: false, error: SERVER_URL_ERRORS.empty };
 
@@ -25,7 +31,7 @@ export function parseLoopbackUrl(value: string): LoopbackCheck {
   if (url.username.length > 0 || url.password.length > 0) {
     return { ok: false, error: SERVER_URL_ERRORS.credentials };
   }
-  if (!isLoopbackHost(url.hostname)) {
+  if (!isLoopbackHost(url.hostname) && options.allowRemote !== true) {
     return { ok: false, error: SERVER_URL_ERRORS.remote };
   }
 

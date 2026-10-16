@@ -9,12 +9,14 @@ const {
   loaded,
   backendId,
   serverUrl,
+  allowRemote,
   overrides,
   backends,
   strategies,
   error,
   saveBackendId,
   saveServerUrl,
+  saveAllowRemote,
   saveStrategyOverride,
 } = useSettingsPage();
 
@@ -23,6 +25,10 @@ const urlSaved = ref(false);
 function onBackendChange(event: Event): void {
   const value = (event.target as HTMLSelectElement).value;
   if (hasAgentBackend(value)) void saveBackendId(value);
+}
+
+function onAllowRemoteChange(event: Event): void {
+  void saveAllowRemote((event.target as HTMLInputElement).checked);
 }
 
 function onOverrideChange(backend: AgentBackendId, event: Event): void {
@@ -72,6 +78,22 @@ async function submitServerUrl(): Promise<void> {
         <span v-if="urlSaved" class="saved">Saved</span>
       </div>
     </form>
+
+    <section class="field">
+      <label class="remote-toggle">
+        <input
+          v-if="loaded"
+          type="checkbox"
+          :checked="allowRemote"
+          @change="onAllowRemoteChange"
+        />
+        Allow a remote server
+      </label>
+      <p class="hint">
+        Off by default. When on, the pairing token and feedback cross your network — keep the link encrypted
+        (Tailscale, SSH tunnel) or trusted.
+      </p>
+    </section>
 
     <section class="field">
       <h2>Session strategy</h2>

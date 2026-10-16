@@ -3,7 +3,7 @@ import type { AgentBackendId } from '@/lib/agent-backend/interface';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import type { OriginBindings } from '@/lib/storage/projects';
 import { getSettings } from '@/lib/storage/settings';
-import { parseLoopbackUrl } from './endpoint';
+import { parseServerUrl } from './endpoint';
 import { connectionKey, type ConnectionIdentity } from './identity';
 import { isConnectionIdentity } from './protocol';
 
@@ -15,8 +15,8 @@ export async function migrateLegacyConnectionStorage(): Promise<void> {
   }
   if (owner.state === 'unreadable') return;
 
-  const { backendId, serverUrl } = await getSettings();
-  const parsed = parseLoopbackUrl(serverUrl);
+  const { backendId, serverUrl, allowRemote } = await getSettings();
+  const parsed = parseServerUrl(serverUrl, { allowRemote });
   if (!parsed.ok) return;
 
   const connection: ConnectionIdentity = { backendId, endpoint: parsed.endpoint };

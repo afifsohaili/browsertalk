@@ -1,4 +1,4 @@
-import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { parseServerUrl } from '@/lib/connection/endpoint';
 import { BackendError, backendErrorCode } from './interface';
 import type {
   FeedbackAttachment,
@@ -52,6 +52,8 @@ export interface OpenCodeServerInfo {
 export interface OpenCodeApiConfig {
   baseUrl: string;
   token: string;
+  /** The "Allow a remote server" policy; when off, only loopback base URLs are accepted. */
+  allowRemote?: boolean;
   fetchFn?: FetchLike;
   timeoutMs?: number;
 }
@@ -59,6 +61,7 @@ export interface OpenCodeApiConfig {
 export interface PairingRedeemInput {
   baseUrl: string;
   code: string;
+  allowRemote?: boolean;
   fetchFn?: FetchLike;
 }
 
@@ -68,6 +71,7 @@ export async function redeemPairingCode(input: PairingRedeemInput): Promise<stri
     baseUrl: input.baseUrl,
     path: `/auth/connect/${encodeURIComponent(input.code)}`,
     headers: { Accept: 'application/json' },
+    allowRemote: input.allowRemote,
     fetchFn: input.fetchFn,
     unauthorizedMessage: 'That pairing code is wrong or expired',
   });
@@ -155,6 +159,7 @@ export class OpenCodeApi {
       baseUrl: this.config.baseUrl,
       path,
       headers: { Authorization: openCodeAuthHeader(this.config.token) },
+      allowRemote: this.config.allowRemote,
       fetchFn: this.config.fetchFn,
       timeoutMs: this.config.timeoutMs,
       unauthorizedMessage: 'Pairing token rejected',
@@ -176,6 +181,7 @@ export class OpenCodeApi {
         'Content-Type': 'application/json',
       },
       body: payload,
+      allowRemote: this.config.allowRemote,
       fetchFn: this.config.fetchFn,
       timeoutMs: this.config.timeoutMs,
       unauthorizedMessage: 'Pairing token rejected',
@@ -226,6 +232,7 @@ interface JsonRequest {
   path: string;
   headers: Record<string, string>;
   body?: Record<string, unknown>;
+  allowRemote?: boolean;
   fetchFn?: FetchLike;
   timeoutMs?: number;
   unauthorizedMessage: string;
@@ -234,7 +241,7 @@ interface JsonRequest {
 }
 
 async function requestJson(input: JsonRequest): Promise<unknown> {
-  const parsed = parseLoopbackUrl(input.baseUrl);
+  const parsed = parseServerUrl(input.baseUrl, { allowRemote: input.allowRemote === true });
   if (!parsed.ok) throw new OpenCodeError(parsed.error);
 
   const fetchFn = input.fetchFn ?? fetchImpl ?? defaultFetch;

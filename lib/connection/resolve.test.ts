@@ -33,7 +33,7 @@ describe('resolveConfiguredConnection', () => {
 
     await expect(resolveConfiguredConnection()).resolves.toEqual({
       ok: true,
-      connection: { backendId: 'fake', endpoint: 'http://127.0.0.1:4096', token: 'tok_fake' },
+      connection: { backendId: 'fake', endpoint: 'http://127.0.0.1:4096', token: 'tok_fake', allowRemote: false },
     });
   });
 
@@ -50,7 +50,7 @@ describe('resolveConfiguredConnection', () => {
 
     await expect(resolveConfiguredConnection()).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
   });
 
@@ -64,7 +64,36 @@ describe('resolveConfiguredConnection', () => {
     const backend: AgentBackend = connectionBackend(resolved.connection);
 
     expect(backend.id).toBe('fake');
-    expect(seenConfigs).toEqual([{ baseUrl: 'http://127.0.0.1:15001', token: 'tok_fake' }]);
+    expect(seenConfigs).toEqual([{ baseUrl: 'http://127.0.0.1:15001', token: 'tok_fake', allowRemote: false }]);
+  });
+
+  it('resolves a remote URL once the option is on and carries the policy to the backend factory', async () => {
+    await browser.storage.local.set({
+      'settings.backendId': 'fake',
+      'settings.serverUrl': 'http://afif.tailnet.ts.net:15001',
+      'settings.allowRemote': true,
+    });
+    await setToken('fake@http://afif.tailnet.ts.net:15001', 'tok_remote');
+
+    const resolved = await resolveConfiguredConnection();
+
+    expect(resolved).toEqual({
+      ok: true,
+      connection: {
+        backendId: 'fake',
+        endpoint: 'http://afif.tailnet.ts.net:15001',
+        token: 'tok_remote',
+        allowRemote: true,
+      },
+    });
+    if (!resolved.ok) throw new Error('expected a resolved connection');
+
+    const backend: AgentBackend = connectionBackend(resolved.connection);
+
+    expect(backend.id).toBe('fake');
+    expect(seenConfigs).toEqual([
+      { baseUrl: 'http://afif.tailnet.ts.net:15001', token: 'tok_remote', allowRemote: true },
+    ]);
   });
 });
 
@@ -84,14 +113,14 @@ describe('resolveConnection', () => {
 
     await expect(resolveConnection({ backendId: 'fake', endpoint: 'http://127.0.0.1:15001' })).resolves.toEqual({
       ok: true,
-      connection: { backendId: 'fake', endpoint: 'http://127.0.0.1:15001', token: 'tok_captured' },
+      connection: { backendId: 'fake', endpoint: 'http://127.0.0.1:15001', token: 'tok_captured', allowRemote: false },
     });
   });
 
   it('refuses a non-loopback captured endpoint', async () => {
     await expect(resolveConnection({ backendId: 'fake', endpoint: 'https://example.com' })).resolves.toEqual({
       ok: false,
-      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1',
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
     });
   });
 });

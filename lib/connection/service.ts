@@ -3,7 +3,8 @@ import { connectionKey, type ConnectionIdentity } from '@/lib/connection/identit
 import { connectionBackend, resolveConfiguredConnection, resolveConnection } from '@/lib/connection/resolve';
 import { setToken } from '@/lib/storage/auth';
 import { bindProject } from '@/lib/storage/projects';
-import { parseLoopbackUrl } from './endpoint';
+import { getSettings } from '@/lib/storage/settings';
+import { parseServerUrl } from './endpoint';
 import type { ConnectionResult, OnboardingResult, ProjectsResult } from './protocol';
 
 export async function pairWithServer(credential: string): Promise<ConnectionResult> {
@@ -88,7 +89,8 @@ export async function bindOrigin(input: BindOriginInput): Promise<ConnectionResu
   const projectDirectory = input.projectDirectory.trim();
   if (projectDirectory.length === 0) return { ok: false, error: 'Pick a project first' };
 
-  const parsed = parseLoopbackUrl(input.connection.endpoint);
+  const { allowRemote } = await getSettings();
+  const parsed = parseServerUrl(input.connection.endpoint, { allowRemote });
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
   const key = connectionKey({ backendId: input.connection.backendId, endpoint: parsed.endpoint });

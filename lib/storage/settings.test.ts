@@ -24,6 +24,7 @@ describe('settings storage', () => {
     expect(await getSettings()).toEqual({
       backendId: DEFAULT_BACKEND_ID,
       serverUrl: DEFAULT_SERVER_URL,
+      allowRemote: false,
       sessionStrategy: {},
     });
   });
@@ -32,11 +33,13 @@ describe('settings storage', () => {
     await browser.storage.local.set({
       'settings.backendId': 'fake',
       'settings.serverUrl': 'http://127.0.0.1:4096',
+      'settings.allowRemote': true,
     });
 
     expect(await getSettings()).toEqual({
       backendId: 'fake',
       serverUrl: 'http://127.0.0.1:4096',
+      allowRemote: true,
       sessionStrategy: {},
     });
   });
@@ -47,16 +50,18 @@ describe('settings storage', () => {
     expect(await getSettings()).toEqual({
       backendId: DEFAULT_BACKEND_ID,
       serverUrl: 'http://127.0.0.1:4096',
+      allowRemote: false,
       sessionStrategy: {},
     });
   });
 
   it('falls back to the defaults for junk values', async () => {
-    await browser.storage.local.set({ 'settings.backendId': 42, 'settings.serverUrl': 42 });
+    await browser.storage.local.set({ 'settings.backendId': 42, 'settings.serverUrl': 42, 'settings.allowRemote': 42 });
 
     expect(await getSettings()).toEqual({
       backendId: DEFAULT_BACKEND_ID,
       serverUrl: DEFAULT_SERVER_URL,
+      allowRemote: false,
       sessionStrategy: {},
     });
   });
@@ -127,6 +132,38 @@ describe('settings storage', () => {
     );
 
     expect((await getSettings()).serverUrl).toBe(DEFAULT_SERVER_URL);
+  });
+
+  it('accepts a remote URL in the same patch that turns the option on', async () => {
+    await setSettings({ serverUrl: 'http://afif.tailnet.ts.net:15001', allowRemote: true });
+
+    expect(await getSettings()).toMatchObject({
+      serverUrl: 'http://afif.tailnet.ts.net:15001',
+      allowRemote: true,
+    });
+  });
+
+  it('accepts a remote URL once the option is already on', async () => {
+    await setSettings({ allowRemote: true });
+    await setSettings({ serverUrl: 'https://example.com/' });
+
+    expect((await getSettings()).serverUrl).toBe('https://example.com');
+  });
+
+  it('refuses to turn the option off while a remote URL is stored', async () => {
+    await setSettings({ serverUrl: 'http://afif.tailnet.ts.net:15001', allowRemote: true });
+
+    await expect(setSettings({ allowRemote: false })).rejects.toThrow('The server must be on this machine');
+
+    expect((await getSettings()).allowRemote).toBe(true);
+  });
+
+  it('turns the option off in the same patch that returns to loopback', async () => {
+    await setSettings({ serverUrl: 'http://afif.tailnet.ts.net:15001', allowRemote: true });
+
+    await setSettings({ serverUrl: DEFAULT_SERVER_URL, allowRemote: false });
+
+    expect(await getSettings()).toMatchObject({ serverUrl: DEFAULT_SERVER_URL, allowRemote: false });
   });
 
   it('rejects a server URL with embedded credentials', async () => {

@@ -1,71 +1,102 @@
 import { describe, expect, it } from 'vitest';
-import { SERVER_URL_ERRORS, isLoopbackHost, parseLoopbackUrl } from './endpoint';
+import { SERVER_URL_ERRORS, isLoopbackHost, parseServerUrl } from './endpoint';
 
-describe('parseLoopbackUrl', () => {
+describe('parseServerUrl', () => {
   it('accepts the literal loopback addresses and keeps a canonical endpoint', () => {
-    expect(parseLoopbackUrl('http://127.0.0.1:15001')).toEqual({
+    expect(parseServerUrl('http://127.0.0.1:15001')).toEqual({
       ok: true,
       endpoint: 'http://127.0.0.1:15001',
     });
-    expect(parseLoopbackUrl('http://localhost:4096')).toEqual({ ok: true, endpoint: 'http://localhost:4096' });
-    expect(parseLoopbackUrl('https://127.0.0.2:443')).toEqual({ ok: true, endpoint: 'https://127.0.0.2' });
-    expect(parseLoopbackUrl('http://[::1]:15001')).toEqual({ ok: true, endpoint: 'http://[::1]:15001' });
+    expect(parseServerUrl('http://localhost:4096')).toEqual({ ok: true, endpoint: 'http://localhost:4096' });
+    expect(parseServerUrl('https://127.0.0.2:443')).toEqual({ ok: true, endpoint: 'https://127.0.0.2' });
+    expect(parseServerUrl('http://[::1]:15001')).toEqual({ ok: true, endpoint: 'http://[::1]:15001' });
   });
 
   it('trims whitespace and drops a trailing slash, query, and hash', () => {
-    expect(parseLoopbackUrl('  http://127.0.0.1:15001/  ')).toEqual({
+    expect(parseServerUrl('  http://127.0.0.1:15001/  ')).toEqual({
       ok: true,
       endpoint: 'http://127.0.0.1:15001',
     });
-    expect(parseLoopbackUrl('http://127.0.0.1:15001/?debug=1#x')).toEqual({
+    expect(parseServerUrl('http://127.0.0.1:15001/?debug=1#x')).toEqual({
       ok: true,
       endpoint: 'http://127.0.0.1:15001',
     });
-    expect(parseLoopbackUrl('http://127.0.0.1:15001/base/')).toEqual({
+    expect(parseServerUrl('http://127.0.0.1:15001/base/')).toEqual({
       ok: true,
       endpoint: 'http://127.0.0.1:15001/base',
     });
   });
 
   it('rejects an empty value', () => {
-    expect(parseLoopbackUrl('   ')).toEqual({ ok: false, error: SERVER_URL_ERRORS.empty });
+    expect(parseServerUrl('   ')).toEqual({ ok: false, error: SERVER_URL_ERRORS.empty });
   });
 
   it('rejects a value that is not a URL', () => {
-    expect(parseLoopbackUrl('127.0.0.1:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.invalid });
-    expect(parseLoopbackUrl('not a url')).toEqual({ ok: false, error: SERVER_URL_ERRORS.invalid });
+    expect(parseServerUrl('127.0.0.1:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.invalid });
+    expect(parseServerUrl('not a url')).toEqual({ ok: false, error: SERVER_URL_ERRORS.invalid });
   });
 
   it('rejects a protocol that is not http or https', () => {
-    expect(parseLoopbackUrl('ftp://127.0.0.1:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.protocol });
-    expect(parseLoopbackUrl('file:///home/afif')).toEqual({ ok: false, error: SERVER_URL_ERRORS.protocol });
+    expect(parseServerUrl('ftp://127.0.0.1:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.protocol });
+    expect(parseServerUrl('file:///home/afif')).toEqual({ ok: false, error: SERVER_URL_ERRORS.protocol });
   });
 
   it('rejects credentials embedded in the URL', () => {
-    expect(parseLoopbackUrl('http://user:pass@127.0.0.1:15001')).toEqual({
+    expect(parseServerUrl('http://user:pass@127.0.0.1:15001')).toEqual({
       ok: false,
       error: SERVER_URL_ERRORS.credentials,
     });
-    expect(parseLoopbackUrl('http://opencode:tok@localhost:15001')).toEqual({
+    expect(parseServerUrl('http://opencode:tok@localhost:15001')).toEqual({
       ok: false,
       error: SERVER_URL_ERRORS.credentials,
     });
   });
 
   it('rejects any host that is not on this machine', () => {
-    expect(parseLoopbackUrl('https://example.com')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
-    expect(parseLoopbackUrl('http://192.168.1.10:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
-    expect(parseLoopbackUrl('http://10.0.0.5:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
-    expect(parseLoopbackUrl('http://0.0.0.0:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
-    expect(parseLoopbackUrl('http://127.0.0.1.evil.example:15001')).toEqual({
+    expect(parseServerUrl('https://example.com')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+    expect(parseServerUrl('http://192.168.1.10:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+    expect(parseServerUrl('http://10.0.0.5:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+    expect(parseServerUrl('http://0.0.0.0:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+    expect(parseServerUrl('http://127.0.0.1.evil.example:15001')).toEqual({
       ok: false,
       error: SERVER_URL_ERRORS.remote,
     });
-    expect(parseLoopbackUrl('http://localhost.evil.example:15001')).toEqual({
+    expect(parseServerUrl('http://localhost.evil.example:15001')).toEqual({
       ok: false,
       error: SERVER_URL_ERRORS.remote,
     });
-    expect(parseLoopbackUrl('http://[2001:db8::1]:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+    expect(parseServerUrl('http://[2001:db8::1]:15001')).toEqual({ ok: false, error: SERVER_URL_ERRORS.remote });
+  });
+
+  it('accepts a remote host when remote servers are allowed', () => {
+    expect(parseServerUrl('http://afif.tailnet.ts.net:15001/', { allowRemote: true })).toEqual({
+      ok: true,
+      endpoint: 'http://afif.tailnet.ts.net:15001',
+    });
+    expect(parseServerUrl('https://example.com/', { allowRemote: true })).toEqual({
+      ok: true,
+      endpoint: 'https://example.com',
+    });
+    expect(parseServerUrl('http://192.168.1.10:15001', { allowRemote: true })).toEqual({
+      ok: true,
+      endpoint: 'http://192.168.1.10:15001',
+    });
+    expect(parseServerUrl('http://[2001:db8::1]:15001', { allowRemote: true })).toEqual({
+      ok: true,
+      endpoint: 'http://[2001:db8::1]:15001',
+    });
+  });
+
+  it('still refuses credentials and other protocols with remote servers allowed', () => {
+    expect(parseServerUrl('http://user:pass@example.com', { allowRemote: true })).toEqual({
+      ok: false,
+      error: SERVER_URL_ERRORS.credentials,
+    });
+    expect(parseServerUrl('ftp://example.com', { allowRemote: true })).toEqual({
+      ok: false,
+      error: SERVER_URL_ERRORS.protocol,
+    });
+    expect(parseServerUrl('', { allowRemote: true })).toEqual({ ok: false, error: SERVER_URL_ERRORS.empty });
   });
 });
 

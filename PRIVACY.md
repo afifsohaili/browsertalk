@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-10
 
-opencode Browsertalk ("Browsertalk") is a Chrome extension that sends browser feedback to the opencode coding-agent session on your own computer. This policy describes what it handles and where that data goes.
+opencode Browsertalk ("Browsertalk") is a Chrome extension that sends browser feedback to the opencode coding-agent session you run (on your own computer by default). This policy describes what it handles and where that data goes.
 
 ## What Browsertalk collects
 
@@ -17,9 +17,10 @@ Nothing is captured before you accept the first-run disclosure. After that, noth
 
 ## Where the data goes
 
-Feedback is sent only to the opencode server on your own computer, at the address you configure (default `http://127.0.0.1:15001`). That server is yours.
+Feedback is sent only to the opencode server you configure (default `http://127.0.0.1:15001`). That server is yours.
 
-- All transfer stays on your machine (loopback, `127.0.0.1`).
+- By default all transfer stays on your machine (loopback, `127.0.0.1`).
+- With the settings option "Allow a remote server" turned on, that server may be on another machine: the pairing token and feedback then travel to the address you set. Use it only over an encrypted link (Tailscale, SSH tunnel) or a network you trust.
 - No external servers, no analytics, no telemetry, no crash reporting.
 - Nothing is shared with third parties, sold, or used for advertising or creditworthiness.
 
@@ -27,7 +28,7 @@ Feedback is sent only to the opencode server on your own computer, at the addres
 
 Browsertalk keeps its own state in `chrome.storage.local` on your machine:
 
-- your server URL, backend choice, and session-strategy override,
+- your server URL, backend choice, the remote-server option, and session-strategy override,
 - the pairing token for your server,
 - the origin → project bindings you create,
 - session references, the outbox, and recent sent summaries.
@@ -38,7 +39,7 @@ A pending pick (the element you selected before writing the comment) lives in `c
 
 - Outbox items and sent summaries stay in extension storage until you discard them, clear the extension's storage, or uninstall the extension.
 - Removing the extension deletes all of its storage.
-- Feedback that has been sent lives in the opencode server and session history on your own machine; delete it there.
+- Feedback that has been sent lives in the opencode server and session history you run; delete it there.
 
 ## Limited Use
 

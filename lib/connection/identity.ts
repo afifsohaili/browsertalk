@@ -2,7 +2,7 @@ import type { AgentBackendId } from '@/lib/agent-backend/interface';
 
 export interface ConnectionIdentity {
   backendId: AgentBackendId;
-  /** Canonical loopback endpoint from `parseLoopbackUrl`. */
+  /** Canonical endpoint from `parseServerUrl`. */
   endpoint: string;
 }
 

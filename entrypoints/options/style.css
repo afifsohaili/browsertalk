@@ -70,6 +70,17 @@ input {
   min-width: 0;
 }
 
+.remote-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.remote-toggle input {
+  padding: 0;
+  border-radius: 4px;
+}
+
 .strategies {
   display: flex;
   flex-direction: column;

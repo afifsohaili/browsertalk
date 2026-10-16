@@ -35,6 +35,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Pairing code | Short-lived code from `POST /api/pair`; redeemed via `GET /auth/connect/{code}` |
 | Token | The credential stored after pairing; used as the auth header |
 | Server URL | Base URL of the opencode server. Default `http://127.0.0.1:15001` |
+| Remote server | An opencode server on another machine; opt-in via the "Allow a remote server" setting, off by default |
 | Delivery | How a feedback enters a busy session: `queue` (wait for idle) or `steer` (interrupt). Default `queue` |
 | Surfaces | The UI entry points: side panel, overlay, context menu, shortcut, options page |
 

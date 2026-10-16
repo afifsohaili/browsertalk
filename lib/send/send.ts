@@ -2,7 +2,7 @@ import { BackendError, backendErrorCode, type AgentBackend, type SessionRef } fr
 import { getAgentBackend } from '@/lib/agent-backend/registry';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
-import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { parseServerUrl } from '@/lib/connection/endpoint';
 import { connectionKey } from '@/lib/connection/identity';
 import { resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { projectName } from '@/lib/session-strategy/interface';
@@ -19,7 +19,7 @@ import {
   type OutboxItem,
 } from '@/lib/storage/outbox';
 import { getBoundProject } from '@/lib/storage/projects';
-import { getSettings } from '@/lib/storage/settings';
+import { getSettings, type SessionStrategyOverrides } from '@/lib/storage/settings';
 import {
   commitDeliveredItem,
   reserveOutboxItem,
@@ -111,9 +111,14 @@ async function admit(item: OutboxItem, destination: OutboxDestination, options: 
 
   const key = connectionKeyOf(destination);
   const token = await getToken(key);
-  const backend: AgentBackend = getAgentBackend(destination.backendId, { baseUrl: destination.endpoint, token });
+  const { sessionStrategy, allowRemote } = await getSettings();
+  const backend: AgentBackend = getAgentBackend(destination.backendId, {
+    baseUrl: destination.endpoint,
+    token,
+    allowRemote,
+  });
   const now = options.now ?? new Date();
-  const attempt = await freezeAdmissionInput(item, destination, backend, now);
+  const attempt = await freezeAdmissionInput(item, destination, backend, now, sessionStrategy);
   const input = attempt.admissionInput;
 
   if (!(await hasConsent())) throw new Error(CONSENT_REQUIRED_ERROR);
@@ -148,13 +153,13 @@ async function freezeAdmissionInput(
   destination: OutboxDestination,
   backend: AgentBackend,
   now: Date,
+  sessionStrategy: SessionStrategyOverrides,
 ): Promise<FrozenAttempt> {
   const stored = item.attempt;
   if (stored !== undefined && stored.admissionInput !== undefined) {
     return { requestID: stored.requestID, sentAt: stored.sentAt, admissionInput: stored.admissionInput };
   }
 
-  const { sessionStrategy } = await getSettings();
   const strategy = getSessionStrategy(pickSessionStrategyId(backend, sessionStrategy[destination.backendId]));
   const session = await strategy.resolveSession({
     backend,
@@ -198,7 +203,8 @@ type DestinationResult = { ok: true; destination: OutboxDestination } | { ok: fa
 
 async function resolveDestination(item: OutboxItem, origin: string): Promise<DestinationResult> {
   if (item.destination !== undefined) {
-    const parsed = parseLoopbackUrl(item.destination.endpoint);
+    const { allowRemote } = await getSettings();
+    const parsed = parseServerUrl(item.destination.endpoint, { allowRemote });
     if (!parsed.ok) return { ok: false, error: parsed.error };
     return { ok: true, destination: { ...item.destination, endpoint: parsed.endpoint } };
   }

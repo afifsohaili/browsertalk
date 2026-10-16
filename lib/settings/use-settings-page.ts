@@ -27,12 +27,14 @@ export interface SettingsPage {
   loaded: Ref<boolean>;
   backendId: Ref<AgentBackendId>;
   serverUrl: Ref<string>;
+  allowRemote: Ref<boolean>;
   overrides: Ref<SessionStrategyOverrides>;
   backends: SettingsBackendChoice[];
   strategies: SettingsStrategyChoice[];
   error: Ref<string | null>;
   saveBackendId: (id: AgentBackendId) => Promise<void>;
   saveServerUrl: () => Promise<void>;
+  saveAllowRemote: (value: boolean) => Promise<void>;
   saveStrategyOverride: (backend: AgentBackendId, strategyId: SessionStrategyId | null) => Promise<void>;
 }
 
@@ -40,6 +42,7 @@ export function useSettingsPage(): SettingsPage {
   const loaded = ref(false);
   const backendId = ref<AgentBackendId>(DEFAULT_BACKEND_ID);
   const serverUrl = ref(DEFAULT_SERVER_URL);
+  const allowRemote = ref(false);
   const overrides = ref<SessionStrategyOverrides>({});
   const error = ref<string | null>(null);
 
@@ -67,6 +70,7 @@ export function useSettingsPage(): SettingsPage {
       const settings = await getSettings();
       backendId.value = settings.backendId;
       serverUrl.value = settings.serverUrl;
+      allowRemote.value = settings.allowRemote;
       overrides.value = settings.sessionStrategy;
       loaded.value = true;
     });
@@ -87,6 +91,13 @@ export function useSettingsPage(): SettingsPage {
     });
   }
 
+  function saveAllowRemote(value: boolean): Promise<void> {
+    return persist(async () => {
+      await setSettings({ allowRemote: value });
+      allowRemote.value = (await getSettings()).allowRemote;
+    });
+  }
+
   function saveStrategyOverride(backend: AgentBackendId, strategyId: SessionStrategyId | null): Promise<void> {
     return persist(async () => {
       await setSessionStrategyOverride(backend, strategyId);
@@ -100,12 +111,14 @@ export function useSettingsPage(): SettingsPage {
     loaded,
     backendId,
     serverUrl,
+    allowRemote,
     overrides,
     backends,
     strategies,
     error,
     saveBackendId,
     saveServerUrl,
+    saveAllowRemote,
     saveStrategyOverride,
   };
 }

@@ -102,6 +102,7 @@ describe('session strategy selection', () => {
       backendId: 'fake',
       endpoint: 'http://127.0.0.1:15001',
       token: 'tok_captured',
+      allowRemote: false,
     });
   });
 

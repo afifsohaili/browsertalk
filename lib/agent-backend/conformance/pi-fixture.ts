@@ -1,4 +1,4 @@
-import { parseLoopbackUrl } from '@/lib/connection/endpoint';
+import { parseServerUrl } from '@/lib/connection/endpoint';
 import { BackendError, type AgentBackend } from '../interface';
 import type {
   BackendCapabilities,
@@ -261,7 +261,7 @@ export class PiFixtureBackend implements AgentBackend {
     payload?: Record<string, unknown>,
     options: { ambiguousAdmission?: boolean } = {},
   ): Promise<Record<string, unknown>> {
-    const parsed = parseLoopbackUrl(this.config.baseUrl ?? '');
+    const parsed = parseServerUrl(this.config.baseUrl ?? '');
     if (!parsed.ok) throw new Error(parsed.error);
 
     const controller = new AbortController();

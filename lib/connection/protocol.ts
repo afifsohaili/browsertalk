@@ -1,5 +1,5 @@
 import { isAgentBackendId, isProject, type BackendStatus, type Project } from '@/lib/agent-backend/interface';
-import { parseLoopbackUrl } from './endpoint';
+import { parseServerUrl } from './endpoint';
 import type { ConnectionIdentity } from './identity';
 
 export type ConnectionRequest =
@@ -67,7 +67,9 @@ export function isConnectionIdentity(value: unknown): value is ConnectionIdentit
   if (!isAgentBackendId(candidate.backendId)) return false;
   if (typeof candidate.endpoint !== 'string') return false;
 
-  const parsed = parseLoopbackUrl(candidate.endpoint);
+  // Syntax-level only, so guards stay synchronous; the "Allow a remote server" policy is enforced
+  // where the connection is used: resolve, bind, and the transport.
+  const parsed = parseServerUrl(candidate.endpoint, { allowRemote: true });
   return parsed.ok && parsed.endpoint === candidate.endpoint;
 }
 
