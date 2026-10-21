@@ -22,7 +22,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 013 | `013-panel-comment/` | `ticket.md` | shipped · 40fb88a | — |
 | 014 | `014-remote-server/` | `ticket.md` | shipped · 05151fa | — |
 | 015 | `015-element-set/` | `ticket-01..06` | shipped · 924b8cb | — |
-| 016 | `016-review-fixes/` | `ticket-01..06` | shipped · 016f | 015 |
+| 016 | `016-review-fixes/` | `ticket-01..06` | shipped · 944f1d9 | 015 |
 
 Policy:
 

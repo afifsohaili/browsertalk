@@ -68,4 +68,4 @@ Divergences:
 - 016f did not re-run the live smoke; `smoke.md` records the 016e run and the procedure to repeat it. The quota multi-drop loop remains unit-tested only.
 - The composer removal path was already correct; only its test is new.
 
-**Sha:** this commit (`fix(picker): surface removal and clear errors`).
+**Sha:** `944f1d9` (`fix(picker): surface removal and clear errors`).

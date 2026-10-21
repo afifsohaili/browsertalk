@@ -75,7 +75,7 @@ Not covered: the quota multi-drop loop (unit-tested: two drops, then success wit
 | Page-world `pushState`, armed 2-element set | Overlay gone; pending `2 elements` (2 shots) → empty |
 | Page-world `replaceState`, armed set | Overlay gone; pending `1 element` → empty |
 | Composer Escape | Pending `1 element` → empty; composer gone |
-| Five picks, 1.5 s apart | Composer `5 elements`; pending 5 elements, indices 0–4, 4 shots; a sixth modifier click changes nothing |
+| Five picks, 1.5 s apart | Composer `5 elements`; pending 5 elements, indices 0–4, 4 shots; the fifth shot is gated by the index ≥ 4 rule |
 | N=1 plain click | Composer `1 element`; pending 1 element, 1 shot |
 
 `captureVisibleTab` works headless: 4 shots on 5 picks after waits, matching the cap.

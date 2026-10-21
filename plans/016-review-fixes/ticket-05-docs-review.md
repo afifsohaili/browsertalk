@@ -32,7 +32,7 @@ Docs:
 - `CHROMEWEBSTORE.md`: host-permission justification adds the MAIN-world route script as use (3), server access becomes (4), and states it adds no permission and reads no page content; remote-code section names both bundled content scripts.
 - `CONTEXT.md`: Element set and Pick state rows cover count wording, the four-shot cap, and the clear on dismiss/route/composer close; code names add `installRouteEmitter` / `watchRouteChanges` / `watchWindowRoutes`, `picker-route.content.ts`, `respondToPickerRequest` / `registerPickerMessageHandler`, `formatElementCount`, `createPerTabQueue`.
 - `plans/README.md`: 016 row → `shipped · cd1d9fa`, `ticket-01..05`.
-- `plans/016-review-fixes/README.md`: per-ticket shas (016a `ade8fad`, 016b `8e9f315`, 016c `5be28b0`, 016d `cd1d9fa`, 016e this docs commit) and a note that the final review follows this commit.
+- `plans/016-review-fixes/README.md`: per-ticket shas (016a `ade8fad`, 016b `8e9f315`, 016c `5be28b0`, 016d `cd1d9fa`, 016e `5b81c5a`) and a note that the final review follows this commit.
 - `plans/015-element-set/README.md`, `ticket-06-docs-verification.md`: the stale "unconfirmed" wording is gone; both say 016a confirmed the route bridge live.
 - Each 016 ticket's `**Sha:**` line filled.
 
@@ -61,7 +61,7 @@ Re-review: **not run in 016e.** The orchestrator runs the Standards + Spec revie
 
 Divergences:
 
-- `plans/016-review-fixes/README.md` names 016e by "this docs commit" rather than a sha; a file cannot carry its own commit sha.
+- 016e's own sha is `5b81c5a`; the phase README records it.
 - Chrome's `--load-extension` path is unusable for smokes in this build; the CDP `Extensions.loadUnpacked` route above is the replacement.
 
-**Sha:** this docs commit.
+**Sha:** `5b81c5a`.
