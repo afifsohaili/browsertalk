@@ -61,6 +61,16 @@ describe('picker message guard', () => {
     expect(isPickerMessage({ type: 'picker/captured', feedback: sampleFeedback(), elementIndex: 0 })).toBe(true);
   });
 
+  it('accepts a clear for one set', () => {
+    expect(isPickerMessage({ type: 'picker/cleared', setID: 'fb_1' })).toBe(true);
+  });
+
+  it('rejects a clear without a set id', () => {
+    expect(isPickerMessage({ type: 'picker/cleared' })).toBe(false);
+    expect(isPickerMessage({ type: 'picker/cleared', setID: '' })).toBe(false);
+    expect(isPickerMessage({ type: 'picker/cleared', setID: 7 })).toBe(false);
+  });
+
   it('leaves other messages alone', () => {
     expect(isPickerMessage({ type: 'connection/status' })).toBe(false);
     expect(isPickerMessage('picker/arm')).toBe(false);
@@ -175,6 +185,17 @@ describe('element capture validation', () => {
     expect(isPickerElementCapture(sampleElementCapture())).toBe(true);
     expect(isPickerElementCapture(sampleElementCapture({ extras: sampleExtras() }))).toBe(true);
     expect(isPickerElementCapture(sampleElementCapture({ extras: {} }))).toBe(true);
+  });
+
+  it('accepts the pick index that orders a set', () => {
+    expect(isPickerElementCapture(sampleElementCapture({ index: 0 }))).toBe(true);
+    expect(isPickerElementCapture(sampleElementCapture({ index: 4 }))).toBe(true);
+  });
+
+  it('rejects a malformed pick index', () => {
+    expect(isPickerElementCapture({ ...sampleElementCapture(), index: -1 })).toBe(false);
+    expect(isPickerElementCapture({ ...sampleElementCapture(), index: 1.5 })).toBe(false);
+    expect(isPickerElementCapture({ ...sampleElementCapture(), index: '0' })).toBe(false);
   });
 
   it('rejects a missing or malformed element', () => {

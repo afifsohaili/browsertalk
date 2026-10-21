@@ -8,6 +8,7 @@ import {
   armPickerOnActiveTab,
   armPickerOnTab,
   notifyCaptured,
+  notifyCleared,
   registerPickerMessageHandler,
   requestArmPicker,
   respondToPickerRequest,
@@ -84,9 +85,17 @@ function captured(
   );
 }
 
+function cleared(setID: string, tabId = 1): ReturnType<typeof respondToPickerRequest> {
+  return respondToPickerRequest({ type: 'picker/cleared', setID }, { tabId });
+}
+
 function pickedElement(selector: string, text: string): PickerFeedback['elements'][number] {
   const base = sampleFeedback().elements[0]!;
   return { element: { ...base.element, selector, text } };
+}
+
+function indexed(feedback: PickerFeedback): PickerFeedback {
+  return { ...feedback, elements: feedback.elements.map((entry, index) => ({ ...entry, index })) };
 }
 
 describe('picker messaging', () => {
@@ -153,7 +162,7 @@ describe('picker messaging', () => {
     const item = sampleFeedback();
 
     await expect(captured(item, 1)).resolves.toEqual({ ok: true });
-    expect(await getPendingFeedback(1)).toEqual(item);
+    expect(await getPendingFeedback(1)).toEqual(indexed(item));
     expect(await getPendingFeedback(2)).toBeNull();
   });
 
@@ -202,6 +211,64 @@ describe('picker messaging', () => {
     expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#again']);
   });
 
+  it('keeps pick order when the captures land out of order', async () => {
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#third', 'Third')] }, 1, { index: 2 });
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#first', 'First')] }, 1, { index: 0 });
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#second', 'Second')] }, 1, { index: 1 });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual([
+      'button#first',
+      'button#second',
+      'button#third',
+    ]);
+  });
+
+  it('clears the pending set named by the clear message', async () => {
+    await captured(sampleFeedback(), 1);
+
+    await expect(cleared('fb_1')).resolves.toEqual({ ok: true });
+
+    expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('leaves a newer set alone when an older set is cleared', async () => {
+    await captured(sampleFeedback(), 1);
+
+    await expect(cleared('fb_other')).resolves.toEqual({ ok: true });
+
+    expect((await getPendingFeedback(1))?.id).toBe('fb_1');
+  });
+
+  it('rejects a clear that does not name the sender tab', async () => {
+    await captured(sampleFeedback(), 1);
+
+    await expect(
+      respondToPickerRequest({ type: 'picker/cleared', setID: 'fb_1' }),
+    ).resolves.toEqual({ ok: false, error: 'No page sent this capture' });
+    expect((await getPendingFeedback(1))?.id).toBe('fb_1');
+  });
+
+  it('does not let an in-flight capture land after its set was cleared', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    setElementScreenshotter({
+      captureFor: vi.fn(async () => {
+        await gate;
+        return null;
+      }),
+    });
+
+    const capture = captured(sampleFeedback(), 1);
+    const clear = cleared('fb_1');
+    release();
+    await Promise.all([capture, clear]);
+
+    expect(await getPendingFeedback(1)).toBeNull();
+  });
+
   it('attaches the screenshot to the element at its index', async () => {
     const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
     setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
@@ -237,6 +304,17 @@ describe('picker messaging', () => {
     await expect(notifyCaptured(item, 0)).resolves.toEqual({ ok: true });
 
     expect(send).toHaveBeenCalledWith({ type: 'picker/captured', feedback: item, elementIndex: 0 });
+    browser.runtime.sendMessage = originalSendMessage;
+  });
+
+  it('sends the set id when the picker clears a set', async () => {
+    const originalSendMessage = browser.runtime.sendMessage;
+    const send = vi.fn(async () => ({ ok: true }));
+    browser.runtime.sendMessage = send as unknown as typeof browser.runtime.sendMessage;
+
+    await expect(notifyCleared('fb_set')).resolves.toEqual({ ok: true });
+
+    expect(send).toHaveBeenCalledWith({ type: 'picker/cleared', setID: 'fb_set' });
     browser.runtime.sendMessage = originalSendMessage;
   });
 
@@ -298,7 +376,7 @@ describe('picker messaging', () => {
     const item = sampleFeedback();
 
     await expect(captured(item, 1)).resolves.toEqual({ ok: true });
-    expect(await getPendingFeedback(1)).toEqual(item);
+    expect(await getPendingFeedback(1)).toEqual(indexed(item));
   });
 
   it('drops the screenshot and keeps the capture when pending storage is full', async () => {

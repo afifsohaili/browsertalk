@@ -7,6 +7,7 @@ import {
   getPendingFeedback,
   mergePendingElement,
   pendingFeedbackKey,
+  removePendingElement,
   setPendingFeedback,
 } from './pending';
 
@@ -150,7 +151,39 @@ describe('pending feedback storage', () => {
 
       await mergePendingElement(1, pick, 0);
 
-      expect(await getPendingFeedback(1)).toEqual(pick);
+      expect(await getPendingFeedback(1)).toEqual({
+        ...pick,
+        elements: [{ ...pick.elements[0]!, index: 0 }],
+      });
+    });
+
+    it('keeps the pick order when captures land out of order', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#third'), 2);
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+      await mergePendingElement(1, picked('fb_set', 'button#second'), 1);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual([
+        'button#first',
+        'button#second',
+        'button#third',
+      ]);
+      expect(pending?.elements.map((entry) => entry.index)).toEqual([0, 1, 2]);
+    });
+
+    it('sorts a lone early capture into place when an earlier pick lands later', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#second'), 1);
+
+      expect((await getPendingFeedback(1))?.elements.map((entry) => entry.element.selector)).toEqual([
+        'button#second',
+      ]);
+
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+
+      expect((await getPendingFeedback(1))?.elements.map((entry) => entry.element.selector)).toEqual([
+        'button#first',
+        'button#second',
+      ]);
     });
 
     it('appends later picks in index order', async () => {
@@ -251,6 +284,52 @@ describe('pending feedback storage', () => {
       expect(await getPendingFeedback(1)).toEqual(picked('fb_new', 'button#new'));
       expect(await browser.storage.session.get(key)).toEqual({ [key]: picked('fb_new', 'button#new') });
       setSpy.mockRestore();
+    });
+  });
+
+  describe('removing one picked element', () => {
+    function picked(id: string, selector: string): PickerFeedback {
+      const base = feedback(id);
+      return { ...base, elements: [{ element: { ...base.elements[0]!.element, selector } }] };
+    }
+
+    async function pickThree(): Promise<void> {
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+      await mergePendingElement(1, picked('fb_set', 'button#second'), 1);
+      await mergePendingElement(1, picked('fb_set', 'button#third'), 2);
+    }
+
+    it('splices the element out and reports the remaining count', async () => {
+      await pickThree();
+
+      await expect(removePendingElement(1, 'fb_set', 1)).resolves.toBe(2);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#first', 'button#third']);
+    });
+
+    it('drops the whole pending set when the last element goes', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+
+      await expect(removePendingElement(1, 'fb_set', 0)).resolves.toBe(0);
+
+      expect(await getPendingFeedback(1)).toBeNull();
+    });
+
+    it('ignores a removal for another set and reports nothing', async () => {
+      await pickThree();
+
+      await expect(removePendingElement(1, 'fb_other', 0)).resolves.toBeNull();
+
+      expect((await getPendingFeedback(1))?.elements).toHaveLength(3);
+    });
+
+    it('keeps the count right for an index that already left', async () => {
+      await pickThree();
+      await removePendingElement(1, 'fb_set', 2);
+
+      await expect(removePendingElement(1, 'fb_set', 2)).resolves.toBe(2);
+      expect((await getPendingFeedback(1))?.elements).toHaveLength(2);
     });
   });
 

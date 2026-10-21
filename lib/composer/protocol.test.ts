@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isComposerQueueResult, isComposerRequest, isOutboxChanged, isOutboxCountResult } from './protocol';
+import {
+  isComposerQueueResult,
+  isComposerRemoveResult,
+  isComposerRequest,
+  isOutboxChanged,
+  isOutboxCountResult,
+} from './protocol';
 
 describe('composer request guard', () => {
-  it('accepts the three request shapes', () => {
+  it('accepts the four request shapes', () => {
     expect(
       isComposerRequest({
         type: 'composer/queue',
@@ -12,9 +18,18 @@ describe('composer request guard', () => {
         elementCount: 1,
       }),
     ).toBe(true);
+    expect(isComposerRequest({ type: 'composer/remove', captureID: 'fb_1', index: 2 })).toBe(true);
     expect(isComposerRequest({ type: 'outbox/page-comment', comment: 'Layout jumps' })).toBe(true);
     expect(isComposerRequest({ type: 'outbox/page-comment', comment: '' })).toBe(true);
     expect(isComposerRequest({ type: 'outbox/count' })).toBe(true);
+  });
+
+  it('rejects malformed remove requests', () => {
+    expect(isComposerRequest({ type: 'composer/remove', captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/remove', captureID: '', index: 0 })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/remove', captureID: 'fb_1', index: -1 })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/remove', captureID: 'fb_1', index: 1.5 })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/remove', captureID: 'fb_1', index: '0' })).toBe(false);
   });
 
   it('rejects malformed queue requests', () => {
@@ -83,5 +98,13 @@ describe('composer result guards', () => {
     expect(isOutboxCountResult({ ok: false, error: 'nope' })).toBe(true);
     expect(isOutboxCountResult({ ok: true, count: Number.POSITIVE_INFINITY })).toBe(false);
     expect(isOutboxCountResult({ ok: true, count: '3' })).toBe(false);
+  });
+
+  it('accepts both remove result shapes', () => {
+    expect(isComposerRemoveResult({ ok: true, elementCount: 2 })).toBe(true);
+    expect(isComposerRemoveResult({ ok: false, error: 'nope' })).toBe(true);
+    expect(isComposerRemoveResult({ ok: true })).toBe(false);
+    expect(isComposerRemoveResult({ ok: true, elementCount: -1 })).toBe(false);
+    expect(isComposerRemoveResult(null)).toBe(false);
   });
 });

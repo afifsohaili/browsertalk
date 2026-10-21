@@ -13,8 +13,15 @@ export interface ComposerQueueRequest {
   elementCount: number;
 }
 
+export interface ComposerRemoveRequest {
+  type: 'composer/remove';
+  captureID: string;
+  index: number;
+}
+
 export type ComposerRequest =
   | ComposerQueueRequest
+  | ComposerRemoveRequest
   | { type: 'outbox/page-comment'; comment: string }
   | { type: 'outbox/count' };
 
@@ -27,6 +34,8 @@ export type ComposerMessage = ComposerRequest | OutboxChangedEvent;
 export type ComposerQueueResult =
   | { ok: true; outboxCount: number; screenshotDropped?: boolean }
   | { ok: false; error: string };
+
+export type ComposerRemoveResult = { ok: true; elementCount: number } | { ok: false; error: string };
 
 export type OutboxCountResult = { ok: true; count: number } | { ok: false; error: string };
 
@@ -44,6 +53,8 @@ export function isComposerRequest(value: unknown): value is ComposerRequest {
         isCaptureID(value.captureID) &&
         isElementCount(value.elementCount)
       );
+    case 'composer/remove':
+      return isCaptureID(value.captureID) && isPickIndex(value.index);
     default:
       return false;
   }
@@ -68,12 +79,24 @@ export function isOutboxCountResult(value: unknown): value is OutboxCountResult 
   return value.ok === false && typeof value.error === 'string';
 }
 
+export function isComposerRemoveResult(value: unknown): value is ComposerRemoveResult {
+  if (!isRecord(value)) return false;
+  if (value.ok === true) {
+    return typeof value.elementCount === 'number' && Number.isInteger(value.elementCount) && value.elementCount >= 0;
+  }
+  return value.ok === false && typeof value.error === 'string';
+}
+
 function isCaptureID(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
 function isElementCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
+function isPickIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function isComposerPageRequest(value: unknown): value is ComposerPageRequest {

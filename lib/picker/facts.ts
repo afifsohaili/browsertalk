@@ -57,6 +57,7 @@ export interface PickerElementFacts {
 
 export interface PickerElementCapture {
   element: PickerElementFacts;
+  index?: number;
   extras?: PickerExtras;
 }
 
@@ -180,8 +181,13 @@ export function isPickerExtras(value: unknown): value is PickerExtras {
 export function isPickerElementCapture(value: unknown): value is PickerElementCapture {
   if (!isRecord(value)) return false;
   if (!isElementFacts(value.element)) return false;
+  if (value.index !== undefined && !isPickIndex(value.index)) return false;
   if (value.extras !== undefined && !isPickerExtras(value.extras)) return false;
   return true;
+}
+
+function isPickIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 export function isPickerFeedback(value: unknown): value is PickerFeedback {

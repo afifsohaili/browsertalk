@@ -17,6 +17,7 @@ import {
   requestOutboxCount,
   requestPageComment,
   requestQueueComment,
+  requestRemoveElement,
   respondToComposerRequest,
 } from './messages';
 
@@ -90,6 +91,10 @@ function elementQueue(captureID: string, comment: string, elementCount = 1): Com
 
 function pageComment(comment: string): ComposerRequest {
   return { type: 'outbox/page-comment', comment };
+}
+
+function removeElement(index: number, captureID = 'fb_1'): ComposerRequest {
+  return { type: 'composer/remove', captureID, index };
 }
 
 function storedItem(): OutboxItem {
@@ -189,6 +194,48 @@ describe('composer messaging', () => {
     expect(await readOutbox()).toEqual([]);
     expect(requestedSends).toEqual([]);
     expect((await getPendingFeedback(1))?.elements).toHaveLength(2);
+  });
+
+  it('removes one chip element from the pending set and reports the count', async () => {
+    await setPendingFeedback(1, {
+      ...sampleFeedback(),
+      elements: [sampleFeedback().elements[0]!, secondElement()],
+    });
+
+    await expect(respondToComposerRequest(removeElement(0), { tabId: 1 })).resolves.toEqual({
+      ok: true,
+      elementCount: 1,
+    });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['h1.title']);
+
+    await expect(respondToComposerRequest(elementQueue('fb_1', 'Only the heading', 1), { tabId: 1 })).resolves.toEqual({
+      ok: true,
+      outboxCount: 1,
+    });
+
+    const item = (await readOutbox())[0];
+    expect(item?.facts.elements?.map((entry) => entry.element.selector)).toEqual(['h1.title']);
+  });
+
+  it('refuses a removal for a set the tab no longer holds', async () => {
+    await setPendingFeedback(1, sampleFeedback('fb_other'));
+
+    await expect(respondToComposerRequest(removeElement(0), { tabId: 1 })).resolves.toEqual({
+      ok: false,
+      error: 'No picked element to comment on',
+    });
+    expect((await getPendingFeedback(1))?.elements).toHaveLength(1);
+  });
+
+  it('refuses a removal without a sender tab', async () => {
+    await setPendingFeedback(1, sampleFeedback());
+
+    await expect(respondToComposerRequest(removeElement(0))).resolves.toEqual({
+      ok: false,
+      error: 'No picked element to comment on',
+    });
   });
 
   it('captures the destination connection and binding when queued', async () => {
@@ -383,6 +430,10 @@ describe('composer messaging', () => {
     await expect(
       requestQueueComment('Fix this', { url: 'https://example.com/', title: 'Example' }, 'fb_1', 1),
     ).resolves.toEqual({ ok: false, error: 'Background unavailable' });
+    await expect(requestRemoveElement('fb_1', 0)).resolves.toEqual({
+      ok: false,
+      error: 'Background unavailable',
+    });
   });
 
   it('leaves messages for other modules alone', async () => {

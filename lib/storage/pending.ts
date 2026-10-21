@@ -4,9 +4,34 @@ import { isQuotaExceeded } from './budgets';
 import { STORAGE_KEYS } from './keys';
 
 const tails = new Map<number, Promise<unknown>>();
+const captureTails = new Map<number, Promise<unknown>>();
 
 export function pendingFeedbackKey(tabId: number): string {
   return `${STORAGE_KEYS.pending.feedback}.${tabId}`;
+}
+
+/**
+ * Serialises a full pick (screenshot plus merge) per tab. Removals and clears wait
+ * on this tail, so a capture that is already in flight cannot land after the set
+ * it belonged to was cleared or had the element removed.
+ */
+export function queuePendingCapture<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
+  const previous = captureTails.get(tabId) ?? Promise.resolve();
+  const result = previous.then(operation, operation);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  captureTails.set(tabId, tail);
+  void tail.then(() => {
+    if (captureTails.get(tabId) === tail) captureTails.delete(tabId);
+  });
+  return result;
+}
+
+function afterPendingCaptures<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
+  const previous = captureTails.get(tabId) ?? Promise.resolve();
+  return previous.then(operation, operation);
 }
 
 export function setPendingFeedback(
@@ -56,12 +81,39 @@ function mergeElements(
   if (feedback.elements.length === 0) return pending;
 
   const set = pending !== null && pending.id === feedback.id ? pending : null;
-  if (set === null) return { ...feedback, elements: [...feedback.elements] };
+  const incoming = feedback.elements.map((entry, offset) => ({ ...entry, index: index + offset }));
+  const incomingIndices = new Set(incoming.map((entry) => entry.index));
 
-  const entries = [...set.elements];
-  const at = Math.min(Math.max(index, 0), entries.length);
-  const merged = [...entries.slice(0, at), ...feedback.elements, ...entries.slice(at + 1)];
-  return { ...set, elements: merged };
+  const kept = (set?.elements ?? [])
+    .map((entry, position) => ({ entry, key: entry.index ?? position }))
+    .filter((item) => !incomingIndices.has(item.key));
+  const merged = [...kept, ...incoming.map((entry) => ({ entry, key: entry.index }))]
+    .sort((left, right) => left.key - right.key)
+    .map((item) => item.entry);
+
+  const base = set ?? { ...feedback, elements: [] };
+  return { ...base, elements: merged };
+}
+
+export function removePendingElement(tabId: number, setID: string, index: number): Promise<number | null> {
+  return afterPendingCaptures(tabId, () =>
+    enqueuePendingMutation(tabId, async () => {
+      const pending = await getPendingFeedback(tabId);
+      if (pending === null || pending.id !== setID) return null;
+
+      const remaining = pending.elements.filter((entry, position) => (entry.index ?? position) !== index);
+      if (remaining.length === pending.elements.length) return remaining.length;
+
+      const key = pendingFeedbackKey(tabId);
+      if (remaining.length === 0) {
+        await browser.storage.session.remove(key);
+        return 0;
+      }
+
+      await browser.storage.session.set({ [key]: { ...pending, elements: remaining } });
+      return remaining.length;
+    }),
+  );
 }
 
 export async function getPendingFeedback(tabId: number): Promise<PickerFeedback | null> {
@@ -72,13 +124,15 @@ export async function getPendingFeedback(tabId: number): Promise<PickerFeedback 
 }
 
 export function clearPendingFeedback(tabId: number, captureID?: string): Promise<void> {
-  return enqueuePendingMutation(tabId, async () => {
-    if (captureID !== undefined) {
-      const pending = await getPendingFeedback(tabId);
-      if (pending === null || pending.id !== captureID) return;
-    }
-    await browser.storage.session.remove(pendingFeedbackKey(tabId));
-  });
+  return afterPendingCaptures(tabId, () =>
+    enqueuePendingMutation(tabId, async () => {
+      if (captureID !== undefined) {
+        const pending = await getPendingFeedback(tabId);
+        if (pending === null || pending.id !== captureID) return;
+      }
+      await browser.storage.session.remove(pendingFeedbackKey(tabId));
+    }),
+  );
 }
 
 function enqueuePendingMutation<T>(tabId: number, operation: () => Promise<T>): Promise<T> {

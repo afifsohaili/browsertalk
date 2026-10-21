@@ -1,6 +1,6 @@
-import { formatCountLabel, removeChip } from './chips';
+import { formatCountLabel } from './chips';
 import { createComposerController, type ComposerQueueResult as ControllerQueueResult } from './controller';
-import type { ComposerQueueResult } from './protocol';
+import type { ComposerQueueResult, ComposerRemoveResult } from './protocol';
 export const COMPOSER_HOST_ID = 'browsertalk-composer';
 
 const CONFIRMATION_MS = 900;
@@ -11,15 +11,22 @@ const EMPTY_SET_TEXT = 'No elements left. Close and pick again.';
 export interface ComposerSetElement {
   element: Element;
   label: string;
+  index: number;
 }
 
 export interface ComposerSessionOptions {
   queue: (comment: string, elementCount: number) => Promise<ComposerQueueResult>;
-  remove?: (index: number) => void;
+  remove: (index: number) => Promise<ComposerRemoveResult>;
+  onClose?: () => void;
+}
+
+export interface ComposerSetInput {
+  elements: ComposerSetElement[];
+  anchor: Element;
 }
 
 export interface ComposerSession {
-  openSet: (elements: ComposerSetElement[], anchor: Element) => void;
+  openSet: (input: ComposerSetInput) => void;
   close: () => void;
   isOpen: () => boolean;
 }
@@ -61,6 +68,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   }
 
   function close(): void {
+    if (host === null) return;
     if (confirmationTimer !== null) {
       window.clearTimeout(confirmationTimer);
       confirmationTimer = null;
@@ -68,7 +76,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
     window.removeEventListener('keydown', onKeyDown, true);
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', reposition, true);
-    host?.remove();
+    host.remove();
     host = null;
     textarea = null;
     queueButton = null;
@@ -78,6 +86,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
     emptyLine = null;
     entries = [];
     anchor = null;
+    options.onClose?.();
   }
 
   function onKeyDown(event: KeyboardEvent): void {
@@ -105,10 +114,20 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
     showConfirmation();
   }
 
-  function dropElement(index: number): void {
-    if (index < 0 || index >= entries.length) return;
-    entries = removeChip(entries, index);
-    options.remove?.(index);
+  async function dropElement(pickIndex: number): Promise<void> {
+    const entry = entries.find((candidate) => candidate.index === pickIndex);
+    if (entry === undefined) return;
+
+    const outcome = await options.remove(pickIndex);
+    if (!outcome.ok) {
+      if (errorLine !== null) {
+        errorLine.textContent = outcome.error;
+        errorLine.style.display = 'block';
+      }
+      return;
+    }
+
+    entries = entries.filter((candidate) => candidate.index !== pickIndex);
     renderChips();
     textarea?.focus();
   }
@@ -178,7 +197,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
       countLine.style.display = empty ? 'none' : 'block';
     }
 
-    entries.forEach((entry, index) => {
+    entries.forEach((entry) => {
       const chip = document.createElement('span');
       chip.style.display = 'inline-flex';
       chip.style.alignItems = 'center';
@@ -208,7 +227,9 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
       remove.style.cursor = 'pointer';
       remove.style.font = 'inherit';
       remove.style.padding = '0 2px';
-      remove.addEventListener('click', () => dropElement(index));
+      remove.addEventListener('click', () => {
+        void dropElement(entry.index);
+      });
 
       chip.append(text, remove);
       chipsRow?.append(chip);
@@ -304,7 +325,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
   }
 
   return {
-    openSet: (elements, element) => open(elements, element),
+    openSet: ({ elements, anchor: element }) => open(elements, element),
     close,
     isOpen: () => host !== null,
   };

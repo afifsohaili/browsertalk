@@ -3,7 +3,7 @@ import { captureQueuedDestination } from '@/lib/connection/destinations';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { requestSend } from '@/lib/send/trigger';
 import { isQuotaExceeded } from '@/lib/storage/budgets';
-import { clearPendingFeedback, getPendingFeedback } from '@/lib/storage/pending';
+import { clearPendingFeedback, getPendingFeedback, removePendingElement } from '@/lib/storage/pending';
 import { countOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { appendToOutbox } from '@/lib/storage/writer';
 import { buildElementOutboxItem, buildPageOutboxItem, withoutScreenshot } from './assemble';
@@ -11,12 +11,15 @@ import { broadcastOutboxChanged } from './broadcast';
 import { NO_PICKED_ELEMENT_ERROR } from './element-submission';
 import {
   isComposerQueueResult,
+  isComposerRemoveResult,
   isComposerRequest,
   isOutboxChanged,
   isOutboxCountResult,
   type ComposerPageRequest,
   type ComposerQueueRequest,
   type ComposerQueueResult,
+  type ComposerRemoveRequest,
+  type ComposerRemoveResult,
   type ComposerRequest,
   type OutboxCountResult,
 } from './protocol';
@@ -26,7 +29,7 @@ const NO_ACTIVE_PAGE = 'No active page to comment on';
 const NO_PAGE_URL = "Can't read this page's URL";
 export const SET_COUNT_MISMATCH_ERROR = 'The element set changed — pick again';
 
-export type ComposerResponse = ComposerQueueResult | OutboxCountResult;
+export type ComposerResponse = ComposerQueueResult | ComposerRemoveResult | OutboxCountResult;
 
 export interface ComposerRequestContext {
   tabId?: number;
@@ -39,6 +42,8 @@ export async function respondToComposerRequest(
   switch (request.type) {
     case 'composer/queue':
       return queueComment(request, context);
+    case 'composer/remove':
+      return removeCommentElement(request, context);
     case 'outbox/page-comment':
       return queueActivePage(request.comment);
     case 'outbox/count':
@@ -89,6 +94,19 @@ async function queueComment(request: ComposerQueueRequest, context: ComposerRequ
     outboxCount: await countOutbox(),
     ...(appended.screenshotDropped ? { screenshotDropped: true } : {}),
   };
+}
+
+async function removeCommentElement(
+  request: ComposerRemoveRequest,
+  context: ComposerRequestContext,
+): Promise<ComposerRemoveResult> {
+  const tabId = context.tabId;
+  if (tabId === undefined) return { ok: false, error: NO_PICKED_ELEMENT_ERROR };
+
+  const elementCount = await removePendingElement(tabId, request.captureID, request.index);
+  if (elementCount === null) return { ok: false, error: NO_PICKED_ELEMENT_ERROR };
+
+  return { ok: true, elementCount };
 }
 
 async function appendItem(item: OutboxItem): Promise<{ item: OutboxItem; screenshotDropped: boolean }> {
@@ -148,6 +166,11 @@ export async function requestQueueComment(
   const request: ComposerRequest = { type: 'composer/queue', comment, page, captureID, elementCount };
   const response = await sendSafely(request);
   return isComposerQueueResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestRemoveElement(captureID: string, index: number): Promise<ComposerRemoveResult> {
+  const response = await sendSafely({ type: 'composer/remove', captureID, index });
+  return isComposerRemoveResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
 export async function requestPageComment(comment: string): Promise<ComposerQueueResult> {

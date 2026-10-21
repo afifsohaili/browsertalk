@@ -1,6 +1,10 @@
 import { browser } from 'wxt/browser';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
-import { clearPendingFeedback, mergePendingElement } from '@/lib/storage/pending';
+import {
+  clearPendingFeedback,
+  mergePendingElement,
+  queuePendingCapture,
+} from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
   isArmPickerResult,
@@ -20,6 +24,7 @@ const NO_SENDER_TAB = 'No page sent this capture';
 const INVALID_CAPTURE = 'The captured feedback was invalid';
 const INVALID_INDEX = 'The captured element index was invalid';
 const CONTEXT_MENU_ID = 'arm-picker';
+const NO_TAB = -1;
 
 const defaultScreenshotter = createElementScreenshotter({
   captureTab: (windowId) =>
@@ -42,7 +47,7 @@ export interface PickerRequestContext {
   windowId?: number;
 }
 
-export async function respondToPickerRequest(
+export function respondToPickerRequest(
   request: PickerMessage,
   context: PickerRequestContext = {},
 ): Promise<ArmPickerResult | CaptureResult> {
@@ -50,23 +55,45 @@ export async function respondToPickerRequest(
     case 'picker/arm':
       return armPickerOnActiveTab();
     case 'picker/captured': {
-      if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
-      if (!isPickerFeedback(request.feedback)) return { ok: false, error: INVALID_CAPTURE };
-      if (!isElementIndex(request.elementIndex)) return { ok: false, error: INVALID_INDEX };
+      if (!isPickerFeedback(request.feedback)) return Promise.resolve({ ok: false, error: INVALID_CAPTURE });
+      if (!isElementIndex(request.elementIndex)) return Promise.resolve({ ok: false, error: INVALID_INDEX });
 
-      const tabId = context.tabId;
-      if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
-
-      const screenshot = await activeScreenshotter.captureFor(request.feedback, {
-        windowId: context.windowId,
-        isVisible: () => isSenderTabVisible(tabId, context.windowId),
-      });
-      if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
-
-      await persistPendingCapture(tabId, request.feedback, request.elementIndex, screenshot);
-      return { ok: true };
+      const feedback = request.feedback;
+      return queuePendingCapture(context.tabId ?? NO_TAB, () =>
+        capturePick(feedback, request.elementIndex, context),
+      );
     }
+    case 'picker/cleared':
+      return clearPick(request.setID, context);
   }
+}
+
+async function capturePick(
+  feedback: PickerFeedback,
+  elementIndex: number,
+  context: PickerRequestContext,
+): Promise<CaptureResult> {
+  if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
+
+  const tabId = context.tabId;
+  if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
+
+  const screenshot = await activeScreenshotter.captureFor(feedback, {
+    windowId: context.windowId,
+    isVisible: () => isSenderTabVisible(tabId, context.windowId),
+  });
+  if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
+
+  await persistPendingCapture(tabId, feedback, elementIndex, screenshot);
+  return { ok: true };
+}
+
+async function clearPick(setID: string, context: PickerRequestContext): Promise<CaptureResult> {
+  const tabId = context.tabId;
+  if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
+
+  await clearPendingFeedback(tabId, setID);
+  return { ok: true };
 }
 
 async function persistPendingCapture(
@@ -168,6 +195,11 @@ export async function requestArmPicker(): Promise<ArmPickerResult> {
 
 export async function notifyCaptured(feedback: PickerFeedback, elementIndex: number): Promise<CaptureResult> {
   const response = await sendSafely({ type: 'picker/captured', feedback, elementIndex });
+  return isCaptureResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function notifyCleared(setID: string): Promise<CaptureResult> {
+  const response = await sendSafely({ type: 'picker/cleared', setID });
   return isCaptureResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 

@@ -1,6 +1,6 @@
 import type { PickerFeedback } from '@/lib/picker/facts';
 import type { CaptureResult } from '@/lib/picker/protocol';
-import type { ComposerPageRequest, ComposerQueueResult } from './protocol';
+import type { ComposerPageRequest, ComposerQueueResult, ComposerRemoveResult } from './protocol';
 
 export const NO_PICKED_ELEMENT_ERROR = 'No picked element to comment on';
 
@@ -12,11 +12,13 @@ export interface ElementSubmissionDeps {
     captureID: string;
     elementCount: number;
   }) => Promise<ComposerQueueResult>;
+  remove: (captureID: string, index: number) => Promise<ComposerRemoveResult>;
 }
 
 export interface ElementSubmission {
   track: (feedback: PickerFeedback, index: number) => void;
-  remove: (index: number) => void;
+  remove: (index: number) => Promise<ComposerRemoveResult>;
+  clear: () => void;
   submit: (comment: string, page: ComposerPageRequest, elementCount: number) => Promise<ComposerQueueResult>;
 }
 
@@ -36,8 +38,17 @@ export function createElementSubmission(deps: ElementSubmissionDeps): ElementSub
     });
   }
 
-  function remove(index: number): void {
-    captures.delete(index);
+  function ordered(): TrackedCapture[] {
+    return [...captures.entries()].sort(([left], [right]) => left - right).map(([, capture]) => capture);
+  }
+
+  async function remove(index: number): Promise<ComposerRemoveResult> {
+    const capture = captures.get(index);
+    if (capture === undefined) return { ok: false, error: NO_PICKED_ELEMENT_ERROR };
+
+    const outcome = await deps.remove(capture.captureID, index);
+    if (outcome.ok) captures.delete(index);
+    return outcome;
   }
 
   async function submit(
@@ -45,11 +56,11 @@ export function createElementSubmission(deps: ElementSubmissionDeps): ElementSub
     page: ComposerPageRequest,
     elementCount: number,
   ): Promise<ComposerQueueResult> {
-    const ordered = [...captures.entries()].sort(([left], [right]) => left - right).map(([, capture]) => capture);
-    const first = ordered[0];
+    const entries = ordered();
+    const first = entries[0];
     if (first === undefined) return { ok: false, error: NO_PICKED_ELEMENT_ERROR };
 
-    for (const capture of ordered) {
+    for (const capture of entries) {
       const outcome = await capture.result;
       if (!outcome.ok) return { ok: false, error: outcome.error };
     }
@@ -57,5 +68,5 @@ export function createElementSubmission(deps: ElementSubmissionDeps): ElementSub
     return deps.send({ comment, page, captureID: first.captureID, elementCount });
   }
 
-  return { track, remove, submit };
+  return { track, remove, clear: () => captures.clear(), submit };
 }
