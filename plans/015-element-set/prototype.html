@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browsertalk multi-pick — prototype</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%234f46e5'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f6f7;
+    --surface: #ffffff;
+    --fg: #1c1c1e;
+    --muted: #6e6e73;
+    --border: #e2e2e5;
+    --accent: #4f46e5;
+    --accent-soft: rgba(79, 70, 229, 0.10);
+    --shadow: 0 12px 40px rgba(0, 0, 0, 0.16);
+  }
+
+  body[data-theme="dark"] {
+    --bg: #101012;
+    --surface: #1c1c1e;
+    --fg: #f2f2f7;
+    --muted: #a1a1a6;
+    --border: #2c2c2e;
+    --accent: #7c73ff;
+    --accent-soft: rgba(124, 115, 255, 0.14);
+    --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  [hidden] { display: none !important; }
+  body.picking #page, body.picking #page * { cursor: crosshair !important; }
+
+  #page { max-width: 1120px; margin: 0 auto; padding: 0 24px 80px; }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .brand { font-weight: 700; letter-spacing: -0.02em; color: inherit; text-decoration: none; }
+  nav { display: flex; gap: 18px; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  nav a:hover { color: var(--fg); }
+
+  .hero { padding: 64px 0 36px; max-width: 720px; }
+  .eyebrow {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  h1 {
+    font-size: clamp(36px, 6vw, 56px);
+    line-height: 1.03;
+    letter-spacing: -0.04em;
+    margin: 8px 0 16px;
+  }
+  .lede { font-size: 17px; line-height: 1.5; color: var(--muted); max-width: 620px; margin: 0; }
+  .hero-actions { display: flex; gap: 16px; align-items: center; margin-top: 24px; }
+  .text-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+
+  .primary, .ghost {
+    border-radius: 8px;
+    padding: 8px 14px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .primary { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  .primary:hover { filter: brightness(1.05); }
+  .primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .ghost {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg);
+  }
+  .ghost:hover { border-color: var(--muted); }
+
+  .plans {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 24px 0 56px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card.featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card h2 { margin: 0; font-size: 16px; }
+  .price { font-size: 36px; font-weight: 700; letter-spacing: -0.04em; margin: 0; }
+  .price span { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .card-copy { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0; }
+  .card ul {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .card li::before { content: "✓"; color: var(--accent); margin-right: 6px; }
+  .card .primary { margin-top: auto; }
+
+  .compare { margin: 24px 0 56px; }
+  .compare h2 { font-size: 20px; letter-spacing: -0.02em; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+
+  .settings {
+    margin: 24px 0 56px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: grid;
+    gap: 12px;
+    max-width: 560px;
+  }
+  .settings h2 { margin: 0; font-size: 18px; }
+  .settings label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+  .settings input, .settings select {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.4 inherit;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 0;
+    color: var(--muted);
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Picker overlay */
+  #overlay { position: fixed; inset: 0; pointer-events: none; z-index: 2147483000; }
+  .pick-box {
+    position: fixed;
+    border: 2px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+  }
+  .pick-badge {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font: 600 11px/20px ui-monospace, SFMono-Regular, Menlo, monospace;
+    text-align: center;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+  }
+  .hover-box {
+    position: fixed;
+    border: 1px dashed var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+  }
+  .hover-label {
+    position: absolute;
+    left: 0;
+    bottom: 100%;
+    margin-bottom: 2px;
+    max-width: 60vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--accent);
+    color: #fff;
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* Count bar */
+  #countbar { position: fixed; z-index: 2147483500; }
+  #countbar.pill {
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px 8px 14px;
+    border-radius: 999px;
+    background: #1c1c1e;
+    color: #f2f2f7;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+    font: 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+    white-space: nowrap;
+  }
+  .count-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .count-sep { color: #8e8e93; }
+  #countbar.pill .ghost {
+    border-color: #3a3a3c;
+    color: #d1d1d6;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font: inherit;
+  }
+
+  #countbar.dock {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 340px;
+    background: var(--surface);
+    color: var(--fg);
+    border-left: 1px solid var(--border);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dock-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; }
+  .dock-chips { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+  .dock-hint { margin: 0; font-size: 11px; color: var(--muted); }
+
+  /* Composer */
+  #composer {
+    position: fixed;
+    z-index: 2147483600;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  #composer.variant-A { width: 340px; max-height: calc(100vh - 24px); overflow: auto; }
+  #composer.variant-B {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: 340px;
+    border-radius: 0;
+    border-left: 1px solid var(--border);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
+  }
+  #composer.variant-C {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    max-height: 42vh;
+    border-radius: 16px 16px 0 0;
+  }
+  .composer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .composer-head .icon {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  #composer.variant-B .chips { flex: 1; align-content: flex-start; overflow: auto; }
+  #composer.variant-C .chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 2px 4px 2px 6px;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+  }
+  .chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0 2px;
+  }
+  .composer-empty {
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+  #composer textarea {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+    font: 12px/1.4 inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px;
+  }
+  .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .composer-hint { font-size: 11px; color: var(--muted); }
+
+  /* Prototype control panel */
+  #prototype-panel {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 2147483647;
+    width: 272px;
+    padding: 10px;
+    border-radius: 12px;
+    background: #111114;
+    color: #f5f5f7;
+    border: 1px dashed #6e6e73;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .pp-label { color: #8e8e93; letter-spacing: 0.08em; font-size: 10px; }
+  #prototype-panel details { margin-top: 7px; }
+  #prototype-panel summary {
+    cursor: pointer;
+    color: #8e8e93;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    list-style: none;
+  }
+  #prototype-panel summary::-webkit-details-marker { display: none; }
+  #prototype-panel summary::after { content: " ▸ controls"; }
+  #prototype-panel details[open] summary::after { content: " ▾ controls"; }
+  .pp-body { margin-top: 6px; }
+  .pp-variants { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+  .pp-variants button {
+    border: 1px solid #3a3a3c;
+    background: #1c1c1e;
+    color: #f2f2f7;
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font: inherit;
+  }
+  #pp-variant { flex: 1; text-align: center; font-weight: 600; }
+  .pp-state { margin-top: 6px; color: #c7c7cc; }
+  .pp-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .pp-actions button {
+    border: 1px solid #3a3a3c;
+    background: #1c1c1e;
+    color: #f2f2f7;
+    border-radius: 6px;
+    padding: 4px 7px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .pp-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pp-hint { margin: 8px 0 0; color: #8e8e93; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 76px;
+    transform: translateX(-50%);
+    z-index: 2147483647;
+    pointer-events: none;
+    background: #1c1c1e;
+    color: #f2f2f7;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  body[data-variant="B"] #prototype-panel {
+    top: auto;
+    right: auto;
+    bottom: 14px;
+    left: 14px;
+  }
+
+  @media (max-width: 800px) {
+    .plans { grid-template-columns: 1fr; }
+    #prototype-panel { width: 232px; }
+    #countbar.dock, #composer.variant-B { width: 300px; }
+  }
+</style>
+</head>
+<body data-theme="light">
+  <div id="page">
+    <header class="site-header" data-testid="site-header">
+      <a class="brand" href="#">Northwind</a>
+      <nav>
+        <a href="#">Product</a>
+        <a href="#">Pricing</a>
+        <a href="#">Docs</a>
+      </nav>
+      <button type="button" class="ghost" data-testid="sign-in">Sign in</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Pricing</p>
+        <h1>Plans that scale with your team</h1>
+        <p class="lede">Start small, move up when the work does. Every plan includes the core workspace, unlimited viewers, and a 14-day trial.</p>
+        <div class="hero-actions">
+          <button type="button" class="primary" data-testid="start-trial">Start a 14-day trial</button>
+          <a class="text-link" href="#">Compare plans</a>
+        </div>
+      </section>
+
+      <section class="plans" aria-label="Plans">
+        <article class="card" data-testid="plan-starter">
+          <h2>Starter</h2>
+          <p class="price">$9<span>/mo</span></p>
+          <p class="card-copy">For solo builders shipping their first thing.</p>
+          <ul>
+            <li>1 workspace</li>
+            <li>3 projects</li>
+            <li>Community support</li>
+          </ul>
+          <button type="button" class="primary" data-testid="choose-starter">Choose Starter</button>
+        </article>
+
+        <article class="card featured" data-testid="plan-pro">
+          <h2>Pro</h2>
+          <p class="price">$29<span>/mo</span></p>
+          <p class="card-copy">For teams that ship every week.</p>
+          <ul>
+            <li>5 workspaces</li>
+            <li>Unlimited projects</li>
+            <li>Priority support</li>
+          </ul>
+          <button type="button" class="primary" data-testid="choose-pro">Choose Pro</button>
+        </article>
+
+        <article class="card" data-testid="plan-team">
+          <h2>Team</h2>
+          <p class="price">$79<span>/mo</span></p>
+          <p class="card-copy">For orgs with review, audit, and SSO needs.</p>
+          <ul>
+            <li>Unlimited workspaces</li>
+            <li>SSO and audit log</li>
+            <li>Dedicated support</li>
+          </ul>
+          <button type="button" class="primary" data-testid="choose-team">Choose Team</button>
+        </article>
+      </section>
+
+      <section class="compare">
+        <h2>Compare plans</h2>
+        <table>
+          <thead>
+            <tr><th>Feature</th><th>Starter</th><th>Pro</th><th>Team</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Projects</td><td>3</td><td>Unlimited</td><td>Unlimited</td></tr>
+            <tr><td>SSO</td><td>—</td><td>—</td><td>Included</td></tr>
+            <tr><td>Audit log</td><td>—</td><td>30 days</td><td>1 year</td></tr>
+            <tr><td>Support</td><td>Community</td><td>Priority</td><td>Dedicated</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="settings" data-testid="workspace-settings">
+        <h2>Workspace settings</h2>
+        <label>Workspace name <input type="text" value="Northwind" data-testid="workspace-name"></label>
+        <label>Default region
+          <select data-testid="region">
+            <option>US East</option>
+            <option>EU West</option>
+            <option>AP Southeast</option>
+          </select>
+        </label>
+        <label>Weekly digest <input type="checkbox" checked></label>
+        <button type="button" class="ghost" data-testid="save-settings">Save changes</button>
+      </section>
+    </main>
+
+    <footer>
+      <span>© 2026 Northwind</span>
+      <span>Privacy · Terms</span>
+    </footer>
+  </div>
+
+  <div id="overlay" aria-hidden="true"></div>
+  <div id="countbar" hidden></div>
+  <div id="composer" hidden></div>
+  <div id="toast" hidden></div>
+
+  <div id="prototype-panel">
+    <div class="pp-label">PROTOTYPE · multi-pick</div>
+    <div class="pp-variants">
+      <button type="button" data-action="prev" aria-label="Previous variant">‹</button>
+      <span id="pp-variant">A · Anchored card</span>
+      <button type="button" data-action="next" aria-label="Next variant">›</button>
+    </div>
+    <details open>
+      <summary></summary>
+      <div class="pp-body">
+        <div class="pp-state" id="pp-state">disarmed · 0 picked · composer closed</div>
+        <div class="pp-actions">
+          <button type="button" id="pp-arm" data-action="arm">Arm picker</button>
+          <button type="button" data-action="clear">Clear</button>
+          <button type="button" data-action="blur">Blur</button>
+          <button type="button" data-action="route">Route</button>
+          <button type="button" data-action="theme">Theme</button>
+        </div>
+        <p class="pp-hint" id="pp-hint"></p>
+      </div>
+    </details>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const VARIANTS = { A: 'Anchored card', B: 'Right dock', C: 'Bottom sheet' };
+      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+      const MOD = isMac ? '⌘' : 'Ctrl';
+
+      const state = { armed: false, set: [], composerOpen: false, comment: '', variant: 'A' };
+      let hovered = null;
+      let toastTimer = null;
+
+      const $ = (id) => document.getElementById(id);
+      const page = $('page');
+      const overlay = $('overlay');
+      const countbar = $('countbar');
+      const composer = $('composer');
+      const toast = $('toast');
+      const ppVariant = $('pp-variant');
+      const ppState = $('pp-state');
+      const ppArm = $('pp-arm');
+      const ppHint = $('pp-hint');
+
+      try {
+        const initial = new URLSearchParams(location.search).get('variant');
+        if (initial && VARIANTS[initial]) state.variant = initial;
+      } catch {}
+      ppHint.textContent = `Hold ${MOD} and click to add. Release ${MOD} or press Enter to comment.`;
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        }[char]));
+      }
+
+      function labelFor(element) {
+        const tag = element.tagName.toLowerCase();
+        const id = element.id ? `#${element.id}` : '';
+        const classes = [...element.classList].slice(0, 2).map((name) => `.${name}`).join('');
+        const heading = element.querySelector('h1, h2, h3, button, a');
+        const raw = (heading ? heading.textContent : element.textContent || '').replace(/\s+/g, ' ').trim();
+        const text = raw.length > 40 ? `${raw.slice(0, 40)}…` : raw;
+        return `${tag}${id}${classes}${text ? ` · "${text}"` : ''}`;
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.hidden = false;
+        if (toastTimer !== null) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toast.hidden = true;
+          toastTimer = null;
+        }, 2200);
+      }
+
+      function renderOverlay() {
+        overlay.innerHTML = '';
+        if (!state.armed || state.composerOpen) return;
+
+        state.set.forEach((item, index) => {
+          const rect = item.el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return;
+          const box = document.createElement('div');
+          box.className = 'pick-box';
+          box.style.left = `${rect.left}px`;
+          box.style.top = `${rect.top}px`;
+          box.style.width = `${rect.width}px`;
+          box.style.height = `${rect.height}px`;
+
+          const badge = document.createElement('div');
+          badge.className = 'pick-badge';
+          badge.textContent = String(index + 1);
+          box.append(badge);
+          overlay.append(box);
+        });
+
+        if (hovered && hovered.isConnected && !state.set.some((item) => item.el === hovered)) {
+          const rect = hovered.getBoundingClientRect();
+          if (rect.width > 0 || rect.height > 0) {
+            const box = document.createElement('div');
+            box.className = 'hover-box';
+            box.style.left = `${rect.left}px`;
+            box.style.top = `${rect.top}px`;
+            box.style.width = `${rect.width}px`;
+            box.style.height = `${rect.height}px`;
+
+            const label = document.createElement('div');
+            label.className = 'hover-label';
+            label.textContent = labelFor(hovered);
+            box.append(label);
+            overlay.append(box);
+          }
+        }
+      }
+
+      function renderCountBar() {
+        const show = state.armed && !state.composerOpen && state.set.length > 0;
+        if (!show) {
+          countbar.hidden = true;
+          countbar.innerHTML = '';
+          countbar.className = '';
+          return;
+        }
+
+        countbar.hidden = false;
+        const count = state.set.length;
+
+        if (state.variant === 'B') {
+          countbar.className = 'countbar dock';
+          countbar.innerHTML = `
+            <div class="dock-head">
+              <span>${count} selected</span>
+              <button type="button" class="ghost" data-action="clear">Clear</button>
+            </div>
+            <div class="dock-chips">
+              ${state.set.map((item) => `<span class="chip" title="${escapeHtml(item.label)}"><span class="chip-text">${escapeHtml(item.label)}</span></span>`).join('')}
+            </div>
+            <p class="dock-hint">Release ${MOD} to comment</p>
+          `;
+          return;
+        }
+
+        countbar.className = 'countbar pill';
+        countbar.innerHTML = `
+          <span class="count-dot"></span>
+          <span>${count} selected</span>
+          <span class="count-sep">·</span>
+          <span>release ${MOD} to comment</span>
+          <button type="button" class="ghost" data-action="clear">Clear</button>
+        `;
+      }
+
+      function positionComposerA() {
+        if (!state.composerOpen || state.variant !== 'A') return;
+
+        const last = state.set[state.set.length - 1];
+        if (!last) {
+          composer.style.left = 'auto';
+          composer.style.top = 'auto';
+          composer.style.right = '16px';
+          composer.style.bottom = '16px';
+          return;
+        }
+
+        const rect = last.el.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          composer.style.left = 'auto';
+          composer.style.top = 'auto';
+          composer.style.right = '16px';
+          composer.style.bottom = '16px';
+          return;
+        }
+
+        const width = composer.offsetWidth || 340;
+        const height = composer.offsetHeight || 220;
+        let top = rect.bottom + 8;
+        if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 8);
+        let left = rect.left;
+        if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+
+        composer.style.right = 'auto';
+        composer.style.bottom = 'auto';
+        composer.style.left = `${left}px`;
+        composer.style.top = `${top}px`;
+      }
+
+      function renderComposer() {
+        if (!state.composerOpen) {
+          composer.hidden = true;
+          composer.innerHTML = '';
+          composer.className = '';
+          return;
+        }
+
+        composer.hidden = false;
+        composer.className = `composer variant-${state.variant}`;
+        composer.style.left = '';
+        composer.style.top = '';
+        composer.style.right = '';
+        composer.style.bottom = '';
+        if (state.variant === 'A') {
+          composer.style.left = '16px';
+          composer.style.top = '16px';
+        }
+
+        const count = state.set.length;
+        const chips = state.set.map((item, index) => `
+          <span class="chip" title="${escapeHtml(item.label)}">
+            <span class="chip-text">${escapeHtml(item.label)}</span>
+            <button type="button" data-remove="${index}" aria-label="Remove ${escapeHtml(item.label)}">×</button>
+          </span>
+        `).join('');
+
+        composer.innerHTML = `
+          <div class="composer-head">
+            <span>${count} element${count === 1 ? '' : 's'}</span>
+            <button type="button" class="icon" data-action="close" aria-label="Close">×</button>
+          </div>
+          ${count === 0
+            ? '<div class="composer-empty">No elements left. Close and pick again.</div>'
+            : `<div class="chips">${chips}</div>`}
+          <textarea id="comment" rows="3" placeholder="What looks wrong?">${escapeHtml(state.comment)}</textarea>
+          <div class="composer-foot">
+            <span class="composer-hint">Enter queues · Esc dismisses</span>
+            <button type="button" class="primary" data-action="queue" ${count === 0 ? 'disabled' : ''}>Queue</button>
+          </div>
+        `;
+
+        if (state.variant === 'A') requestAnimationFrame(positionComposerA);
+        if (document.activeElement === document.body) document.getElementById('comment')?.focus();
+      }
+
+      function updatePanel() {
+        ppVariant.textContent = `${state.variant} · ${VARIANTS[state.variant]}`;
+        ppState.textContent = `${state.armed ? 'armed' : 'disarmed'} · ${state.set.length} picked · ${state.composerOpen ? 'composer open' : 'composer closed'}`;
+        ppArm.textContent = state.armed ? 'Cancel' : 'Arm picker';
+        ppArm.disabled = state.composerOpen;
+      }
+
+      function renderAll() {
+        document.body.dataset.variant = state.variant;
+        renderOverlay();
+        renderCountBar();
+        renderComposer();
+        updatePanel();
+      }
+
+      function arm() {
+        state.armed = true;
+        state.set = [];
+        state.composerOpen = false;
+        state.comment = '';
+        hovered = null;
+        document.body.classList.add('picking');
+        renderAll();
+      }
+
+      function stopArmed() {
+        state.armed = false;
+        hovered = null;
+        document.body.classList.remove('picking');
+      }
+
+      function resetSelection() {
+        state.set = [];
+        state.composerOpen = false;
+        state.comment = '';
+        stopArmed();
+        renderAll();
+      }
+
+      function clearSelection(message) {
+        resetSelection();
+        if (message) showToast(message);
+      }
+
+      function finish() {
+        if (state.set.length === 0) return;
+        stopArmed();
+        state.composerOpen = true;
+        renderAll();
+        requestAnimationFrame(() => document.getElementById('comment')?.focus());
+      }
+
+      function queue() {
+        if (state.set.length === 0) return;
+        const count = state.set.length;
+        resetSelection();
+        showToast(`Queued ${count} element${count === 1 ? '' : 's'} · demo only`);
+      }
+
+      function addElement(element) {
+        state.set.push({ el: element, label: labelFor(element) });
+      }
+
+      function removeAt(index) {
+        if (index < 0 || index >= state.set.length) return;
+        state.set.splice(index, 1);
+        renderAll();
+        requestAnimationFrame(() => document.getElementById('comment')?.focus());
+      }
+
+      function setVariant(key) {
+        if (!VARIANTS[key]) return;
+        state.variant = key;
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set('variant', key);
+          history.replaceState(null, '', url);
+        } catch {}
+        renderAll();
+      }
+
+      function cycleVariant(direction) {
+        const keys = Object.keys(VARIANTS);
+        const index = keys.indexOf(state.variant);
+        setVariant(keys[(index + direction + keys.length) % keys.length]);
+      }
+
+      function simulateRoute() {
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set('variant', state.variant);
+          url.searchParams.set('route', String(Date.now()));
+          history.pushState({}, '', url);
+        } catch {}
+        clearOnRoute();
+      }
+
+      function clearOnBlur() {
+        if (!state.armed || state.composerOpen) return;
+        clearSelection('Selection cleared — page lost focus');
+      }
+
+      function clearOnRoute() {
+        if (!state.armed && !state.composerOpen) return;
+        clearSelection('Selection cleared — page changed');
+      }
+
+      function toggleTheme() {
+        document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+      }
+
+      document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const actionEl = target.closest('[data-action]');
+        if (actionEl) {
+          event.preventDefault();
+          event.stopPropagation();
+          const action = actionEl.getAttribute('data-action');
+          switch (action) {
+            case 'arm':
+              state.armed ? clearSelection() : arm();
+              break;
+            case 'clear':
+            case 'close':
+              clearSelection();
+              break;
+            case 'queue':
+              queue();
+              break;
+            case 'blur':
+              clearOnBlur();
+              break;
+            case 'route':
+              simulateRoute();
+              break;
+            case 'theme':
+              toggleTheme();
+              break;
+            case 'prev':
+              cycleVariant(-1);
+              break;
+            case 'next':
+              cycleVariant(1);
+              break;
+          }
+          return;
+        }
+
+        const removeEl = target.closest('[data-remove]');
+        if (removeEl) {
+          event.preventDefault();
+          event.stopPropagation();
+          removeAt(Number(removeEl.getAttribute('data-remove')));
+          return;
+        }
+
+        if (target.closest('#prototype-panel, #composer, #countbar')) return;
+
+        if (!state.armed || state.composerOpen) {
+          const interactive = target.closest('a, button');
+          if (interactive && page.contains(interactive)) {
+            event.preventDefault();
+            event.stopPropagation();
+            showToast('Demo page — arm the picker to comment');
+          }
+          return;
+        }
+
+        const insidePage = target.closest('#page');
+        if (insidePage === null) return;
+
+        const picked = target === page ? null : target;
+        if (picked === null || picked === document.body || picked === document.documentElement) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.metaKey || event.ctrlKey) {
+          const existing = state.set.findIndex((item) => item.el === picked);
+          if (existing >= 0) {
+            state.set.splice(existing, 1);
+            renderAll();
+            return;
+          }
+
+          if (state.set.length >= 5) {
+            showToast('5 elements max');
+            return;
+          }
+
+          addElement(picked);
+          if (state.set.length >= 5) finish();
+          else renderAll();
+          return;
+        }
+
+        if (state.set.length === 0) {
+          addElement(picked);
+          finish();
+          return;
+        }
+
+        finish();
+      }, true);
+
+      document.addEventListener('mousemove', (event) => {
+        if (!state.armed || state.composerOpen) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        if (target.closest('#prototype-panel, #composer, #countbar')) {
+          if (hovered !== null) {
+            hovered = null;
+            renderOverlay();
+          }
+          return;
+        }
+
+        const insidePage = target.closest('#page');
+        const next = insidePage === null || target === page ? null : target;
+        if (next !== hovered) {
+          hovered = next;
+          renderOverlay();
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        const target = event.target;
+        const typing = target instanceof Element && target.matches('input, textarea, select, [contenteditable="true"]');
+
+        if (event.key === 'Escape') {
+          if (state.composerOpen || state.armed) {
+            event.preventDefault();
+            clearSelection();
+          }
+          return;
+        }
+
+        if (
+          event.key === 'Enter' &&
+          state.composerOpen &&
+          target instanceof HTMLElement &&
+          target.id === 'comment' &&
+          !event.shiftKey &&
+          !event.isComposing
+        ) {
+          event.preventDefault();
+          queue();
+          return;
+        }
+
+        if (event.key === 'Enter' && state.armed && !state.composerOpen && state.set.length > 0) {
+          event.preventDefault();
+          finish();
+          return;
+        }
+
+        if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !typing) {
+          event.preventDefault();
+          cycleVariant(event.key === 'ArrowLeft' ? -1 : 1);
+        }
+      });
+
+      document.addEventListener('keyup', (event) => {
+        if (event.key !== 'Meta' && event.key !== 'Control') return;
+        if (!state.armed || state.composerOpen || state.set.length === 0) return;
+        finish();
+      });
+
+      document.addEventListener('input', (event) => {
+        const target = event.target;
+        if (target instanceof HTMLTextAreaElement && target.id === 'comment') {
+          state.comment = target.value;
+        }
+      });
+
+      window.addEventListener('blur', clearOnBlur);
+
+      window.addEventListener('scroll', () => {
+        if (state.armed && !state.composerOpen) renderOverlay();
+        if (state.composerOpen && state.variant === 'A') positionComposerA();
+      }, true);
+
+      window.addEventListener('resize', () => {
+        if (state.armed && !state.composerOpen) renderOverlay();
+        if (state.composerOpen && state.variant === 'A') positionComposerA();
+      });
+
+      renderAll();
+    })();
+  </script>
+</body>
+</html>

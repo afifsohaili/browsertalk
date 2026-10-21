@@ -165,7 +165,6 @@ export function assembleFeedback(raw: RawCapture, meta: CaptureMeta): PickerFeed
     id: meta.id,
     capturedAt: meta.capturedAt,
     page: parsePageFacts(raw.page.url, raw.page.title),
-    element,
-    ...(extras === null ? {} : { extras }),
+    elements: [{ element, ...(extras === null ? {} : { extras }) }],
   };
 }

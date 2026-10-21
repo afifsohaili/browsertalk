@@ -64,6 +64,22 @@ describe('sent item guard', () => {
     expect(isSentItem(sentItem(1))).toBe(true);
   });
 
+  it('accepts a missing element count for old records', () => {
+    expect(isSentItem({ ...sentItem(1), elementCount: undefined })).toBe(true);
+  });
+
+  it('accepts zero for page-only sends and N for element sets', () => {
+    expect(isSentItem({ ...sentItem(1), elementCount: 0 })).toBe(true);
+    expect(isSentItem({ ...sentItem(1), elementCount: 3 })).toBe(true);
+  });
+
+  it('rejects a broken element count', () => {
+    expect(isSentItem({ ...sentItem(1), elementCount: -1 })).toBe(false);
+    expect(isSentItem({ ...sentItem(1), elementCount: 1.5 })).toBe(false);
+    expect(isSentItem({ ...sentItem(1), elementCount: '3' })).toBe(false);
+    expect(isSentItem({ ...sentItem(1), elementCount: null })).toBe(false);
+  });
+
   it('rejects broken shapes', () => {
     expect(isSentItem(null)).toBe(false);
     expect(isSentItem({ ...sentItem(1), id: '' })).toBe(false);

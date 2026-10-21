@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isPickerFeedback, type PickerExtras, type PickerFeedback } from './facts';
+import {
+  isPickerElementCapture,
+  isPickerFeedback,
+  type PickerElementCapture,
+  type PickerElementFacts,
+  type PickerExtras,
+  type PickerFeedback,
+} from './facts';
 import { MAX_SCREENSHOT_DATA_URL_CHARS } from './limits';
 import { isArmPickerResult, isCaptureResult, isPickerMessage } from './protocol';
 
@@ -12,6 +19,25 @@ export function sampleExtras(): PickerExtras {
   };
 }
 
+export function sampleElementFacts(overrides: Partial<PickerElementFacts> = {}): PickerElementFacts {
+  return {
+    tag: 'button',
+    id: 'checkout',
+    classes: ['btn', 'primary'],
+    selector: 'button#checkout',
+    text: 'Checkout',
+    attributes: { role: 'button', 'data-testid': 'checkout' },
+    box: { x: 10, y: 20, width: 120, height: 32 },
+    viewport: { width: 1280, height: 800 },
+    scroll: { x: 0, y: 0 },
+    ...overrides,
+  };
+}
+
+export function sampleElementCapture(overrides: Partial<PickerElementCapture> = {}): PickerElementCapture {
+  return { element: sampleElementFacts(), ...overrides };
+}
+
 export function sampleFeedback(): PickerFeedback {
   return {
     id: 'fb_1',
@@ -22,17 +48,7 @@ export function sampleFeedback(): PickerFeedback {
       query: [{ name: 'step', value: '2' }],
       title: 'Cart',
     },
-    element: {
-      tag: 'button',
-      id: 'checkout',
-      classes: ['btn', 'primary'],
-      selector: 'button#checkout',
-      text: 'Checkout',
-      attributes: { role: 'button', 'data-testid': 'checkout' },
-      box: { x: 10, y: 20, width: 120, height: 32 },
-      viewport: { width: 1280, height: 800 },
-      scroll: { x: 0, y: 0 },
-    },
+    elements: [sampleElementCapture()],
   };
 }
 
@@ -60,23 +76,54 @@ describe('feedback validation', () => {
 
   it('accepts a null element id and empty collections', () => {
     const feedback = sampleFeedback();
-    feedback.element.id = null;
-    feedback.element.classes = [];
-    feedback.element.attributes = {};
+    const element = feedback.elements[0]!.element;
+    element.id = null;
+    element.classes = [];
+    element.attributes = {};
     feedback.page.query = [];
 
     expect(isPickerFeedback(feedback)).toBe(true);
   });
 
-  it('rejects a missing element', () => {
-    const { element: _element, ...rest } = sampleFeedback();
+  it('accepts an ordered element set', () => {
+    const feedback: PickerFeedback = {
+      ...sampleFeedback(),
+      elements: [
+        sampleElementCapture(),
+        sampleElementCapture({ element: sampleElementFacts({ tag: 'h1', id: null, selector: 'h1', text: 'Cart' }) }),
+        sampleElementCapture({ element: sampleElementFacts({ tag: 'p', id: null, selector: 'p', text: 'Total' }) }),
+      ],
+    };
+
+    expect(isPickerFeedback(feedback)).toBe(true);
+  });
+
+  it('rejects a missing element set', () => {
+    const { elements: _elements, ...rest } = sampleFeedback();
 
     expect(isPickerFeedback(rest)).toBe(false);
   });
 
+  it('rejects the old single-element shape', () => {
+    const { elements, ...rest } = sampleFeedback();
+
+    expect(isPickerFeedback({ ...rest, element: elements[0]!.element })).toBe(false);
+    expect(isPickerFeedback({ ...rest, element: elements[0]!.element, extras: sampleExtras() })).toBe(false);
+  });
+
+  it('rejects an empty element set', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), elements: [] })).toBe(false);
+  });
+
+  it('rejects a malformed element entry', () => {
+    expect(isPickerFeedback({ ...sampleFeedback(), elements: [{ element: { tag: 'button' } }] })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), elements: ['nope'] })).toBe(false);
+    expect(isPickerFeedback({ ...sampleFeedback(), elements: [{ extras: { component: 'App' } }] })).toBe(false);
+  });
+
   it('rejects non-string attribute values', () => {
     const feedback = sampleFeedback();
-    feedback.element.attributes = { role: 42 } as unknown as Record<string, string>;
+    feedback.elements[0]!.element.attributes = { role: 42 } as unknown as Record<string, string>;
 
     expect(isPickerFeedback(feedback)).toBe(false);
   });
@@ -90,7 +137,7 @@ describe('feedback validation', () => {
 
   it('rejects non-finite numbers', () => {
     const feedback = sampleFeedback();
-    feedback.element.box.width = Number.POSITIVE_INFINITY;
+    feedback.elements[0]!.element.box.width = Number.POSITIVE_INFINITY;
 
     expect(isPickerFeedback(feedback)).toBe(false);
   });
@@ -105,52 +152,73 @@ describe('feedback validation', () => {
   });
 });
 
+describe('element capture validation', () => {
+  it('accepts an entry with and without extras', () => {
+    expect(isPickerElementCapture(sampleElementCapture())).toBe(true);
+    expect(isPickerElementCapture(sampleElementCapture({ extras: sampleExtras() }))).toBe(true);
+    expect(isPickerElementCapture(sampleElementCapture({ extras: {} }))).toBe(true);
+  });
+
+  it('rejects a missing or malformed element', () => {
+    expect(isPickerElementCapture({ extras: {} })).toBe(false);
+    expect(isPickerElementCapture({ element: { tag: 'button' } })).toBe(false);
+    expect(isPickerElementCapture(null)).toBe(false);
+  });
+
+  it('rejects malformed extras', () => {
+    expect(isPickerElementCapture(sampleElementCapture({ extras: { styles: { display: 42 } } as unknown as PickerExtras }))).toBe(false);
+  });
+});
+
 describe('extras validation', () => {
+  const withExtras = (extras: unknown): unknown => ({
+    ...sampleFeedback(),
+    elements: [{ element: sampleElementFacts(), extras }],
+  });
+
   it('accepts a feedback with a full extras set', () => {
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: sampleExtras() })).toBe(true);
+    expect(isPickerFeedback(withExtras(sampleExtras()))).toBe(true);
   });
 
   it('accepts partial extras', () => {
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: { component: 'App' } })).toBe(true);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { name: 'Checkout' } } })).toBe(true);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: {} })).toBe(true);
+    expect(isPickerFeedback(withExtras({ component: 'App' }))).toBe(true);
+    expect(isPickerFeedback(withExtras({ aria: { name: 'Checkout' } }))).toBe(true);
+    expect(isPickerFeedback(withExtras({}))).toBe(true);
   });
 
   it('rejects a screenshot without a data URL and size', () => {
     const missingDataUrl = { screenshot: { width: 10, height: 10 } };
     const badWidth = { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: '10', height: 10 } };
 
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: missingDataUrl })).toBe(false);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: badWidth })).toBe(false);
+    expect(isPickerFeedback(withExtras(missingDataUrl))).toBe(false);
+    expect(isPickerFeedback(withExtras(badWidth))).toBe(false);
   });
 
   it('rejects a data URL that is not a bounded base64 image', () => {
     const extrasWith = (dataUrl: string) => ({ screenshot: { dataUrl, width: 10, height: 10 } });
     const overBudget = `data:image/png;base64,${'A'.repeat(MAX_SCREENSHOT_DATA_URL_CHARS + 1)}`;
 
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith('data:text/plain;base64,AAAA') })).toBe(false);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith('data:image/png,AAAA') })).toBe(false);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: extrasWith(overBudget) })).toBe(false);
+    expect(isPickerFeedback(withExtras(extrasWith('data:text/plain;base64,AAAA')))).toBe(false);
+    expect(isPickerFeedback(withExtras(extrasWith('data:image/png,AAAA')))).toBe(false);
+    expect(isPickerFeedback(withExtras(extrasWith(overBudget)))).toBe(false);
   });
 
   it('rejects non-string style values', () => {
-    const extras = { styles: { display: 42 } };
-
-    expect(isPickerFeedback({ ...sampleFeedback(), extras })).toBe(false);
+    expect(isPickerFeedback(withExtras({ styles: { display: 42 } }))).toBe(false);
   });
 
   it('rejects a component that is not a string', () => {
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: { component: 42 } })).toBe(false);
+    expect(isPickerFeedback(withExtras({ component: 42 }))).toBe(false);
   });
 
   it('rejects an aria pair with non-string members', () => {
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { role: 1 } } })).toBe(false);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: { aria: { name: 1 } } })).toBe(false);
+    expect(isPickerFeedback(withExtras({ aria: { role: 1 } }))).toBe(false);
+    expect(isPickerFeedback(withExtras({ aria: { name: 1 } }))).toBe(false);
   });
 
   it('rejects extras that are not an object', () => {
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: 'nope' })).toBe(false);
-    expect(isPickerFeedback({ ...sampleFeedback(), extras: 7 })).toBe(false);
+    expect(isPickerFeedback(withExtras('nope'))).toBe(false);
+    expect(isPickerFeedback(withExtras(7))).toBe(false);
   });
 });
 

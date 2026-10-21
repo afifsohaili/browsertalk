@@ -90,7 +90,9 @@ async function isSenderTabVisible(tabId: number, windowId: number | undefined): 
 
 function withScreenshot(feedback: PickerFeedback, screenshot: PickerScreenshotFacts | null): PickerFeedback {
   if (screenshot === null) return feedback;
-  return { ...feedback, extras: { ...feedback.extras, screenshot } };
+  const [first, ...rest] = feedback.elements;
+  if (first === undefined) return feedback;
+  return { ...feedback, elements: [{ ...first, extras: { ...first.extras, screenshot } }, ...rest] };
 }
 
 export function registerPickerMessageHandler(): void {

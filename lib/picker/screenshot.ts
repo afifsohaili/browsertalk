@@ -50,7 +50,9 @@ export function createElementScreenshotter(deps: ScreenshotDeps): ElementScreens
   let lastCaptureAt: number | null = null;
   return {
     async captureFor(feedback, request) {
-      const { box, viewport } = feedback.element;
+      const first = feedback.elements[0];
+      if (first === undefined) return null;
+      const { box, viewport } = first.element;
       if (box.width <= 0 || box.height <= 0) return null;
       if (lastCaptureAt !== null) {
         const wait = MIN_CAPTURE_INTERVAL_MS - (deps.now() - lastCaptureAt);

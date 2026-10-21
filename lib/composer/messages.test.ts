@@ -44,14 +44,34 @@ function sampleFeedback(id = 'fb_1'): PickerFeedback {
       query: [{ name: 'step', value: '2' }],
       title: 'Cart',
     },
+    elements: [
+      {
+        element: {
+          tag: 'button',
+          id: 'checkout',
+          classes: ['btn', 'primary'],
+          selector: 'button#checkout',
+          text: 'Checkout',
+          attributes: { role: 'button' },
+          box: { x: 10, y: 20, width: 120, height: 32 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+      },
+    ],
+  };
+}
+
+function secondElement(): PickerFeedback['elements'][number] {
+  return {
     element: {
-      tag: 'button',
-      id: 'checkout',
-      classes: ['btn', 'primary'],
-      selector: 'button#checkout',
-      text: 'Checkout',
-      attributes: { role: 'button' },
-      box: { x: 10, y: 20, width: 120, height: 32 },
+      tag: 'h1',
+      id: null,
+      classes: ['title'],
+      selector: 'h1.title',
+      text: 'Your cart',
+      attributes: {},
+      box: { x: 10, y: 200, width: 320, height: 40 },
       viewport: { width: 1280, height: 800 },
       scroll: { x: 0, y: 0 },
     },
@@ -123,9 +143,33 @@ describe('composer messaging', () => {
       status: 'queued',
     });
     expect(items[0]?.facts.page).toEqual(pending.page);
-    expect(items[0]?.facts.element).toEqual(pending.element);
+    expect(items[0]?.facts.elements).toEqual(pending.elements);
     expect(requestedSends).toEqual([items[0]?.id]);
     expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('queues an ordered element set from one pending feedback', async () => {
+    const pending: PickerFeedback = {
+      ...sampleFeedback(),
+      elements: [
+        {
+          ...sampleFeedback().elements[0]!,
+          extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
+        },
+        secondElement(),
+      ],
+    };
+    await setPendingFeedback(1, pending);
+
+    await expect(respondToComposerRequest(elementQueue('fb_1', 'Two problems'), { tabId: 1 })).resolves.toEqual({
+      ok: true,
+      outboxCount: 1,
+    });
+
+    const item = (await readOutbox())[0];
+    expect(item?.facts.elements?.map((entry) => entry.element.selector)).toEqual(['button#checkout', 'h1.title']);
+    expect(item?.facts.elements?.[0]?.extras?.screenshot).toEqual(pending.elements[0]?.extras?.screenshot);
+    expect(item?.facts.elements?.[1]?.extras).toBeUndefined();
   });
 
   it('captures the destination connection and binding when queued', async () => {
@@ -152,16 +196,21 @@ describe('composer messaging', () => {
   it('keeps the extras that the background attached to the pick', async () => {
     const pending: PickerFeedback = {
       ...sampleFeedback(),
-      extras: {
-        component: 'CheckoutButton',
-        screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 },
-      },
+      elements: [
+        {
+          ...sampleFeedback().elements[0]!,
+          extras: {
+            component: 'CheckoutButton',
+            screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 },
+          },
+        },
+      ],
     };
     await setPendingFeedback(1, pending);
 
     await respondToComposerRequest(elementQueue('fb_1', 'Fix this'), { tabId: 1 });
 
-    expect((await readOutbox())[0]?.facts.extras).toEqual(pending.extras);
+    expect((await readOutbox())[0]?.facts.elements?.[0]?.extras).toEqual(pending.elements[0]?.extras);
   });
 
   it('refuses an element comment without a picked element', async () => {
@@ -205,7 +254,7 @@ describe('composer messaging', () => {
     const items = await readOutbox();
     expect(items.map((item) => item.comment)).toEqual(['First tab', 'Second tab']);
     expect(items.map((item) => item.facts.page.url)).toEqual(['https://example.com/cart?step=2', 'https://other.example.org/']);
-    expect(items.map((item) => item.facts.element?.text)).toEqual(['Checkout', 'Checkout']);
+    expect(items.map((item) => item.facts.elements?.[0]?.element.text)).toEqual(['Checkout', 'Checkout']);
     expect(await getPendingFeedback(2)).toBeNull();
   });
 
@@ -233,7 +282,7 @@ describe('composer messaging', () => {
 
     const item = (await readOutbox())[0];
     expect(item?.comment).toBe('Layout jumps');
-    expect(item?.facts.element).toBeUndefined();
+    expect(item?.facts.elements).toBeUndefined();
     expect(item?.facts.page).toEqual({
       url: 'https://example.com/cart?step=2#pay',
       path: '/cart',
@@ -331,14 +380,19 @@ describe('composer messaging', () => {
       await appendToOutbox(fillOutbox(10_000));
       const pending: PickerFeedback = {
         ...sampleFeedback(),
-        extras: {
-          component: 'CheckoutButton',
-          screenshot: {
-            dataUrl: `data:image/png;base64,${'A'.repeat(100_000)}`,
-            width: 120,
-            height: 32,
+        elements: [
+          {
+            ...sampleFeedback().elements[0]!,
+            extras: {
+              component: 'CheckoutButton',
+              screenshot: {
+                dataUrl: `data:image/png;base64,${'A'.repeat(100_000)}`,
+                width: 120,
+                height: 32,
+              },
+            },
           },
-        },
+        ],
       };
       await setPendingFeedback(1, pending);
 
@@ -349,9 +403,40 @@ describe('composer messaging', () => {
       });
 
       const stored = (await readOutbox()).find((item) => item.id !== 'ob_seed');
-      expect(stored?.facts.extras).toEqual({ component: 'CheckoutButton' });
+      expect(stored?.facts.elements?.[0]?.extras).toEqual({ component: 'CheckoutButton' });
       expect(await getPendingFeedback(1)).toBeNull();
       expect(requestedSends).toEqual([stored?.id]);
+    });
+
+    it('drops the last element screenshot when an earlier element has none', async () => {
+      await appendToOutbox(fillOutbox(10_000));
+      const pending: PickerFeedback = {
+        ...sampleFeedback(),
+        elements: [
+          secondElement(),
+          {
+            ...sampleFeedback().elements[0]!,
+            extras: {
+              screenshot: {
+                dataUrl: `data:image/png;base64,${'A'.repeat(100_000)}`,
+                width: 120,
+                height: 32,
+              },
+            },
+          },
+        ],
+      };
+      await setPendingFeedback(1, pending);
+
+      await expect(respondToComposerRequest(elementQueue('fb_1', 'Fix this'), { tabId: 1 })).resolves.toEqual({
+        ok: true,
+        outboxCount: 2,
+        screenshotDropped: true,
+      });
+
+      const stored = (await readOutbox()).find((item) => item.id !== 'ob_seed');
+      expect(stored?.facts.elements?.[1]?.extras).toBeUndefined();
+      expect(stored?.facts.elements?.[0]?.element.selector).toBe('h1.title');
     });
 
     it('keeps the pick and reports the error when there is no screenshot to drop', async () => {

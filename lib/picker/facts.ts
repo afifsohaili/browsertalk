@@ -55,12 +55,16 @@ export interface PickerElementFacts {
   scroll: PickerPointFacts;
 }
 
+export interface PickerElementCapture {
+  element: PickerElementFacts;
+  extras?: PickerExtras;
+}
+
 export interface PickerFeedback {
   id: string;
   capturedAt: string;
   page: PickerPageFacts;
-  element: PickerElementFacts;
-  extras?: PickerExtras;
+  elements: PickerElementCapture[];
 }
 
 export interface PickerScreenshotFacts {
@@ -173,13 +177,21 @@ export function isPickerExtras(value: unknown): value is PickerExtras {
   return true;
 }
 
+export function isPickerElementCapture(value: unknown): value is PickerElementCapture {
+  if (!isRecord(value)) return false;
+  if (!isElementFacts(value.element)) return false;
+  if (value.extras !== undefined && !isPickerExtras(value.extras)) return false;
+  return true;
+}
+
 export function isPickerFeedback(value: unknown): value is PickerFeedback {
   return (
     isRecord(value) &&
     isString(value.id) &&
     isString(value.capturedAt) &&
     isPageFacts(value.page) &&
-    isElementFacts(value.element) &&
-    (value.extras === undefined || isPickerExtras(value.extras))
+    Array.isArray(value.elements) &&
+    value.elements.length > 0 &&
+    value.elements.every(isPickerElementCapture)
   );
 }

@@ -1,10 +1,9 @@
-import type { PickerAriaFacts } from '@/lib/picker/facts';
+import type { PickerAriaFacts, PickerElementCapture, PickerElementFacts, PickerExtras } from '@/lib/picker/facts';
 import type { OutboxItem } from '@/lib/storage/outbox';
 
 export interface RenderPromptInput {
   projectName: string;
   item: OutboxItem;
-  sentAt: string;
 }
 
 export function renderPrompt(input: RenderPromptInput): string {
@@ -13,8 +12,9 @@ export function renderPrompt(input: RenderPromptInput): string {
 
   lines.push(`Comment:${item.comment.length > 0 ? ` ${item.comment}` : ''}`, '');
 
-  if (item.facts.element !== undefined) {
-    lines.push(...elementBlock(item));
+  const elements = item.facts.elements;
+  if (elements !== undefined && elements.length > 0) {
+    lines.push(...elementLines(elements));
     lines.push('');
   }
 
@@ -22,37 +22,48 @@ export function renderPrompt(input: RenderPromptInput): string {
   if (item.facts.page.title.length > 0) {
     lines.push(`  title     ${item.facts.page.title}`);
   }
-  lines.push('', `Sent by Browsertalk · ${input.sentAt}`);
 
   return lines.join('\n');
 }
 
-function elementBlock(item: OutboxItem): string[] {
-  const element = item.facts.element;
-  if (element === undefined) return [];
+function elementLines(elements: readonly PickerElementCapture[]): string[] {
+  const multiple = elements.length > 1;
+  const lines: string[] = multiple ? [`Elements (${elements.length}):`] : [];
 
-  const classes = element.classes.map((className) => `.${className}`).join('');
-  const lines = [
-    `Element: ${element.tag}${classes} — "${element.text}"`,
-    `  selector  ${element.selector}`,
-    `  box       ${element.box.width}×${element.box.height} @ (${element.box.x},${element.box.y}) · viewport ${element.viewport.width}×${element.viewport.height} · scroll (${element.scroll.x},${element.scroll.y})`,
-  ];
+  elements.forEach((entry, index) => {
+    const prefix = multiple ? `${index + 1}. ` : 'Element: ';
+    lines.push(`${prefix}${elementLine(entry.element)}`);
 
-  const attrs = Object.entries(element.attributes).map(([name, value]) => `${name}=${value}`);
-  if (attrs.length > 0) lines.push(`  attrs     ${attrs.join(' · ')}`);
-
-  const extras = item.facts.extras;
-  if (extras?.component !== undefined) {
-    lines.push(`  component ${extras.component}`);
-  }
-
-  const styles = Object.entries(extras?.styles ?? {}).map(([name, value]) => `${name}: ${value}`);
-  if (styles.length > 0) lines.push(`  styles    ${styles.join(' · ')}`);
-
-  const aria = ariaParts(extras?.aria);
-  if (aria.length > 0) lines.push(`  aria      ${aria.join(' · ')}`);
+    const extras = extrasLine(entry.extras, multiple ? '   ' : '  ');
+    if (extras !== undefined) lines.push(extras);
+  });
 
   return lines;
+}
+
+function elementLine(element: PickerElementFacts): string {
+  const classes = element.classes.map((className) => `.${className}`).join('');
+  const parts = [`${element.tag}${classes} — "${element.text}"`, element.selector];
+
+  const attrs = Object.entries(element.attributes).map(([name, value]) => `${name}=${value}`);
+  if (attrs.length > 0) parts.push(attrs.join(' · '));
+
+  return parts.join(' · ');
+}
+
+function extrasLine(extras: PickerExtras | undefined, indent: string): string | undefined {
+  if (extras === undefined) return undefined;
+
+  const parts: string[] = [];
+  if (extras.component !== undefined) parts.push(extras.component);
+
+  const styles = Object.entries(extras.styles ?? {}).map(([name, value]) => `${name}: ${value}`);
+  parts.push(...styles);
+
+  parts.push(...ariaParts(extras.aria));
+
+  if (parts.length === 0) return undefined;
+  return `${indent}extras    ${parts.join(' · ')}`;
 }
 
 function ariaParts(aria: PickerAriaFacts | undefined): string[] {

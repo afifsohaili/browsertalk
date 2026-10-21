@@ -1,11 +1,16 @@
 import type { FeedbackAttachment } from '@/lib/agent-backend/interface';
-import type { PickerExtras } from '@/lib/picker/facts';
+import type { PickerElementCapture } from '@/lib/picker/facts';
 
-export function elementAttachment(extras: PickerExtras | undefined): FeedbackAttachment | null {
-  if (extras?.screenshot === undefined) return null;
-  return {
-    uri: extras.screenshot.dataUrl,
-    name: 'element.png',
-    description: 'Screenshot of the picked element',
-  };
+export function elementAttachments(elements: readonly PickerElementCapture[] | undefined): FeedbackAttachment[] {
+  if (elements === undefined) return [];
+  return elements.flatMap((entry, index) => {
+    if (entry.extras?.screenshot === undefined) return [];
+    return [
+      {
+        uri: entry.extras.screenshot.dataUrl,
+        name: `element-${index + 1}.png`,
+        description: `Screenshot of element ${index + 1}`,
+      },
+    ];
+  });
 }

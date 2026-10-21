@@ -10,6 +10,7 @@ export interface SentItem {
   sentAt: string;
   session: { id: string; title: string };
   page: { title: string; url: string };
+  elementCount?: number;
 }
 
 export function isSentItem(value: unknown): value is SentItem {
@@ -22,7 +23,12 @@ export function isSentItem(value: unknown): value is SentItem {
   if (typeof value.session.title !== 'string') return false;
   if (!isRecord(value.page)) return false;
   if (typeof value.page.title !== 'string' || typeof value.page.url !== 'string') return false;
+  if (value.elementCount !== undefined && !isElementCount(value.elementCount)) return false;
   return true;
+}
+
+function isElementCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 export async function readSent(): Promise<SentItem[]> {

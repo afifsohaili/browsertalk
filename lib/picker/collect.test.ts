@@ -209,17 +209,21 @@ describe('fact assembly', () => {
         query: [{ name: 'step', value: '2' }],
         title: 'Cart',
       },
-      element: {
-        tag: 'button',
-        id: 'checkout',
-        classes: ['btn', 'primary'],
-        selector: 'button#checkout',
-        text: 'Checkout now',
-        attributes: { 'data-testid': 'checkout' },
-        box: { x: 10, y: 21, width: 121, height: 32 },
-        viewport: { width: 1280, height: 800 },
-        scroll: { x: 0, y: 13 },
-      },
+      elements: [
+        {
+          element: {
+            tag: 'button',
+            id: 'checkout',
+            classes: ['btn', 'primary'],
+            selector: 'button#checkout',
+            text: 'Checkout now',
+            attributes: { 'data-testid': 'checkout' },
+            box: { x: 10, y: 21, width: 121, height: 32 },
+            viewport: { width: 1280, height: 800 },
+            scroll: { x: 0, y: 13 },
+          },
+        },
+      ],
     });
   });
 
@@ -247,7 +251,7 @@ describe('fact assembly', () => {
 
     const feedback = assembleFeedback(withExtras, { id: 'fb_1', capturedAt: '2026-10-10T09:00:00.000Z' });
 
-    expect(feedback.extras).toEqual({
+    expect(feedback.elements[0]?.extras).toEqual({
       component: 'CheckoutButton',
       styles: { display: 'inline-block', cursor: 'pointer' },
       aria: { role: 'button', name: 'Checkout' },
@@ -260,6 +264,6 @@ describe('fact assembly', () => {
       { id: 'fb_1', capturedAt: '2026-10-10T09:00:00.000Z' },
     );
 
-    expect('extras' in feedback).toBe(false);
+    expect('extras' in feedback.elements[0]!).toBe(false);
   });
 });

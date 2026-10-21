@@ -94,12 +94,16 @@ async function appendItem(item: OutboxItem): Promise<{ item: OutboxItem; screens
     await appendToOutbox(item);
     return { item, screenshotDropped: false };
   } catch (error) {
-    if (!isQuotaExceeded(error) || item.facts.extras?.screenshot === undefined) throw error;
+    if (!isQuotaExceeded(error) || !hasElementScreenshot(item)) throw error;
 
     const stripped = withoutScreenshot(item);
     await appendToOutbox(stripped);
     return { item: stripped, screenshotDropped: true };
   }
+}
+
+function hasElementScreenshot(item: OutboxItem): boolean {
+  return item.facts.elements?.some((entry) => entry.extras?.screenshot !== undefined) ?? false;
 }
 
 async function queueActivePage(comment: string): Promise<ComposerQueueResult> {

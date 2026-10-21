@@ -18,9 +18,11 @@ import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
+import { buildElementOutboxItem } from '@/lib/composer/assemble';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { rolloverStoredSession } from '@/lib/session-strategy/persist';
 import { parsePageFacts } from '@/lib/picker/collect';
+import type { PickerFeedback } from '@/lib/picker/facts';
 import { setToken } from '@/lib/storage/auth';
 import { deliveryReadySize, jsonByteSize, MAX_OUTBOX_BYTES, MAX_SENT_BYTES } from '@/lib/storage/budgets';
 import { bindProject } from '@/lib/storage/projects';
@@ -148,19 +150,68 @@ function elementItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
         query: [{ name: 'step', value: '2' }],
         title: 'Cart',
       },
-      element: {
-        tag: 'button',
-        id: 'checkout',
-        classes: ['btn'],
-        selector: 'button#checkout',
-        text: 'Checkout',
-        attributes: { role: 'button' },
-        box: { x: 10, y: 20, width: 120, height: 32 },
-        viewport: { width: 1280, height: 800 },
-        scroll: { x: 0, y: 0 },
-      },
+      elements: [
+        {
+          element: {
+            tag: 'button',
+            id: 'checkout',
+            classes: ['btn'],
+            selector: 'button#checkout',
+            text: 'Checkout',
+            attributes: { role: 'button' },
+            box: { x: 10, y: 20, width: 120, height: 32 },
+            viewport: { width: 1280, height: 800 },
+            scroll: { x: 0, y: 0 },
+          },
+        },
+      ],
     },
     ...overrides,
+  };
+}
+
+function withScreenshot(item: OutboxItem, dataUrl = 'data:image/png;base64,AAAA'): OutboxItem {
+  const [first, ...rest] = item.facts.elements ?? [];
+  if (first === undefined) return item;
+  return {
+    ...item,
+    facts: {
+      ...item.facts,
+      elements: [
+        { ...first, extras: { ...first.extras, screenshot: { dataUrl, width: 120, height: 32 } } },
+        ...rest,
+      ],
+    },
+  };
+}
+
+function legacyElementItem(): OutboxItem {
+  const current = elementItem();
+  const capture = current.facts.elements![0]!;
+  return {
+    ...current,
+    facts: {
+      page: current.facts.page,
+      element: capture.element,
+      ...(capture.extras === undefined ? {} : { extras: capture.extras }),
+    } as OutboxItem['facts'],
+  };
+}
+
+function pageOutboxItem(): OutboxItem {
+  return {
+    id: 'ob_page',
+    comment: '',
+    capturedAt: '2026-10-10T09:05:00.000Z',
+    status: 'queued',
+    facts: {
+      page: {
+        url: 'https://example.com/cart?step=2',
+        path: '/cart',
+        query: [{ name: 'step', value: '2' }],
+        title: 'Cart',
+      },
+    },
   };
 }
 
@@ -209,7 +260,8 @@ describe('send pipeline', () => {
     expect(sent?.delivery).toBe('queue');
     expect(sent?.text).toContain('## Browser feedback — example');
     expect(sent?.text).toContain('Comment: Checkout button is broken');
-    expect(sent?.text).toContain(`Sent by Browsertalk · ${SENT_AT}`);
+    expect(sent?.text).toContain('Element: button.btn — "Checkout" · button#checkout · role=button');
+    expect(sent?.text).not.toContain('Sent by Browsertalk');
     expect(sent?.files).toBeUndefined();
 
     expect(await readOutbox()).toEqual([]);
@@ -220,9 +272,36 @@ describe('send pipeline', () => {
         sentAt: SENT_AT,
         session: { id: 'ses_fake_1', title: DAY_TITLE },
         page: { title: 'Cart', url: 'https://example.com/cart?step=2' },
+        elementCount: 1,
       },
     ]);
     expect(events).toContain('changed');
+  });
+
+  it('sends an old queued item with facts.element as a one-element set', async () => {
+    const legacy = legacyElementItem();
+    await browser.storage.local.set({ outbox: [legacy] });
+
+    await expect(sendQueuedItem(legacy.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const sent = fakeBackend.sent[0];
+    expect(sent?.text).toContain('Element: button.btn — "Checkout" · button#checkout · role=button');
+    expect(sent?.text).not.toContain('Elements (');
+    expect(await readOutbox()).toEqual([]);
+    expect((await readSent())[0]?.elementCount).toBe(1);
+  });
+
+  it('records zero elementCount for a page-only send', async () => {
+    const item = pageOutboxItem();
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const sent = fakeBackend.sent[0];
+    expect(sent?.text).toContain('Comment:');
+    expect(sent?.text).not.toContain('Element:');
+    expect(sent?.files).toBeUndefined();
+    expect((await readSent())[0]?.elementCount).toBe(0);
   });
 
   it('sends a comment accepted at the delivery-ready budget', async () => {
@@ -315,12 +394,7 @@ describe('send pipeline', () => {
   });
 
   it('attaches the screenshot as a file when the pick has one', async () => {
-    const item = elementItem({
-      facts: {
-        ...elementItem().facts,
-        extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
-      },
-    });
+    const item = withScreenshot(elementItem());
     await appendToOutbox(item);
 
     await sendQueuedItem(item.id, { now: NOW });
@@ -328,26 +402,87 @@ describe('send pipeline', () => {
     expect(fakeBackend.sent[0]?.files).toEqual([
       {
         uri: 'data:image/png;base64,AAAA',
-        name: 'element.png',
-        description: 'Screenshot of the picked element',
+        name: 'element-1.png',
+        description: 'Screenshot of element 1',
       },
     ]);
   });
 
   it('leaves the screenshot out when the backend cannot take images', async () => {
     fakeBackend = new NoImagesBackend();
-    const item = elementItem({
-      facts: {
-        ...elementItem().facts,
-        extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
-      },
-    });
+    const item = withScreenshot(elementItem());
     await appendToOutbox(item);
 
     await sendQueuedItem(item.id, { now: NOW });
 
     expect(fakeBackend.sent[0]?.files).toBeUndefined();
     expect(fakeBackend.sent[0]?.text).toContain('Comment: Checkout button is broken');
+  });
+
+  it('sends a multi-element set through the outbox builder with ordered attachments', async () => {
+    const pending: PickerFeedback = {
+      id: 'fb_set',
+      capturedAt: '2026-10-10T09:05:00.000Z',
+      page: elementItem().facts.page,
+      elements: [
+        {
+          element: { ...elementItem().facts.elements![0]!.element, selector: 'button#checkout', text: 'Checkout' },
+          extras: {
+            screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 },
+            component: 'CheckoutButton',
+          },
+        },
+        {
+          element: {
+            ...elementItem().facts.elements![0]!.element,
+            tag: 'h1',
+            id: null,
+            classes: ['title'],
+            selector: 'h1.title',
+            text: 'Your cart',
+            attributes: {},
+          },
+        },
+        {
+          element: {
+            ...elementItem().facts.elements![0]!.element,
+            tag: 'p',
+            id: null,
+            classes: [],
+            selector: 'p:nth-of-type(2)',
+            text: 'Total',
+            attributes: {},
+          },
+          extras: { screenshot: { dataUrl: 'data:image/png;base64,CCCC', width: 100, height: 20 } },
+        },
+      ],
+    };
+    const item = buildElementOutboxItem(pending, 'Three things', {
+      id: 'ob_set',
+      now: '2026-10-10T09:10:00.000Z',
+    });
+    await appendToOutbox(item);
+
+    expect((await readOutbox())[0]?.facts).toEqual({
+      page: pending.page,
+      elements: pending.elements,
+    });
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
+
+    const sent = fakeBackend.sent[0];
+    expect(sent?.text).toContain('Elements (3):');
+    expect(sent?.text).toContain('1. button.btn — "Checkout" · button#checkout · role=button');
+    expect(sent?.text).toContain('2. h1.title — "Your cart" · h1.title');
+    expect(sent?.text).toContain('3. p — "Total" · p:nth-of-type(2)');
+    expect(sent?.text).toContain('  extras    CheckoutButton');
+    expect(sent?.files?.map((file) => file.name)).toEqual(['element-1.png', 'element-3.png']);
+    expect(sent?.files?.map((file) => file.uri)).toEqual([
+      'data:image/png;base64,AAAA',
+      'data:image/png;base64,CCCC',
+    ]);
+    expect(await readOutbox()).toEqual([]);
+    expect((await readSent())[0]?.elementCount).toBe(3);
   });
 
   it('keeps the sent log capped when a send succeeds', async () => {
@@ -726,12 +861,7 @@ describe('admission reliability', () => {
 
   it('reuses the frozen session, text, and attachments when a retry meets changed backend capabilities', async () => {
     fakeBackend = new FailsOnceBackend();
-    const item = elementItem({
-      facts: {
-        ...elementItem().facts,
-        extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 120, height: 32 } },
-      },
-    });
+    const item = withScreenshot(elementItem());
     await appendToOutbox(item);
 
     await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
@@ -744,8 +874,8 @@ describe('admission reliability', () => {
     expect(frozen?.files).toEqual([
       {
         uri: 'data:image/png;base64,AAAA',
-        name: 'element.png',
-        description: 'Screenshot of the picked element',
+        name: 'element-1.png',
+        description: 'Screenshot of element 1',
       },
     ]);
 
@@ -868,6 +998,7 @@ describe('admission reliability', () => {
         sentAt: '2026-10-10T08:00:00.000Z',
         session: { id: 'ses_seed', title: 'Browsertalk · example · 2026-10-10' },
         page: { title: 'Cart', url: 'https://example.com/cart?step=2' },
+        elementCount: 1,
       },
     ]);
   });

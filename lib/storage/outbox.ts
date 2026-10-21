@@ -8,8 +8,10 @@ import {
 import {
   isElementFacts,
   isPageFacts,
+  isPickerElementCapture,
   isPickerExtras,
   isRecord,
+  type PickerElementCapture,
   type PickerElementFacts,
   type PickerExtras,
   type PickerPageFacts,
@@ -18,8 +20,7 @@ import { STORAGE_KEYS } from './keys';
 
 export interface OutboxFacts {
   page: PickerPageFacts;
-  element?: PickerElementFacts;
-  extras?: PickerExtras;
+  elements?: PickerElementCapture[];
 }
 
 export interface OutboxDestination {
@@ -130,15 +131,39 @@ export function isOutboxDestination(value: unknown): value is OutboxDestination 
 function isOutboxFacts(value: unknown): value is OutboxFacts {
   if (!isRecord(value)) return false;
   if (!isPageFacts(value.page)) return false;
+  if (value.elements !== undefined) {
+    return (
+      Array.isArray(value.elements) && value.elements.length > 0 && value.elements.every(isPickerElementCapture)
+    );
+  }
   if (value.element !== undefined && !isElementFacts(value.element)) return false;
   if (value.extras !== undefined && !isPickerExtras(value.extras)) return false;
   return true;
 }
 
+interface LegacyOutboxFacts {
+  page: PickerPageFacts;
+  element?: PickerElementFacts;
+  extras?: PickerExtras;
+}
+
+function normalizeOutboxItem(item: OutboxItem): OutboxItem {
+  if (item.facts.elements !== undefined) return item;
+  const legacy = item.facts as LegacyOutboxFacts;
+  if (legacy.element === undefined) return item;
+  return {
+    ...item,
+    facts: {
+      page: item.facts.page,
+      elements: [{ element: legacy.element, ...(legacy.extras === undefined ? {} : { extras: legacy.extras }) }],
+    },
+  };
+}
+
 export async function readOutbox(): Promise<OutboxItem[]> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.outbox);
   const value = stored[STORAGE_KEYS.outbox];
-  return Array.isArray(value) ? value.filter(isOutboxItem) : [];
+  return Array.isArray(value) ? value.filter(isOutboxItem).map(normalizeOutboxItem) : [];
 }
 
 export async function countOutbox(): Promise<number> {

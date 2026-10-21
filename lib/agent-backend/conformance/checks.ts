@@ -54,17 +54,21 @@ function elementItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
         query: [{ name: 'step', value: '2' }],
         title: 'Cart',
       },
-      element: {
-        tag: 'button',
-        id: 'checkout',
-        classes: ['btn'],
-        selector: 'button#checkout',
-        text: 'Checkout',
-        attributes: { role: 'button' },
-        box: { x: 10, y: 20, width: 120, height: 32 },
-        viewport: { width: 1280, height: 800 },
-        scroll: { x: 0, y: 0 },
-      },
+      elements: [
+        {
+          element: {
+            tag: 'button',
+            id: 'checkout',
+            classes: ['btn'],
+            selector: 'button#checkout',
+            text: 'Checkout',
+            attributes: { role: 'button' },
+            box: { x: 10, y: 20, width: 120, height: 32 },
+            viewport: { width: 1280, height: 800 },
+            scroll: { x: 0, y: 0 },
+          },
+        },
+      ],
     },
     ...overrides,
   };
@@ -72,11 +76,18 @@ function elementItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
 
 function screenshotItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
   const base = elementItem();
+  const [first, ...rest] = base.facts.elements ?? [];
   return {
     ...base,
     facts: {
       ...base.facts,
-      extras: { screenshot: { dataUrl: SCREENSHOT, width: 120, height: 32 } },
+      elements: [
+        {
+          ...first!,
+          extras: { screenshot: { dataUrl: SCREENSHOT, width: 120, height: 32 } },
+        },
+        ...rest,
+      ],
     },
     ...overrides,
   };

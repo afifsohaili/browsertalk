@@ -35,19 +35,36 @@ function elementItem(): OutboxItem {
     status: 'queued',
     facts: {
       page: { url: 'https://example.com/cart', path: '/cart', query: [], title: 'Cart' },
-      element: {
-        tag: 'button',
-        id: 'checkout',
-        classes: ['btn'],
-        selector: 'button#checkout',
-        text: 'Checkout',
-        attributes: { role: 'button' },
-        box: { x: 10, y: 20, width: 120, height: 32 },
-        viewport: { width: 1280, height: 800 },
-        scroll: { x: 0, y: 0 },
-      },
-      extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+      elements: [
+        {
+          element: {
+            tag: 'button',
+            id: 'checkout',
+            classes: ['btn'],
+            selector: 'button#checkout',
+            text: 'Checkout',
+            attributes: { role: 'button' },
+            box: { x: 10, y: 20, width: 120, height: 32 },
+            viewport: { width: 1280, height: 800 },
+            scroll: { x: 0, y: 0 },
+          },
+          extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+        },
+      ],
     },
+  };
+}
+
+function legacyElementItem(): OutboxItem {
+  const current = elementItem();
+  const capture = current.facts.elements![0]!;
+  return {
+    ...current,
+    facts: {
+      page: current.facts.page,
+      element: capture.element,
+      ...(capture.extras === undefined ? {} : { extras: capture.extras }),
+    } as OutboxItem['facts'],
   };
 }
 
@@ -94,6 +111,36 @@ describe('outbox storage', () => {
 
     expect(await readOutbox()).toEqual([valid]);
   });
+
+  it('normalizes old single-element facts to an element set on read', async () => {
+    const legacy = legacyElementItem();
+    await browser.storage.local.set({ outbox: [legacy] });
+
+    const [item] = await readOutbox();
+
+    expect(item?.facts).toEqual(elementItem().facts);
+    expect(item?.facts).not.toHaveProperty('element');
+    expect(item?.facts).not.toHaveProperty('extras');
+    expect(await browser.storage.local.get('outbox')).toEqual({ outbox: [legacy] });
+  });
+
+  it('normalizes an old single-element item without extras', async () => {
+    const legacy = legacyElementItem();
+    delete (legacy.facts as { extras?: unknown }).extras;
+    await browser.storage.local.set({ outbox: [legacy] });
+
+    const [item] = await readOutbox();
+
+    expect(item?.facts.elements).toEqual([{ element: elementItem().facts.elements![0]!.element }]);
+  });
+
+  it('leaves the new element set and page-only facts alone', async () => {
+    const element = elementItem();
+    const page = pageItem('page');
+    await browser.storage.local.set({ outbox: [element, page] });
+
+    expect(await readOutbox()).toEqual([element, page]);
+  });
 });
 
 describe('outbox item guard', () => {
@@ -104,8 +151,13 @@ describe('outbox item guard', () => {
 
   it('accepts element facts without extras', () => {
     const item = elementItem();
-    const { extras: _extras, ...facts } = item.facts;
-    expect(isOutboxItem({ ...item, facts })).toBe(true);
+    const { extras: _extras, ...capture } = item.facts.elements![0]!;
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, elements: [capture] } })).toBe(true);
+  });
+
+  it('accepts the old single-element facts on read', () => {
+    expect(isOutboxItem(legacyElementItem())).toBe(true);
+    expect(isOutboxItem({ ...legacyElementItem(), facts: { ...legacyElementItem().facts, extras: undefined } })).toBe(true);
   });
 
   it('rejects broken shapes', () => {
@@ -120,8 +172,19 @@ describe('outbox item guard', () => {
 
   it('rejects broken element facts and extras', () => {
     const item = elementItem();
-    expect(isOutboxItem({ ...item, facts: { ...item.facts, element: { tag: 'button' } } })).toBe(false);
-    expect(isOutboxItem({ ...item, facts: { ...item.facts, extras: { styles: { color: 1 } } } })).toBe(false);
+    const capture = item.facts.elements![0]!;
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, elements: [{ element: { tag: 'button' } }] } })).toBe(false);
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, elements: [] } })).toBe(false);
+    expect(isOutboxItem({ ...item, facts: { ...item.facts, elements: [null] } })).toBe(false);
+    expect(
+      isOutboxItem({
+        ...item,
+        facts: { ...item.facts, elements: [{ element: capture.element, extras: { styles: { color: 1 } } }] },
+      }),
+    ).toBe(false);
+    expect(
+      isOutboxItem({ ...legacyElementItem(), facts: { ...legacyElementItem().facts, extras: { styles: { color: 1 } } } }),
+    ).toBe(false);
   });
 
   it('accepts the facts it round-trips from a picked feedback', () => {
@@ -129,25 +192,29 @@ describe('outbox item guard', () => {
       id: 'fb_1',
       capturedAt: '2026-10-10T09:00:00.000Z',
       page: { url: 'https://example.com/', path: '/', query: [], title: 'Example' },
-      element: {
-        tag: 'a',
-        id: null,
-        classes: [],
-        selector: 'a',
-        text: 'Home',
-        attributes: { href: '/' },
-        box: { x: 0, y: 0, width: 40, height: 16 },
-        viewport: { width: 1280, height: 800 },
-        scroll: { x: 0, y: 0 },
-      },
-      extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 40, height: 16 } },
+      elements: [
+        {
+          element: {
+            tag: 'a',
+            id: null,
+            classes: [],
+            selector: 'a',
+            text: 'Home',
+            attributes: { href: '/' },
+            box: { x: 0, y: 0, width: 40, height: 16 },
+            viewport: { width: 1280, height: 800 },
+            scroll: { x: 0, y: 0 },
+          },
+          extras: { screenshot: { dataUrl: 'data:image/png;base64,AAAA', width: 40, height: 16 } },
+        },
+      ],
     };
     const item: OutboxItem = {
       id: 'ob_1',
       comment: 'Home link wraps oddly',
       capturedAt: pending.capturedAt,
       status: 'queued',
-      facts: { page: pending.page, element: pending.element, extras: pending.extras },
+      facts: { page: pending.page, elements: pending.elements },
     };
 
     expect(isOutboxItem(item)).toBe(true);

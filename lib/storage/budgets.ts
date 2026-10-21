@@ -1,4 +1,4 @@
-import { elementAttachment } from '@/lib/send/attachments';
+import { elementAttachments } from '@/lib/send/attachments';
 import { renderPrompt } from '@/lib/send/prompt';
 import type { OutboxItem } from './outbox';
 
@@ -46,7 +46,6 @@ export function truncateJsonString(value: string, maxBytes: number): string {
   return '';
 }
 
-const ESTIMATE_SENT_AT = '1970-01-01T00:00:00.000Z';
 const ESTIMATE_PROJECT_NAME = 'x'.repeat(255);
 
 export function deliveryReadySize(items: readonly OutboxItem[]): number {
@@ -58,11 +57,11 @@ function itemDeliveryOverhead(item: OutboxItem): number {
   let bytes = OUTBOX_METADATA_HEADROOM_BYTES;
   if (item.attempt?.admissionInput !== undefined) return bytes;
 
-  const text = renderPrompt({ projectName: ESTIMATE_PROJECT_NAME, item, sentAt: ESTIMATE_SENT_AT });
+  const text = renderPrompt({ projectName: ESTIMATE_PROJECT_NAME, item });
   bytes += utf8ByteLength(JSON.stringify(text));
 
-  const attachment = elementAttachment(item.facts.extras);
-  if (attachment !== null) bytes += utf8ByteLength(JSON.stringify([attachment]));
+  const attachments = elementAttachments(item.facts.elements);
+  if (attachments.length > 0) bytes += utf8ByteLength(JSON.stringify(attachments));
   return bytes;
 }
 

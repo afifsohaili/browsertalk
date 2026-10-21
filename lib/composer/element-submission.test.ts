@@ -11,17 +11,21 @@ function feedback(id: string): PickerFeedback {
     id,
     capturedAt: '2026-10-10T09:00:00.000Z',
     page: { url: PAGE.url, path: '/cart', query: [], title: PAGE.title },
-    element: {
-      tag: 'button',
-      id: 'checkout',
-      classes: [],
-      selector: 'button#checkout',
-      text: 'Checkout',
-      attributes: {},
-      box: { x: 0, y: 0, width: 10, height: 10 },
-      viewport: { width: 1280, height: 800 },
-      scroll: { x: 0, y: 0 },
-    },
+    elements: [
+      {
+        element: {
+          tag: 'button',
+          id: 'checkout',
+          classes: [],
+          selector: 'button#checkout',
+          text: 'Checkout',
+          attributes: {},
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+      },
+    ],
   };
 }
 

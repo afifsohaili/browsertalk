@@ -29,7 +29,7 @@ import {
   setOutboxItemError,
 } from '@/lib/storage/writer';
 import { pageOrigin } from '@/lib/url';
-import { elementAttachment } from './attachments';
+import { elementAttachments } from './attachments';
 import { renderPrompt } from './prompt';
 
 export interface SendOutcome {
@@ -169,16 +169,16 @@ async function freezeAdmissionInput(
   });
 
   const sentAt = stored?.sentAt ?? now.toISOString();
-  const attachment = backend.capabilities.images ? elementAttachment(item.facts.extras) : null;
+  const attachments = backend.capabilities.images ? elementAttachments(item.facts.elements) : [];
   const attempt: FrozenAttempt = {
     requestID: stored?.requestID ?? crypto.randomUUID(),
     sentAt,
     admissionInput: {
       sessionID: session.id,
       sessionTitle: session.title,
-      text: renderPrompt({ projectName: projectName(destination.directory), item, sentAt }),
+      text: renderPrompt({ projectName: projectName(destination.directory), item }),
       delivery: 'queue',
-      ...(attachment === null ? {} : { files: [attachment] }),
+      ...(attachments.length === 0 ? {} : { files: attachments }),
     },
   };
   await setOutboxAttempt(item.id, attempt);
@@ -194,6 +194,7 @@ async function commitAdmitted(item: OutboxItem, admission: OutboxAdmission): Pro
       sentAt: item.attempt?.sentAt ?? admission.admittedAt,
       session: { id: admission.sessionID, title: admission.sessionTitle },
       page: { title: item.facts.page.title, url: item.facts.page.url },
+      elementCount: item.facts.elements?.length ?? 0,
     },
   });
   return { id: admission.sessionID, title: admission.sessionTitle };

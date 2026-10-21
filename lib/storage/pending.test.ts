@@ -14,17 +14,21 @@ function feedback(id = 'fb_1'): PickerFeedback {
     id,
     capturedAt: '2026-10-10T09:00:00.000Z',
     page: { url: 'https://example.com/', path: '/', query: [], title: 'Example' },
-    element: {
-      tag: 'button',
-      id: null,
-      classes: [],
-      selector: 'button',
-      text: 'Go',
-      attributes: {},
-      box: { x: 0, y: 0, width: 10, height: 10 },
-      viewport: { width: 1280, height: 800 },
-      scroll: { x: 0, y: 0 },
-    },
+    elements: [
+      {
+        element: {
+          tag: 'button',
+          id: null,
+          classes: [],
+          selector: 'button',
+          text: 'Go',
+          attributes: {},
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+      },
+    ],
   };
 }
 
@@ -55,6 +59,15 @@ describe('pending feedback storage', () => {
 
   it('treats junk values as absent', async () => {
     await browser.storage.session.set({ 'pending.feedback.1': 42 });
+
+    expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('treats an old single-element pending capture as absent', async () => {
+    const { elements, ...rest } = feedback('fb_old');
+    await browser.storage.session.set({
+      'pending.feedback.1': { ...rest, element: elements[0]!.element },
+    });
 
     expect(await getPendingFeedback(1)).toBeNull();
   });

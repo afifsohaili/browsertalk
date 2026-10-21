@@ -112,10 +112,64 @@ describe('delivery-ready budget accounting', () => {
   it('counts the screenshot attachment duplication when the pick carries one', () => {
     const plain = pageItem('');
     const withShot = pageItem('');
-    withShot.facts.extras = {
-      screenshot: { dataUrl: `data:image/png;base64,${'A'.repeat(100)}`, width: 10, height: 10 },
-    };
+    withShot.facts.elements = [
+      {
+        element: {
+          tag: 'div',
+          id: null,
+          classes: [],
+          selector: 'div',
+          text: '',
+          attributes: {},
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+        extras: {
+          screenshot: { dataUrl: `data:image/png;base64,${'A'.repeat(100)}`, width: 10, height: 10 },
+        },
+      },
+    ];
 
     expect(deliveryReadySize([withShot]) - deliveryReadySize([plain])).toBeGreaterThan(100);
+  });
+
+  it('counts every element attachment', () => {
+    const one = pageItem('');
+    one.facts.elements = [
+      {
+        element: {
+          tag: 'div',
+          id: null,
+          classes: [],
+          selector: 'div',
+          text: '',
+          attributes: {},
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+        extras: {
+          screenshot: { dataUrl: `data:image/png;base64,${'A'.repeat(100)}`, width: 10, height: 10 },
+        },
+      },
+    ];
+    const two: OutboxItem = {
+      ...one,
+      facts: {
+        ...one.facts,
+        elements: [
+          one.facts.elements[0]!,
+          {
+            ...one.facts.elements[0]!,
+            extras: {
+              screenshot: { dataUrl: `data:image/png;base64,${'B'.repeat(100)}`, width: 10, height: 10 },
+            },
+          },
+        ],
+      },
+    };
+
+    expect(deliveryReadySize([two]) - deliveryReadySize([one])).toBeGreaterThan(100);
   });
 });

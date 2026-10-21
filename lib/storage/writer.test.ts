@@ -186,7 +186,7 @@ describe('serialized storage writer', () => {
       admissionInput: {
         sessionID: 'ses_1',
         sessionTitle: 'Browsertalk · example · 2026-10-10',
-        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
+        text: renderPrompt({ projectName: 'example', item: seed }),
         delivery: 'queue' as const,
       },
     };
@@ -219,7 +219,7 @@ describe('serialized storage writer', () => {
       admissionInput: {
         sessionID: 'ses_1',
         sessionTitle: 'Browsertalk · example · 2026-10-10',
-        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
+        text: renderPrompt({ projectName: 'example', item: seed }),
         delivery: 'queue' as const,
       },
     };
@@ -314,7 +314,7 @@ describe('serialized storage writer', () => {
       admissionInput: {
         sessionID: 'ses_1',
         sessionTitle: 'Browsertalk · example · 2026-10-10',
-        text: renderPrompt({ projectName: 'example', item: seed, sentAt: '2026-10-10T09:00:00.000Z' }),
+        text: renderPrompt({ projectName: 'example', item: seed }),
         delivery: 'queue',
       },
     });

@@ -54,17 +54,21 @@ function sampleFeedback(): PickerFeedback {
       query: [{ name: 'step', value: '2' }],
       title: 'Cart',
     },
-    element: {
-      tag: 'button',
-      id: 'checkout',
-      classes: ['btn', 'primary'],
-      selector: 'button#checkout',
-      text: 'Checkout',
-      attributes: { role: 'button', 'data-testid': 'checkout' },
-      box: { x: 10, y: 20, width: 120, height: 32 },
-      viewport: { width: 1280, height: 800 },
-      scroll: { x: 0, y: 0 },
-    },
+    elements: [
+      {
+        element: {
+          tag: 'button',
+          id: 'checkout',
+          classes: ['btn', 'primary'],
+          selector: 'button#checkout',
+          text: 'Checkout',
+          attributes: { role: 'button', 'data-testid': 'checkout' },
+          box: { x: 10, y: 20, width: 120, height: 32 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+      },
+    ],
   };
 }
 
@@ -181,7 +185,21 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
 
     await expect(captured(sampleFeedback(), 1)).resolves.toEqual({ ok: true });
-    expect((await getPendingFeedback(1))?.extras?.screenshot).toEqual(shot);
+    expect((await getPendingFeedback(1))?.elements[0]?.extras?.screenshot).toEqual(shot);
+  });
+
+  it('attaches the screenshot to the first element of a set only', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+    const set = sampleFeedback();
+    set.elements.push({ element: { ...set.elements[0]!.element, selector: 'button#pay', text: 'Pay' } });
+
+    await expect(captured(set, 1)).resolves.toEqual({ ok: true });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements[0]?.extras?.screenshot).toEqual(shot);
+    expect(pending?.elements[1]?.extras).toBeUndefined();
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#checkout', 'button#pay']);
   });
 
   it('keeps the content-script extras when the screenshot lands', async () => {
@@ -189,11 +207,16 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
     const item: PickerFeedback = {
       ...sampleFeedback(),
-      extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+      elements: [
+        {
+          ...sampleFeedback().elements[0]!,
+          extras: { component: 'CheckoutButton', aria: { role: 'button', name: 'Checkout' } },
+        },
+      ],
     };
 
     await expect(captured(item, 1)).resolves.toEqual({ ok: true });
-    expect((await getPendingFeedback(1))?.extras).toEqual({
+    expect((await getPendingFeedback(1))?.elements[0]?.extras).toEqual({
       component: 'CheckoutButton',
       aria: { role: 'button', name: 'Checkout' },
       screenshot: shot,
@@ -216,7 +239,7 @@ describe('picker messaging', () => {
     await expect(captured(sampleFeedback(), 1)).resolves.toEqual({ ok: true });
 
     const pending = await getPendingFeedback(1);
-    expect(pending?.extras?.screenshot).toBeUndefined();
+    expect(pending?.elements[0]?.extras?.screenshot).toBeUndefined();
     expect(pending?.id).toBe('fb_1');
     expect(setSpy).toHaveBeenCalledTimes(2);
     setSpy.mockRestore();

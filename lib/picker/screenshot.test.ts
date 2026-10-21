@@ -21,17 +21,21 @@ function feedback(box: PickerBoxFacts = BOX): PickerFeedback {
     id: 'fb_1',
     capturedAt: '2026-10-10T09:00:00.000Z',
     page: { url: 'https://example.com/cart', path: '/cart', query: [], title: 'Cart' },
-    element: {
-      tag: 'button',
-      id: 'checkout',
-      classes: ['btn'],
-      selector: 'button#checkout',
-      text: 'Checkout',
-      attributes: {},
-      box,
-      viewport: VIEWPORT,
-      scroll: { x: 0, y: 0 },
-    },
+    elements: [
+      {
+        element: {
+          tag: 'button',
+          id: 'checkout',
+          classes: ['btn'],
+          selector: 'button#checkout',
+          text: 'Checkout',
+          attributes: {},
+          box,
+          viewport: VIEWPORT,
+          scroll: { x: 0, y: 0 },
+        },
+      },
+    ],
   };
 }
 
@@ -127,6 +131,17 @@ describe('element screenshotter', () => {
 
     expect(shot).toEqual({ dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 });
     expect(stub.captureTab).toHaveBeenCalledWith(7);
+    expect(stub.crop).toHaveBeenCalledWith('data:image/png;base64,AAAA', BOX, VIEWPORT);
+  });
+
+  it('crops the first element of a set', async () => {
+    const stub = deps();
+    const set = feedback();
+    set.elements.push({ element: { ...set.elements[0]!.element, box: { x: 400, y: 400, width: 10, height: 10 } } });
+
+    const shot = await createElementScreenshotter(stub).captureFor(set, request(7));
+
+    expect(shot).not.toBeNull();
     expect(stub.crop).toHaveBeenCalledWith('data:image/png;base64,AAAA', BOX, VIEWPORT);
   });
 
