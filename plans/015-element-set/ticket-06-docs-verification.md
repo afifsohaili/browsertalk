@@ -41,9 +41,9 @@ Shipped in `docs(plans): ship 015 element set` (this commit; sha in `git log -1`
 - N=1 compact: `Element: p.note — …`, no `Elements (`, no box line, no footer.
 - 5 cap: composer shows `5 elements` and 5 chips; after the fifth pick the overlay is gone and a sixth meta-click changes nothing.
 - Clear, window blur, and `popstate` each discard: overlay gone, no composer, `pending.feedback` empty.
-- 4-shot cap: a five-element set attached 2 screenshots (budget-limited, at most 4); no quota error in the service-worker console.
+- 4-shot cap: a five-element set attached 2 screenshots live (the 2-per-1s budget limited it, at most 4); no quota error in the service-worker console. The four-attachment cap itself is unit-tested (five shots → four attachments), not exercised live.
 - Throwaway session deleted; `GET /api/session?search=Browsertalk 015 smoke` returns 0.
 
-**Divergence found by the smoke:** a page-world `pushState` did not clear the armed set, while `popstate` did. `pushState`-only SPA navigation stays unconfirmed and is listed under `product.md` open questions. No code change in this ticket.
+**Divergence found by the smoke:** a page-world `pushState` did not clear the armed set, while `popstate` did. `pushState`-only SPA navigation stays unconfirmed and is listed under `product.md` open questions. No code change in this ticket; fixed in 016a with a MAIN-world bridge.
 
 **Shas:** 015a `2a905e9 + e1dfccf` · 015b `d5b54a2` · 015c `f2c20fb` · 015d `afc495d` · 015e `924b8cb` · 015f this docs commit.

@@ -128,10 +128,12 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
   }
 
   function end(): void {
+    const cleared = setID;
     selection.clear();
     setID = null;
     stopPicking();
     stopWatching();
+    if (cleared !== null) options.onClear(cleared);
   }
 
   function toggle(): boolean {

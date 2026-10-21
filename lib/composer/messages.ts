@@ -110,15 +110,19 @@ async function removeCommentElement(
 }
 
 async function appendItem(item: OutboxItem): Promise<{ item: OutboxItem; screenshotDropped: boolean }> {
-  try {
-    await appendToOutbox(item);
-    return { item, screenshotDropped: false };
-  } catch (error) {
-    if (!isQuotaExceeded(error) || !hasElementScreenshot(item)) throw error;
+  let current = item;
+  let screenshotDropped = false;
 
-    const stripped = withoutScreenshot(item);
-    await appendToOutbox(stripped);
-    return { item: stripped, screenshotDropped: true };
+  for (;;) {
+    try {
+      await appendToOutbox(current);
+      return { item: current, screenshotDropped };
+    } catch (error) {
+      if (!isQuotaExceeded(error) || !hasElementScreenshot(current)) throw error;
+
+      current = withoutScreenshot(current);
+      screenshotDropped = true;
+    }
   }
 }
 

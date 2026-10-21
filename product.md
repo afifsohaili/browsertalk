@@ -69,10 +69,10 @@ One feedback can carry up to five elements from the same page. The comment is wr
 | Plain click with a set | Opens the composer; does not add the clicked element |
 | Clear in the count pill, or Escape | Discards the set and disarms |
 | Window blur | Discards the set and disarms |
-| Route change (`popstate`, `hashchange`) | Discards the set and disarms; an open composer closes |
+| Route change (`pushState`, `replaceState`, `popstate`, `hashchange`) | Discards the set and disarms; an open composer closes |
 | Chip × in the composer | Removes one element before sending |
 
-Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer shows the chips and `N elements`.
+Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer and panel rows show `1 element` or `N elements`.
 
 Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue.
 
@@ -259,7 +259,7 @@ Pairing code creation requires an authenticated client, so the user runs one com
 
 - Pi bridge shape: new daemon vs. an existing pi server mode. Unconfirmed.
 - Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`).
-- SPA route changes: the picker patches `pushState`/`replaceState` from the content-script world. The live smoke saw `popstate` clear the set, but a page-world `pushState` did not; a page that navigates only via `pushState` may leave the set armed. Unconfirmed in a real SPA.
+- SPA route changes: a MAIN-world content script wraps page `pushState`/`replaceState` and dispatches one route event; the isolated picker also listens to `popstate`/`hashchange`. Unit-tested against a fake history; the live `pushState` case in a real SPA is unconfirmed.
 - Component-name detection coverage (React 19 dev fibers, Vue production builds).
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.

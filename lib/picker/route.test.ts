@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { watchRouteChanges, type RouteWatcherDeps } from './route';
+import {
+  PICKER_ROUTE_EVENT,
+  installRouteEmitter,
+  watchRouteChanges,
+  type RouteListenerDeps,
+} from './route';
 
 interface FakeHistory {
   pushState: Mock<History['pushState']>;
@@ -8,21 +13,24 @@ interface FakeHistory {
 
 interface FakeWindow {
   history: FakeHistory;
-  emit: (type: 'popstate' | 'hashchange') => void;
+  emit: (type: string) => void;
   listeners: Map<string, () => void>;
-  addEventListener: RouteWatcherDeps['addEventListener'];
-  removeEventListener: RouteWatcherDeps['removeEventListener'];
+  addEventListener: RouteListenerDeps['addEventListener'];
+  removeEventListener: RouteListenerDeps['removeEventListener'];
+}
+
+function fakeHistory(): FakeHistory {
+  return {
+    pushState: vi.fn<History['pushState']>(),
+    replaceState: vi.fn<History['replaceState']>(),
+  };
 }
 
 function fakeWindow(): FakeWindow {
   const listeners = new Map<string, () => void>();
-  const history: FakeHistory = {
-    pushState: vi.fn<History['pushState']>(),
-    replaceState: vi.fn<History['replaceState']>(),
-  };
 
   return {
-    history,
+    history: fakeHistory(),
     listeners,
     addEventListener: (type, listener) => {
       listeners.set(type, listener);
@@ -34,30 +42,96 @@ function fakeWindow(): FakeWindow {
   };
 }
 
-describe('route watch', () => {
-  it('signals a route change after a patched pushState runs', () => {
-    const win = fakeWindow();
-    const events: string[] = [];
-    win.history.pushState.mockImplementation(() => events.push('push'));
+describe('page route emitter', () => {
+  it('dispatches one route event after a page-world pushState', () => {
+    const history = fakeHistory();
+    const order: string[] = [];
+    history.pushState.mockImplementation(() => {
+      order.push('push');
+    });
 
-    const stop = watchRouteChanges(win, () => events.push('changed'));
+    installRouteEmitter({ history, dispatch: () => order.push('route') });
 
-    win.history.pushState({}, '', '/next');
+    history.pushState({}, '', '/next');
 
-    expect(events).toEqual(['push', 'changed']);
-    stop();
+    expect(order).toEqual(['push', 'route']);
   });
 
-  it('signals a route change after a patched replaceState runs', () => {
+  it('dispatches one route event after a page-world replaceState', () => {
+    const history = fakeHistory();
+    const order: string[] = [];
+    history.replaceState.mockImplementation(() => {
+      order.push('replace');
+    });
+
+    installRouteEmitter({ history, dispatch: () => order.push('route') });
+
+    history.replaceState({}, '', '/next');
+
+    expect(order).toEqual(['replace', 'route']);
+  });
+
+  it('passes the page arguments through to the original methods', () => {
+    const history = fakeHistory();
+    const original = history.pushState;
+    installRouteEmitter({ history, dispatch: () => {} });
+
+    history.pushState({ page: 1 }, '', '/next');
+
+    expect(original).toHaveBeenCalledWith({ page: 1 }, '', '/next');
+  });
+
+  it('restores the page history methods and stops dispatching on stop', () => {
+    const history = fakeHistory();
+    const originalPush = history.pushState;
+    const originalReplace = history.replaceState;
+    const dispatch = vi.fn();
+
+    const stop = installRouteEmitter({ history, dispatch });
+    expect(history.pushState).not.toBe(originalPush);
+    expect(history.replaceState).not.toBe(originalReplace);
+
+    stop();
+
+    expect(history.pushState).toBe(originalPush);
+    expect(history.replaceState).toBe(originalReplace);
+
+    history.pushState({}, '', '/next');
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('restores prototype methods without leaving an own property behind', () => {
+    const prototype = fakeHistory();
+    const history = Object.create(prototype) as FakeHistory;
+
+    const stop = installRouteEmitter({ history, dispatch: () => {} });
+    expect(Object.prototype.hasOwnProperty.call(history, 'pushState')).toBe(true);
+
+    stop();
+
+    expect(Object.prototype.hasOwnProperty.call(history, 'pushState')).toBe(false);
+    expect(history.pushState).toBe(prototype.pushState);
+  });
+
+  it('is safe to stop twice', () => {
+    const history = fakeHistory();
+    const stop = installRouteEmitter({ history, dispatch: () => {} });
+
+    stop();
+    expect(() => stop()).not.toThrow();
+  });
+});
+
+describe('isolated route watch', () => {
+  it('signals a page-world route event', () => {
     const win = fakeWindow();
-    const events: string[] = [];
-    win.history.replaceState.mockImplementation(() => events.push('replace'));
+    const changes = vi.fn();
 
-    const stop = watchRouteChanges(win, () => events.push('changed'));
+    const stop = watchRouteChanges(win, changes);
+    win.emit(PICKER_ROUTE_EVENT);
 
-    win.history.replaceState({}, '', '/next');
-
-    expect(events).toEqual(['replace', 'changed']);
+    expect(changes).toHaveBeenCalledTimes(1);
+    expect(PICKER_ROUTE_EVENT).toBe('browsertalk:picker-route');
     stop();
   });
 
@@ -74,38 +148,19 @@ describe('route watch', () => {
     stop();
   });
 
-  it('restores the original history methods and drops listeners on stop', () => {
+  it('drops every listener on stop', () => {
     const win = fakeWindow();
-    const originalPush = win.history.pushState;
-    const originalReplace = win.history.replaceState;
+    const changes = vi.fn();
 
-    const stop = watchRouteChanges(win, () => {});
-    const patchedPush = win.history.pushState;
-    const patchedReplace = win.history.replaceState;
-    expect(patchedPush).not.toBe(originalPush);
-    expect(patchedReplace).not.toBe(originalReplace);
+    const stop = watchRouteChanges(win, changes);
+    expect(win.listeners.has(PICKER_ROUTE_EVENT)).toBe(true);
     expect(win.listeners.has('popstate')).toBe(true);
     expect(win.listeners.has('hashchange')).toBe(true);
 
     stop();
 
-    expect(win.history.pushState).toBe(originalPush);
-    expect(win.history.replaceState).toBe(originalReplace);
-    expect(win.listeners.has('popstate')).toBe(false);
-    expect(win.listeners.has('hashchange')).toBe(false);
-  });
-
-  it('is safe to stop twice and to stop after the page already moved', () => {
-    const win = fakeWindow();
-    const changes = vi.fn();
-
-    const stop = watchRouteChanges(win, changes);
+    expect(win.listeners.size).toBe(0);
     win.emit('popstate');
-    stop();
-    stop();
-
-    win.emit('popstate');
-
-    expect(changes).toHaveBeenCalledTimes(1);
+    expect(changes).not.toHaveBeenCalled();
   });
 });

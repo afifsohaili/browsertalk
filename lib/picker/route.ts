@@ -1,11 +1,17 @@
-export interface RouteWatcherDeps {
+export const PICKER_ROUTE_EVENT = 'browsertalk:picker-route';
+
+export interface RouteEmitterDeps {
   history: Pick<History, 'pushState' | 'replaceState'>;
-  addEventListener: (type: 'popstate' | 'hashchange', listener: () => void) => void;
-  removeEventListener: (type: 'popstate' | 'hashchange', listener: () => void) => void;
+  dispatch: () => void;
 }
 
-export function watchRouteChanges(deps: RouteWatcherDeps, onChange: () => void): () => void {
-  const { history } = deps;
+export interface RouteListenerDeps {
+  addEventListener: (type: string, listener: () => void) => void;
+  removeEventListener: (type: string, listener: () => void) => void;
+}
+
+export function installRouteEmitter(deps: RouteEmitterDeps): () => void {
+  const { history, dispatch } = deps;
   const originalPush = history.pushState;
   const originalReplace = history.replaceState;
   const ownedPush = Object.prototype.hasOwnProperty.call(history, 'pushState');
@@ -17,7 +23,7 @@ export function watchRouteChanges(deps: RouteWatcherDeps, onChange: () => void):
     ...args: Parameters<History['pushState']>
   ): ReturnType<History['pushState']> {
     const result = originalPush.apply(this, args);
-    onChange();
+    dispatch();
     return result;
   };
   history.replaceState = function patchedReplace(
@@ -25,12 +31,9 @@ export function watchRouteChanges(deps: RouteWatcherDeps, onChange: () => void):
     ...args: Parameters<History['replaceState']>
   ): ReturnType<History['replaceState']> {
     const result = originalReplace.apply(this, args);
-    onChange();
+    dispatch();
     return result;
   };
-
-  deps.addEventListener('popstate', onChange);
-  deps.addEventListener('hashchange', onChange);
 
   return () => {
     if (stopped) return;
@@ -40,7 +43,21 @@ export function watchRouteChanges(deps: RouteWatcherDeps, onChange: () => void):
     else delete (history as { pushState?: unknown }).pushState;
     if (ownedReplace) history.replaceState = originalReplace;
     else delete (history as { replaceState?: unknown }).replaceState;
+  };
+}
 
+export function watchRouteChanges(deps: RouteListenerDeps, onChange: () => void): () => void {
+  let stopped = false;
+
+  deps.addEventListener(PICKER_ROUTE_EVENT, onChange);
+  deps.addEventListener('popstate', onChange);
+  deps.addEventListener('hashchange', onChange);
+
+  return () => {
+    if (stopped) return;
+    stopped = true;
+
+    deps.removeEventListener(PICKER_ROUTE_EVENT, onChange);
     deps.removeEventListener('popstate', onChange);
     deps.removeEventListener('hashchange', onChange);
   };
@@ -49,7 +66,6 @@ export function watchRouteChanges(deps: RouteWatcherDeps, onChange: () => void):
 export function watchWindowRoutes(onChange: () => void): () => void {
   return watchRouteChanges(
     {
-      history: window.history,
       addEventListener: (type, listener) => window.addEventListener(type, listener),
       removeEventListener: (type, listener) => window.removeEventListener(type, listener),
     },

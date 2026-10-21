@@ -509,6 +509,47 @@ describe('composer messaging', () => {
       expect(stored?.facts.elements?.[0]?.element.selector).toBe('h1.title');
     });
 
+    it('drops screenshots from the last element until the outbox takes the item', async () => {
+      await appendToOutbox(fillOutbox(250_000));
+      const shots: PickerFeedback['elements'] = ['a', 'b', 'c'].map((fill, index) => ({
+        element: {
+          ...sampleFeedback().elements[0]!.element,
+          tag: 'p',
+          id: null,
+          classes: [],
+          selector: `p.shot-${index + 1}`,
+          text: `Shot ${index + 1}`,
+        },
+        extras: {
+          screenshot: {
+            dataUrl: `data:image/png;base64,${fill.repeat(100_000)}`,
+            width: 120,
+            height: 32,
+          },
+        },
+      }));
+      await setPendingFeedback(1, { ...sampleFeedback(), elements: shots });
+
+      await expect(respondToComposerRequest(elementQueue('fb_1', 'Three shots', 3), { tabId: 1 })).resolves.toEqual({
+        ok: true,
+        outboxCount: 2,
+        screenshotDropped: true,
+      });
+
+      const stored = (await readOutbox()).find((item) => item.id !== 'ob_seed');
+      expect(stored?.facts.elements?.map((entry) => entry.element.selector)).toEqual([
+        'p.shot-1',
+        'p.shot-2',
+        'p.shot-3',
+      ]);
+      expect(stored?.facts.elements?.map((entry) => entry.extras?.screenshot?.dataUrl)).toEqual([
+        `data:image/png;base64,${'a'.repeat(100_000)}`,
+        undefined,
+        undefined,
+      ]);
+      expect(requestedSends).toEqual([stored?.id]);
+    });
+
     it('keeps the pick and reports the error when there is no screenshot to drop', async () => {
       await appendToOutbox(fillOutbox(100));
       await setPendingFeedback(1, sampleFeedback());

@@ -33,10 +33,7 @@ export default defineContentScript({
         return submission.submit(comment, page, elementCount);
       },
       remove: (index) => submission.remove(index),
-      onClose: () => {
-        submission.clear();
-        endSet();
-      },
+      onClose: () => endSet(),
     });
 
     const session = createPickerSession({
