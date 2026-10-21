@@ -60,7 +60,7 @@ describe('renderPrompt', () => {
         'Comment: Checkout button is broken',
         '',
         'Element: button.btn.primary — "Checkout" · button#checkout · role=button · data-testid=checkout',
-        '  extras    CheckoutButton · display: flex · color: rgb(255, 255, 255) · role=button · name=Checkout',
+        '  extras    component=CheckoutButton · role=button · name=Checkout · display=flex · color=rgb(255, 255, 255)',
         '',
         'Page: https://example.com/cart?step=2',
         '  title     Cart',
@@ -97,8 +97,8 @@ describe('renderPrompt', () => {
       item: elementItem([capture({}, { aria: { name: 'Checkout' } })]),
     });
 
-    expect(componentOnly).toContain('  extras    CheckoutButton');
-    expect(stylesOnly).toContain('  extras    display: flex');
+    expect(componentOnly).toContain('  extras    component=CheckoutButton');
+    expect(stylesOnly).toContain('  extras    display=flex');
     expect(ariaOnly).toContain('  extras    name=Checkout');
     expect(ariaOnly).not.toContain('extras    role=');
   });
@@ -155,7 +155,7 @@ describe('renderPrompt', () => {
         'Elements (3):',
         '1. button.btn — "Checkout" · button#checkout · role=button · data-testid=checkout',
         '2. h1.title — "Your cart" · h1.title',
-        '   extras    CartTitle · role=heading',
+        '   extras    component=CartTitle · role=heading',
         '3. p — "Total" · p:nth-of-type(2) · data-testid=total',
         '',
         'Page: https://example.com/cart?step=2',

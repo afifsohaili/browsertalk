@@ -42,7 +42,7 @@ Divergences and notes:
 
 - `elementAttachments` names by element ordinal, so a set whose first element has no shot starts at `element-2.png`; the ordinal keeps the file-to-element mapping.
 - `readOutbox` normalizes in memory; storage rewrites old items on the next outbox write.
-- The issue left the extras separator unspecified; component, styles, and ARIA join with ` · ` on one line.
+- Extras render as `component=… · role=… · name=… · style=value`, matching the approved sample.
 - `isPickerFeedback` rejects the old single-element shape, so an old pending capture reads as absent.
 - `withoutScreenshot` strips one shot per call, walking from the last element backward to the last element that has one.
 - Commit sha is recorded by 015e.

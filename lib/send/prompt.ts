@@ -55,12 +55,12 @@ function extrasLine(extras: PickerExtras | undefined, indent: string): string | 
   if (extras === undefined) return undefined;
 
   const parts: string[] = [];
-  if (extras.component !== undefined) parts.push(extras.component);
-
-  const styles = Object.entries(extras.styles ?? {}).map(([name, value]) => `${name}: ${value}`);
-  parts.push(...styles);
+  if (extras.component !== undefined) parts.push(`component=${extras.component}`);
 
   parts.push(...ariaParts(extras.aria));
+
+  const styles = Object.entries(extras.styles ?? {}).map(([name, value]) => `${name}=${value}`);
+  parts.push(...styles);
 
   if (parts.length === 0) return undefined;
   return `${indent}extras    ${parts.join(' · ')}`;

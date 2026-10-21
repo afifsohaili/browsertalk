@@ -475,7 +475,7 @@ describe('send pipeline', () => {
     expect(sent?.text).toContain('1. button.btn — "Checkout" · button#checkout · role=button');
     expect(sent?.text).toContain('2. h1.title — "Your cart" · h1.title');
     expect(sent?.text).toContain('3. p — "Total" · p:nth-of-type(2)');
-    expect(sent?.text).toContain('  extras    CheckoutButton');
+    expect(sent?.text).toContain('   extras    component=CheckoutButton');
     expect(sent?.files?.map((file) => file.name)).toEqual(['element-1.png', 'element-3.png']);
     expect(sent?.files?.map((file) => file.uri)).toEqual([
       'data:image/png;base64,AAAA',
