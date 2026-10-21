@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComposerPageRequest, ComposerQueueResult, ComposerRemoveResult } from '@/lib/composer/protocol';
 import { NO_PICKED_ELEMENT_ERROR } from '@/lib/composer/element-submission';
-import { COMPOSER_HOST_ID } from '@/lib/composer/session';
-import { PICKER_OVERLAY_ID } from './session';
+import { COMPOSER_HOST_ID } from '@/lib/composer/dom';
+import { PICKER_OVERLAY_ID } from './overlay';
 import type { CaptureResult } from './protocol';
 import { createPickerWiring, type PickerWiringDeps } from './wiring';
 

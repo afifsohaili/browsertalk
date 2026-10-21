@@ -8,13 +8,11 @@ import type { PickerFeedback } from './facts';
 import {
   armPickerOnActiveTab,
   armPickerOnTab,
-  notifyCaptured,
-  notifyCleared,
   registerPickerMessageHandler,
-  requestArmPicker,
   respondToPickerRequest,
   setElementScreenshotter,
-} from './messages';
+} from './handler';
+import { notifyCaptured, notifyCleared, requestArmPicker } from './messages';
 import { createElementScreenshotter, type ElementScreenshotter } from './screenshot';
 
 type Tab = Browser.tabs.Tab;

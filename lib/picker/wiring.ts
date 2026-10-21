@@ -27,21 +27,18 @@ export interface PickerWiring {
 }
 
 export function createPickerWiring(deps: PickerWiringDeps): PickerWiring {
-  let withOverlayHidden: PickerSession['withOverlayHidden'] = (operation) => operation();
-
   const submission = createElementSubmission({
-    notify: (feedback, index) => withOverlayHidden(() => deps.notifyCaptured(feedback, index)),
+    notify: (feedback, index) =>
+      session.withOverlayHidden(() => deps.notifyCaptured(feedback, index)),
     remove: deps.removeElement,
     send: ({ comment, page, captureID, elementCount }) =>
       deps.queueComment(comment, page, captureID, elementCount),
   });
 
-  let endSet = (): void => {};
-
   const composer = createComposerSession({
     queue: (comment, elementCount) => submission.submit(comment, deps.page(), elementCount),
     remove: (index) => submission.remove(index),
-    onClose: () => endSet(),
+    onClose: () => session.end(),
   });
 
   const session = createPickerSession({
@@ -65,9 +62,6 @@ export function createPickerWiring(deps: PickerWiringDeps): PickerWiring {
     },
     onRouteChange: () => composer.close(),
   });
-
-  endSet = session.end;
-  withOverlayHidden = session.withOverlayHidden;
 
   function arm(): boolean {
     const wasArmed = session.isArmed();

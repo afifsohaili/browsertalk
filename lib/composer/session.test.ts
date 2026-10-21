@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComposerQueueResult, ComposerRemoveResult } from './protocol';
+import { COMPOSER_HOST_ID } from './dom';
 import {
-  COMPOSER_HOST_ID,
   createComposerSession,
   type ComposerSession,
   type ComposerSessionOptions,

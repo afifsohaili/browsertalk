@@ -1,8 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PICKER_COUNT_ID, PICKER_OVERLAY_ID } from './overlay';
 import {
-  PICKER_COUNT_ID,
-  PICKER_OVERLAY_ID,
   createPickerSession,
   type PickerSession,
   type PickerSessionOptions,

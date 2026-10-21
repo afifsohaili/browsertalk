@@ -6,7 +6,7 @@ import {
   registerPickerMessageHandler,
   respondToPickerRequest,
   setElementScreenshotter,
-} from '@/lib/picker/messages';
+} from '@/lib/picker/handler';
 import { renderPrompt } from '@/lib/send/prompt';
 import { resetSendDispatcher, setSendDispatcher } from '@/lib/send/trigger';
 import { readOutbox } from '@/lib/storage/outbox';

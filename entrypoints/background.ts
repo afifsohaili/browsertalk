@@ -4,7 +4,7 @@ import { registerComposerHandler } from '@/lib/composer/messages';
 import { migrateLegacyConnectionStorage } from '@/lib/connection/migrate';
 import { registerConnectionHandler } from '@/lib/connection/messages';
 import { registerPanelHandler } from '@/lib/panel/messages';
-import { registerPickerMessageHandler, registerPickerTriggers } from '@/lib/picker/messages';
+import { registerPickerMessageHandler, registerPickerTriggers } from '@/lib/picker/handler';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy';
 
 export default defineBackground(async () => {
