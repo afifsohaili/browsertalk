@@ -1,7 +1,6 @@
+import type { CaptureBudget } from './capture-budget';
 import type { PickerBoxFacts, PickerFeedback, PickerScreenshotFacts, PickerSizeFacts } from './facts';
 import { MAX_SCREENSHOT_BYTES } from './limits';
-
-export const MIN_CAPTURE_INTERVAL_MS = 500;
 
 export interface CropRect {
   x: number;
@@ -21,14 +20,21 @@ export interface ScreenshotRequest {
 }
 
 export interface ElementScreenshotter {
-  captureFor(feedback: PickerFeedback, request: ScreenshotRequest): Promise<PickerScreenshotFacts | null>;
+  captureFor(
+    feedback: PickerFeedback,
+    request: ScreenshotRequest,
+    options?: CaptureOptions,
+  ): Promise<PickerScreenshotFacts | null>;
+}
+
+export interface CaptureOptions {
+  allowWait?: boolean;
 }
 
 export interface ScreenshotDeps {
   captureTab: (windowId: number | undefined) => Promise<string>;
   crop: (dataUrl: string, box: PickerBoxFacts, viewport: PickerSizeFacts) => Promise<PickerScreenshotFacts | null>;
-  now: () => number;
-  sleep: (ms: number) => Promise<void>;
+  budget: CaptureBudget;
 }
 
 export function computeCropRect(box: PickerBoxFacts, viewport: PickerSizeFacts, image: ImageSize): CropRect | null {
@@ -47,18 +53,19 @@ export function computeCropRect(box: PickerBoxFacts, viewport: PickerSizeFacts, 
 }
 
 export function createElementScreenshotter(deps: ScreenshotDeps): ElementScreenshotter {
-  let lastCaptureAt: number | null = null;
   return {
-    async captureFor(feedback, request) {
+    async captureFor(feedback, request, options = {}) {
       const first = feedback.elements[0];
       if (first === undefined) return null;
       const { box, viewport } = first.element;
       if (box.width <= 0 || box.height <= 0) return null;
-      if (lastCaptureAt !== null) {
-        const wait = MIN_CAPTURE_INTERVAL_MS - (deps.now() - lastCaptureAt);
-        if (wait > 0) await deps.sleep(wait);
+
+      if (options.allowWait === true) {
+        if (!(await deps.budget.waitForToken())) return null;
+      } else if (!deps.budget.tryAcquire()) {
+        return null;
       }
-      lastCaptureAt = deps.now();
+
       try {
         if (!(await request.isVisible())) return null;
         const dataUrl = await deps.captureTab(request.windowId);

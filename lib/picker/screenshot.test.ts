@@ -1,16 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CAPTURE_WINDOW_MS, createCaptureBudget } from './capture-budget';
 import type { PickerBoxFacts, PickerFeedback, PickerSizeFacts } from './facts';
 import {
   computeCropRect,
   createElementScreenshotter,
   dataUrlToBlob,
-  MIN_CAPTURE_INTERVAL_MS,
   type ScreenshotDeps,
   type ScreenshotRequest,
 } from './screenshot';
 
 const VIEWPORT: PickerSizeFacts = { width: 1280, height: 800 };
 const BOX: PickerBoxFacts = { x: 10, y: 20, width: 120, height: 32 };
+
+function fakeClock(start = 0) {
+  let time = start;
+  const sleeps: number[] = [];
+  return {
+    now: () => time,
+    sleeps,
+    set: (value: number) => {
+      time = value;
+    },
+    sleep: async (ms: number) => {
+      sleeps.push(ms);
+      time += ms;
+    },
+  };
+}
 
 function request(windowId: number | undefined, isVisible: () => Promise<boolean> = async () => true): ScreenshotRequest {
   return { windowId, isVisible };
@@ -40,13 +56,19 @@ function feedback(box: PickerBoxFacts = BOX): PickerFeedback {
 }
 
 function deps(partial: Partial<ScreenshotDeps> = {}): ScreenshotDeps {
+  const clock = fakeClock();
   return {
     captureTab: vi.fn(async () => 'data:image/png;base64,AAAA'),
     crop: vi.fn(async () => ({ dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 })),
-    now: () => 0,
-    sleep: vi.fn(async () => {}),
+    budget: createCaptureBudget({ now: clock.now, sleep: clock.sleep }),
     ...partial,
   };
+}
+
+function budgeted(partial: Partial<ScreenshotDeps> = {}) {
+  const clock = fakeClock();
+  const budget = createCaptureBudget({ now: clock.now, sleep: clock.sleep });
+  return { clock, budget, stub: deps({ budget, ...partial }) };
 }
 
 describe('crop math', () => {
@@ -187,64 +209,99 @@ describe('element screenshotter', () => {
     expect(stub.captureTab).not.toHaveBeenCalled();
   });
 
-  it('spaces captures to respect the 2/sec ceiling', async () => {
-    let clock = 0;
-    const sleeps: number[] = [];
-    const stub = deps({
-      now: () => clock,
-      sleep: async (ms) => {
-        sleeps.push(ms);
-        clock += ms;
-      },
-    });
+  it('captures without waiting when a token is free', async () => {
+    const { clock, stub } = budgeted();
+
+    const shot = await createElementScreenshotter(stub).captureFor(feedback(), request(7), { allowWait: true });
+
+    expect(shot).toEqual({ dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 });
+    expect(clock.sleeps).toEqual([]);
+  });
+
+  it('takes two captures from one window and skips the rest', async () => {
+    const { stub } = budgeted();
     const screenshotter = createElementScreenshotter(stub);
 
-    await screenshotter.captureFor(feedback(), request(undefined));
-    await screenshotter.captureFor(feedback(), request(undefined));
+    await screenshotter.captureFor(feedback(), request(undefined), { allowWait: true });
+    await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false });
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false })).toBeNull();
 
-    expect(sleeps).toEqual([MIN_CAPTURE_INTERVAL_MS]);
     expect(stub.captureTab).toHaveBeenCalledTimes(2);
   });
 
-  it('does not wait once the interval has passed', async () => {
-    let clock = 0;
-    const sleeps: number[] = [];
-    const stub = deps({
-      now: () => clock,
-      sleep: async (ms) => {
-        sleeps.push(ms);
-        clock += ms;
-      },
-    });
+  it('waits for the next token when waiting is allowed', async () => {
+    const { clock, budget, stub } = budgeted();
     const screenshotter = createElementScreenshotter(stub);
+    budget.tryAcquire();
+    budget.tryAcquire();
 
-    await screenshotter.captureFor(feedback(), request(undefined));
-    clock = MIN_CAPTURE_INTERVAL_MS;
-    await screenshotter.captureFor(feedback(), request(undefined));
+    const shot = await screenshotter.captureFor(feedback(), request(undefined), { allowWait: true });
 
-    expect(sleeps).toEqual([]);
+    expect(shot).not.toBeNull();
+    expect(clock.sleeps).toEqual([CAPTURE_WINDOW_MS + 1]);
+    expect(stub.captureTab).toHaveBeenCalledTimes(1);
   });
 
-  it('still spaces out the next capture after a failure', async () => {
-    let clock = 0;
-    const sleeps: number[] = [];
-    const captureTab = vi
-      .fn<() => Promise<string>>()
-      .mockRejectedValueOnce(new Error('quota'))
-      .mockResolvedValue('data:image/png;base64,AAAA');
-    const stub = deps({
-      captureTab,
-      now: () => clock,
-      sleep: async (ms) => {
-        sleeps.push(ms);
-        clock += ms;
-      },
+  it('skips without a token when waiting is not allowed', async () => {
+    const { clock, budget, stub } = budgeted();
+    const screenshotter = createElementScreenshotter(stub);
+    budget.tryAcquire();
+    budget.tryAcquire();
+
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false })).toBeNull();
+    expect(clock.sleeps).toEqual([]);
+    expect(stub.captureTab).not.toHaveBeenCalled();
+  });
+
+  it('skips by default when no token is free', async () => {
+    const { budget, stub } = budgeted();
+    const screenshotter = createElementScreenshotter(stub);
+    budget.tryAcquire();
+    budget.tryAcquire();
+
+    expect(await screenshotter.captureFor(feedback(), request(undefined))).toBeNull();
+    expect(stub.captureTab).not.toHaveBeenCalled();
+  });
+
+  it('spends the token before the visibility check', async () => {
+    const { stub } = budgeted();
+    const screenshotter = createElementScreenshotter(stub);
+
+    expect(await screenshotter.captureFor(feedback(), request(7, async () => false))).toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(7), { allowWait: false })).not.toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(7), { allowWait: false })).toBeNull();
+
+    expect(stub.captureTab).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refund a token when the capture fails', async () => {
+    const { clock, stub } = budgeted({
+      captureTab: vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(new Error('quota'))
+        .mockResolvedValue('data:image/png;base64,AAAA'),
     });
     const screenshotter = createElementScreenshotter(stub);
 
-    expect(await screenshotter.captureFor(feedback(), request(undefined))).toBeNull();
-    await screenshotter.captureFor(feedback(), request(undefined));
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false })).toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false })).not.toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: false })).toBeNull();
+    expect(clock.sleeps).toEqual([]);
 
-    expect(sleeps).toEqual([MIN_CAPTURE_INTERVAL_MS]);
+    expect(await screenshotter.captureFor(feedback(), request(undefined), { allowWait: true })).not.toBeNull();
+    expect(clock.sleeps).toEqual([CAPTURE_WINDOW_MS + 1]);
+  });
+
+  it('skips empty boxes without spending a token', async () => {
+    const { stub } = budgeted();
+    const screenshotter = createElementScreenshotter(stub);
+
+    expect(
+      await screenshotter.captureFor(feedback({ x: 0, y: 0, width: 0, height: 0 }), request(7), { allowWait: true }),
+    ).toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(7), { allowWait: false })).not.toBeNull();
+    expect(await screenshotter.captureFor(feedback(), request(7), { allowWait: false })).not.toBeNull();
+
+    expect(stub.captureTab).toHaveBeenCalledTimes(2);
   });
 });

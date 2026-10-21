@@ -3,6 +3,7 @@ import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { CONSENT_REQUIRED_ERROR, acceptConsent, declineConsent } from '@/lib/consent/consent';
 import { getPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
+import { CAPTURE_WINDOW_MS, createCaptureBudget } from './capture-budget';
 import type { PickerFeedback } from './facts';
 import {
   armPickerOnActiveTab,
@@ -14,7 +15,7 @@ import {
   respondToPickerRequest,
   setElementScreenshotter,
 } from './messages';
-import type { ElementScreenshotter } from './screenshot';
+import { createElementScreenshotter, type ElementScreenshotter } from './screenshot';
 
 type Tab = Browser.tabs.Tab;
 
@@ -96,6 +97,25 @@ function pickedElement(selector: string, text: string): PickerFeedback['elements
 
 function indexed(feedback: PickerFeedback): PickerFeedback {
   return { ...feedback, elements: feedback.elements.map((entry, index) => ({ ...entry, index })) };
+}
+
+function budgetedScreenshotter() {
+  let time = 0;
+  const sleeps: number[] = [];
+  const budget = createCaptureBudget({
+    now: () => time,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      time += ms;
+    },
+  });
+  const captureTab = vi.fn(async () => 'data:image/png;base64,AAAA');
+  const screenshotter = createElementScreenshotter({
+    captureTab,
+    crop: vi.fn(async () => ({ dataUrl: 'data:image/png;base64,BBBB', width: 10, height: 10 })),
+    budget,
+  });
+  return { screenshotter, captureTab, budget, sleeps };
 }
 
 describe('picker messaging', () => {
@@ -350,6 +370,79 @@ describe('picker messaging', () => {
     expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#checkout', 'button#pay']);
   });
 
+  it('captures at most twice in the first second of a rapid four-pick burst', async () => {
+    const { screenshotter, captureTab } = budgetedScreenshotter();
+    setElementScreenshotter(screenshotter);
+    const picks = ['first', 'second', 'third', 'fourth'].map((name) => ({
+      ...sampleFeedback(),
+      elements: [pickedElement(`button#${name}`, name)],
+    }));
+
+    const results = await Promise.all(picks.map((item, index) => captured(item, 1, { index })));
+
+    expect(results).toEqual([{ ok: true }, { ok: true }, { ok: true }, { ok: true }]);
+    expect(captureTab).toHaveBeenCalledTimes(2);
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual([
+      'button#first',
+      'button#second',
+      'button#third',
+      'button#fourth',
+    ]);
+    expect(pending?.elements.map((entry) => entry.extras?.screenshot !== undefined)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it('waits for a token before a lone pick', async () => {
+    const { screenshotter, captureTab, budget, sleeps } = budgetedScreenshotter();
+    budget.tryAcquire();
+    budget.tryAcquire();
+    setElementScreenshotter(screenshotter);
+
+    await expect(captured(sampleFeedback(), 1, { index: 0 })).resolves.toEqual({ ok: true });
+
+    expect(captureTab).toHaveBeenCalledTimes(1);
+    expect(sleeps).toEqual([CAPTURE_WINDOW_MS + 1]);
+    expect((await getPendingFeedback(1))?.elements[0]?.extras?.screenshot).toBeDefined();
+  });
+
+  it('keeps the fifth element without a capture', async () => {
+    const captureFor = vi.fn<ElementScreenshotter['captureFor']>(async () => ({
+      dataUrl: 'data:image/png;base64,BBBB',
+      width: 10,
+      height: 10,
+    }));
+    setElementScreenshotter({ captureFor });
+
+    await expect(
+      captured({ ...sampleFeedback(), elements: [pickedElement('button#fifth', 'Fifth')] }, 1, { index: 4 }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(captureFor).not.toHaveBeenCalled();
+    expect((await getPendingFeedback(1))?.elements[0]?.extras).toBeUndefined();
+  });
+
+  it('allows waiting only for the first pick of a set', async () => {
+    const captureFor = vi.fn<ElementScreenshotter['captureFor']>(async () => null);
+    setElementScreenshotter({ captureFor });
+    const item = sampleFeedback();
+
+    await captured(item, 1, { index: 0 });
+    await captured(item, 1, { index: 1 });
+    await captured(item, 1, { index: 3 });
+
+    expect(captureFor.mock.calls.map(([, , options]) => options)).toEqual([
+      { allowWait: true },
+      { allowWait: false },
+      { allowWait: false },
+    ]);
+  });
+
   it('keeps the content-script extras when the screenshot lands', async () => {
     const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
     setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
@@ -442,10 +535,14 @@ describe('picker messaging', () => {
     const item = sampleFeedback();
 
     await expect(captured(item, 1, { windowId: 7 })).resolves.toEqual({ ok: true });
-    expect(captureFor).toHaveBeenCalledWith(item, {
-      windowId: 7,
-      isVisible: expect.any(Function),
-    });
+    expect(captureFor).toHaveBeenCalledWith(
+      item,
+      {
+        windowId: 7,
+        isVisible: expect.any(Function),
+      },
+      { allowWait: true },
+    );
   });
 
   it('checks the sender tab against the visible tab before capturing', async () => {

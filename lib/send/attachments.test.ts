@@ -74,4 +74,39 @@ describe('element attachments', () => {
   it('returns nothing when no element has a screenshot', () => {
     expect(elementAttachments([capture('a'), capture('b')])).toEqual([]);
   });
+
+  it('caps a five-element set at four attachments', () => {
+    const attachments = elementAttachments([
+      capture('a', 'data:image/png;base64,AAAA'),
+      capture('b', 'data:image/png;base64,BBBB'),
+      capture('c', 'data:image/png;base64,CCCC'),
+      capture('d', 'data:image/png;base64,DDDD'),
+      capture('e', 'data:image/png;base64,EEEE'),
+    ]);
+
+    expect(attachments.map((attachment) => attachment.name)).toEqual([
+      'element-1.png',
+      'element-2.png',
+      'element-3.png',
+      'element-4.png',
+    ]);
+    expect(attachments.map((attachment) => attachment.uri)).toEqual([
+      'data:image/png;base64,AAAA',
+      'data:image/png;base64,BBBB',
+      'data:image/png;base64,CCCC',
+      'data:image/png;base64,DDDD',
+    ]);
+  });
+
+  it('keeps the element ordinal when earlier elements have no shot', () => {
+    const attachments = elementAttachments([
+      capture('a'),
+      capture('b'),
+      capture('c'),
+      capture('d'),
+      capture('e', 'data:image/png;base64,EEEE'),
+    ]);
+
+    expect(attachments.map((attachment) => attachment.name)).toEqual(['element-5.png']);
+  });
 });

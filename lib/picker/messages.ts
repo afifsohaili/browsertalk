@@ -6,6 +6,7 @@ import {
   queuePendingCapture,
 } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
+import { MAX_ELEMENT_ATTACHMENTS } from './limits';
 import {
   isArmPickerResult,
   isCaptureResult,
@@ -15,6 +16,7 @@ import {
   type CaptureResult,
   type PickerMessage,
 } from './protocol';
+import { createCaptureBudget } from './capture-budget';
 import { createElementScreenshotter, cropScreenshot, type ElementScreenshotter } from './screenshot';
 
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
@@ -26,14 +28,18 @@ const INVALID_INDEX = 'The captured element index was invalid';
 const CONTEXT_MENU_ID = 'arm-picker';
 const NO_TAB = -1;
 
+const captureBudget = createCaptureBudget({
+  now: () => Date.now(),
+  sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+});
+
 const defaultScreenshotter = createElementScreenshotter({
   captureTab: (windowId) =>
     windowId === undefined
       ? browser.tabs.captureVisibleTab({ format: 'png' })
       : browser.tabs.captureVisibleTab(windowId, { format: 'png' }),
   crop: cropScreenshot,
-  now: () => Date.now(),
-  sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  budget: captureBudget,
 });
 
 let activeScreenshotter: ElementScreenshotter = defaultScreenshotter;
@@ -78,10 +84,17 @@ async function capturePick(
   const tabId = context.tabId;
   if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
 
-  const screenshot = await activeScreenshotter.captureFor(feedback, {
-    windowId: context.windowId,
-    isVisible: () => isSenderTabVisible(tabId, context.windowId),
-  });
+  const screenshot =
+    elementIndex < MAX_ELEMENT_ATTACHMENTS
+      ? await activeScreenshotter.captureFor(
+          feedback,
+          {
+            windowId: context.windowId,
+            isVisible: () => isSenderTabVisible(tabId, context.windowId),
+          },
+          { allowWait: elementIndex === 0 },
+        )
+      : null;
   if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
 
   await persistPendingCapture(tabId, feedback, elementIndex, screenshot);

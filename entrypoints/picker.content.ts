@@ -16,8 +16,10 @@ function chipLabel(feedback: PickerFeedback): string {
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
+    let withOverlayHidden: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation();
+
     const submission = createElementSubmission({
-      notify: notifyCaptured,
+      notify: (feedback, index) => withOverlayHidden(() => notifyCaptured(feedback, index)),
       remove: requestRemoveElement,
       send: ({ comment, page, captureID, elementCount }) =>
         requestQueueComment(comment, page, captureID, elementCount),
@@ -60,6 +62,7 @@ export default defineContentScript({
     });
 
     endSet = session.end;
+    withOverlayHidden = session.withOverlayHidden;
 
     browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
       if (isPickerMessage(message) && message.type === 'picker/arm') {

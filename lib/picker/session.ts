@@ -1,5 +1,6 @@
 import { assembleFeedback, formatElementLabel } from './collect';
 import type { PickerFeedback } from './facts';
+import { createOverlayHolds } from './overlay-visibility';
 import { formatPickCount, modifierLabel } from './platform';
 import { readCapture } from './read';
 import { watchWindowRoutes } from './route';
@@ -38,6 +39,7 @@ export interface PickerSession {
   toggle: () => boolean;
   disarm: () => void;
   end: () => void;
+  withOverlayHidden: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
 export function createPickerSession(options: PickerSessionOptions): PickerSession {
@@ -55,6 +57,17 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
   let clearButton: HTMLButtonElement | null = null;
   let previousCursor = '';
   let stopRouteWatch: (() => void) | null = null;
+
+  const overlay = createOverlayHolds({
+    hide: () => setOverlayHidden(true),
+    show: () => setOverlayHidden(false),
+  });
+
+  function setOverlayHidden(hidden: boolean): void {
+    const value = hidden ? 'hidden' : '';
+    if (host !== null) host.style.visibility = value;
+    if (pill !== null) pill.style.visibility = value;
+  }
 
   function arm(): void {
     if (armed) return;
@@ -346,6 +359,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
     host.append(boxes, hoverBox, hoverLabel, pill, cursorStyle);
     document.documentElement.append(host);
+    if (overlay.count() > 0) setOverlayHidden(true);
   }
 
   function render(): void {
@@ -450,5 +464,5 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     pill.append(dot, text, clearButton);
   }
 
-  return { isArmed: () => armed, toggle, disarm, end };
+  return { isArmed: () => armed, toggle, disarm, end, withOverlayHidden: overlay.guard };
 }

@@ -165,6 +165,25 @@ describe('screenshot stripping', () => {
     expect(twice.facts.elements?.filter((entry) => entry.extras?.screenshot !== undefined)).toHaveLength(1);
   });
 
+  it('strips a five-element set from the fourth element backward', () => {
+    const four = withoutScreenshot(setItem([true, true, true, true, false]));
+    expect(four.facts.elements?.map((entry) => entry.extras?.screenshot !== undefined)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+    ]);
+
+    const two = withoutScreenshot(four);
+    const one = withoutScreenshot(two);
+    const none = withoutScreenshot(one);
+
+    expect(two.facts.elements?.filter((entry) => entry.extras?.screenshot !== undefined)).toHaveLength(2);
+    expect(one.facts.elements?.filter((entry) => entry.extras?.screenshot !== undefined)).toHaveLength(1);
+    expect(none.facts.elements?.every((entry) => entry.extras?.screenshot === undefined)).toBe(true);
+  });
+
   it('leaves a page-only or screenshot-free item alone', () => {
     const page = buildPageOutboxItem({ url: 'https://example.com/', title: 'Example' }, '', {
       id: 'ob_page',

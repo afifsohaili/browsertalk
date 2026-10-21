@@ -172,4 +172,36 @@ describe('delivery-ready budget accounting', () => {
 
     expect(deliveryReadySize([two]) - deliveryReadySize([one])).toBeGreaterThan(100);
   });
+
+  it('counts all four attachments and ignores a fifth shot', () => {
+    function withShots(count: number): OutboxItem {
+      const item = pageItem('');
+      item.facts.elements = Array.from({ length: count }, (_, index) => ({
+        element: {
+          tag: 'div',
+          id: null,
+          classes: [],
+          selector: `div.item-${index + 1}`,
+          text: '',
+          attributes: {},
+          box: { x: 0, y: 0, width: 10, height: 10 },
+          viewport: { width: 1280, height: 800 },
+          scroll: { x: 0, y: 0 },
+        },
+        extras: {
+          screenshot: { dataUrl: `data:image/png;base64,${'A'.repeat(4_000)}`, width: 10, height: 10 },
+        },
+      }));
+      return item;
+    }
+
+    const third = withShots(3);
+    const fourth = withShots(4);
+    const fifth = withShots(5);
+    const stepToFourth = deliveryReadySize([fourth]) - deliveryReadySize([third]);
+    const stepToFifth = deliveryReadySize([fifth]) - deliveryReadySize([fourth]);
+
+    expect(stepToFourth).toBeGreaterThan(4_000);
+    expect(stepToFifth).toBeLessThan(stepToFourth * 0.75);
+  });
 });
