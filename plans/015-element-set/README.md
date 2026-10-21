@@ -28,7 +28,7 @@ Policy: one ticket = one conventional commit; tests ship with it. Vocabulary: `C
 ## Divergences
 
 - Clear, blur, and route changes are silent. The prototype's transient clear toast was not built (optional in `issues/03-visual-affordance.md`).
-- SPA route detection: the picker patches `pushState`/`replaceState` from the isolated content-script world. The live smoke saw `popstate` clear the set; a page-world `pushState` did not. `pushState`-only SPA navigation stays unconfirmed (recorded in `product.md` open questions). No code change in 015f. Fixed in 016a with a MAIN-world bridge.
+- SPA route detection: the picker patched `pushState`/`replaceState` from the isolated content-script world, which the page never calls. The live smoke saw `popstate` clear the set; a page-world `pushState` did not. Fixed in 016a with a MAIN-world bridge, confirmed live there (page-world `pushState` and `replaceState` both clear and close).
 - Live shot cap: five rapid picks attached 2 screenshots, not 4. The 2-per-1s budget spends first; the cap is "at most four", unit-tested (five shots → four attachments) and not exercised live. No quota error appeared.
 
 ## Next-phase must-know

@@ -1,6 +1,6 @@
 # opencode Browsertalk — product definition
 
-Status: MVP shipped through phase 015 (element sets). Decisions locked 2026-10-10; element-set decisions locked 2026-10-21. Phase tracking lives in `plans/` — one folder and ticket per phase.
+Status: MVP shipped through phase 016 (015 element sets, 016 review fixes). Decisions locked 2026-10-10; element-set decisions locked 2026-10-21. Phase tracking lives in `plans/` — one folder and ticket per phase.
 
 ## What it is
 
@@ -69,12 +69,15 @@ One feedback can carry up to five elements from the same page. The comment is wr
 | Plain click with a set | Opens the composer; does not add the clicked element |
 | Clear in the count pill, or Escape | Discards the set and disarms |
 | Window blur | Discards the set and disarms |
-| Route change (`pushState`, `replaceState`, `popstate`, `hashchange`) | Discards the set and disarms; an open composer closes |
+| Route change (`pushState`, `replaceState`, `popstate`, `hashchange`) | Discards the set and disarms; an open composer closes and the background pending is cleared |
 | Chip × in the composer | Removes one element before sending |
+| Composer dismissed (Escape) | Drops the unsent set and clears the background pending |
 
-Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer and panel rows show `1 element` or `N elements`.
+Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer count line and the panel outbox/sent rows read `1 element` or `N elements`.
 
-Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue.
+Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue. At most four shots attach per feedback.
+
+Route detection needs no extra permission. A MAIN-world content script (`picker-route.content.ts`, `document_start`) wraps the page's own `history.pushState`/`replaceState` and dispatches one event; the isolated picker listens for it plus `popstate`/`hashchange`. A page-world `pushState` closes an open composer and clears an armed set, confirmed live (016a).
 
 ## What gets captured
 
@@ -137,7 +140,7 @@ Page: <full URL including query params>
 - One indented `extras` line per element, only when component, ARIA, or styles were captured.
 - No `Sent by Browsertalk` footer. `SentItem.sentAt` still drives the panel timestamp.
 - `Comment:` has no trailing space when the comment is empty; the `title` line is dropped when the title is empty.
-- Screenshots attach as `element-1.png` … in pick order, at most four. The byte budget counts every attachment; a storage-quota drop strips from the last element backward.
+- Screenshots attach as `element-1.png` … in pick order, at most four. The byte budget counts every attachment; a storage-quota drop strips the last element's screenshot, then the previous one, repeating until the item fits.
 
 ## Session model
 
@@ -165,6 +168,7 @@ Defaults: opencode → per-day. The seam must abstract the six axes found in res
 │ side panel (Vue 3)              UI, outbox, sent                │
 │ options page                    backend · server · strategy     │
 │ picker.content.ts               element picking + facts         │
+│ picker-route.content.ts         MAIN-world route bridge         │
 │ background                      router · registries · auth      │
 └────────────────────────────┬───────────────────────────────────┘
                              │ feedback
@@ -233,6 +237,8 @@ Pairing code creation requires an authenticated client, so the user runs one com
 | `<all_urls>` (host) | Picker on any dev site; element screenshots |
 | `commands.arm-picker` | `Alt+Shift+F` shortcut |
 
+The MAIN-world route bridge (`picker-route.content.ts`) runs under the existing host access; it adds no permission. No `webNavigation` permission.
+
 ## Security
 
 - The pairing token lives in extension storage only. Never in code, logs, or the page.
@@ -258,8 +264,7 @@ Pairing code creation requires an authenticated client, so the user runs one com
 ## Open questions
 
 - Pi bridge shape: new daemon vs. an existing pi server mode. Unconfirmed.
-- Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`).
-- SPA route changes: a MAIN-world content script wraps page `pushState`/`replaceState` and dispatches one route event; the isolated picker also listens to `popstate`/`hashchange`. Unit-tested against a fake history; the live `pushState` case in a real SPA is unconfirmed.
+- Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`). The 015 live run attached 2 shots; the four-shot cap is unit-tested (five shots → four attachments).
 - Component-name detection coverage (React 19 dev fibers, Vue production builds).
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.

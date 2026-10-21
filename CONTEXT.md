@@ -10,8 +10,8 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Facts | The data captured about the page and elements, attached to a feedback. Split into core facts and extras |
 | Core facts | The always-captured subset: URL, title, element tag/id/classes, selector, text, attributes, box |
 | Extras | Optional captures: element screenshot, component name, computed styles + ARIA |
-| Element set | The ordered elements one feedback carries, one to five, all from the same page and tab. Click order is pick order |
-| Pick state | The picker's live element set while it is armed. `createPickState` owns it; finish turns it into a feedback |
+| Element set | The ordered elements one feedback carries, one to five, all from the same page and tab. Click order is pick order. The composer and panel rows read `1 element` or `N elements`; up to four screenshots attach |
+| Pick state | The picker's live element set while it is armed. `createPickState` owns it; finish turns it into a feedback; dismiss, route change, or composer close clears it and the background pending |
 | Multi-pick | Holding Cmd (macOS) or Ctrl elsewhere while clicking to build an element set |
 | Picker | The content-script mode for selecting elements. Hover highlights; a plain click picks one; Cmd/Ctrl+click accumulates a set |
 | Arm | Verb: turn the picker on ("arm the picker", "armed") |
@@ -57,6 +57,11 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | `registerSessionStrategy`, `getSessionStrategy`, `listSessionStrategies` | `lib/session-strategy/registry.ts` |
 | `createPickState`, `pickAction`, `MAX_PICKED_ELEMENTS` | `lib/picker/pick-state.ts` |
 | `MAX_ELEMENT_ATTACHMENTS` | `lib/picker/limits.ts` |
+| `installRouteEmitter`, `watchRouteChanges`, `watchWindowRoutes` | `lib/picker/route.ts` |
+| `picker-route.content.ts` | The MAIN-world route bridge content script entrypoint |
+| `respondToPickerRequest`, `registerPickerMessageHandler` | `lib/picker/handler.ts` — the background layer |
+| `formatElementCount` | `lib/element-count.ts` — the `1 element` / `N elements` rule |
+| `createPerTabQueue` | `lib/per-tab-queue.ts` — serialises capture and pending writes per tab |
 | `picker.content.ts` | The content script entrypoint |
 
 File naming follows the seam convention: `interface.ts` (contract), `registry.ts`, one file per adapter, `fake.ts`, `builtins.ts`. The session-strategy seam reuses the shape: one file per strategy (`per-day.ts`, `sticky.ts`).

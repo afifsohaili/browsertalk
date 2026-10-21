@@ -2,7 +2,7 @@
 
 Chrome extension that sends browser feedback straight into an opencode session bound to the right project. You browse, point at or describe what looks wrong, and the feedback lands in opencode with the facts the agent needs to find the code.
 
-Status: MVP complete through phase 015 (pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
+Status: MVP complete through phase 016 (015 element sets, 016 review fixes; pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
 
 ## Surfaces
 
@@ -25,11 +25,13 @@ Limits and exit paths:
 |---|---|
 | Elements per feedback | 5 |
 | Screenshots per feedback | 4, best effort (Chrome allows 2 captures per second; fast picks skip the shot) |
+| Count wording | `1 element` / `N elements` in the composer and panel rows |
 | Scope | One page and tab; click order is kept |
 | After the composer opens | No adding; chip `×` is the only change |
 | Clear in the pill, or Escape | Discards the set and disarms |
 | Window blur | Discards the set and disarms |
-| Navigation (`popstate`, `hashchange`) | Discards the set; closes an open composer |
+| Route change (`pushState`, `replaceState`, `popstate`, `hashchange`) | Discards the set and closes an open composer; the background pending is cleared |
+| Composer dismissed (Escape) | Drops the unsent set and clears the background pending |
 
 ## Architecture
 
@@ -38,6 +40,7 @@ Limits and exit paths:
 │ side panel (Vue 3)              UI, outbox, sent                │
 │ options page                    backend · server · strategy     │
 │ picker.content.ts               element picking + facts         │
+│ picker-route.content.ts         MAIN-world route bridge         │
 │ background                      router · registries · auth      │
 └────────────────────────────┬───────────────────────────────────┘
                              │ feedback
@@ -50,7 +53,7 @@ Limits and exit paths:
                              └── fake.ts ── in-memory (tests, offline use)
 ```
 
-WXT + Vue 3 + TypeScript. The background service worker is the only client of the opencode server; the content script talks only to the background. Feedback routes through a session-strategy seam (`per-day` / `sticky`) and an agent-backend registry (`opencode`, `fake`). Adding a backend is one adapter file plus one registration line.
+WXT + Vue 3 + TypeScript. The background service worker is the only client of the opencode server; the content script talks only to the background. A second content script, `picker-route.content.ts`, runs in the MAIN world at `document_start` and reports page-world `pushState`/`replaceState`; it adds no permission. Feedback routes through a session-strategy seam (`per-day` / `sticky`) and an agent-backend registry (`opencode`, `fake`). Adding a backend is one adapter file plus one registration line.
 
 ## Where it connects
 

@@ -49,4 +49,4 @@ Divergences:
 - Both queues pass `continueOnError: true`: that is what both old queues did in effect, because each stored a sanitised tail. The `false` policy is implemented and tested, but no production queue uses it; using it for mutations would skip writes queued behind a quota error.
 - The commit also carries the 016a/016b plan-status edits and the 016d/016e ticket split that were already uncommitted in the worktree. No 016a/016b code is re-committed.
 
-sha recorded by 016e.
+**Sha:** `5be28b0`.

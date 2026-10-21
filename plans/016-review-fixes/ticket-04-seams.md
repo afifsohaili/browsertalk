@@ -40,4 +40,4 @@ Tests: `bun run compile` pass; `bun run test` 65 files / 962 tests pass; `bun ru
 
 Divergences: none. No split reverted.
 
-sha recorded by 016e.
+**Sha:** `cd1d9fa`.

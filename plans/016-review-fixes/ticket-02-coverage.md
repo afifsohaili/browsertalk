@@ -49,5 +49,5 @@
 - "Composer close clears the submission" is asserted through `wiring.submission.submit` returning `NO_PICKED_ELEMENT_ERROR` after the close. Re-arming also clears, so a re-arm probe cannot isolate the close path. Confirmed red with `submission.clear()` removed and green with it restored.
 - `createPickerWiring` returns `submission` and `composer` alongside `session`. The entrypoint uses only `session` and `arm`; the other two are the composition root's handles for tests.
 
-**Sha:** recorded by 016e.
+**Sha:** `8e9f315`.
 
