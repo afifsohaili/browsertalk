@@ -8,11 +8,12 @@ Source: two-axis review of `be30179..e3944f0` (2026-10-21): Standards, Spec, and
 | 016b | `ticket-02-coverage.md` | shipped · 8e9f315 | 016a |
 | 016c | `ticket-03-standards.md` | shipped · 5be28b0 | 016b |
 | 016d | `ticket-04-seams.md` | shipped · cd1d9fa | 016c |
-| 016e | `ticket-05-docs-review.md` | shipped · this docs commit | 016a–016d |
+| 016e | `ticket-05-docs-review.md` | shipped · 5b81c5a | 016a–016d |
+| 016f | `ticket-06-residuals.md` | shipped · this commit | 016e |
 
 Policy: one ticket = one conventional commit; tests ship with it. The 015 history notes (015a's two commits, docs inside the first feature commit) are recorded, not rewritten.
 
-016e closes the phase: docs, the live CDP smoke, and the compile/test/build run. The final two-axis Standards + Spec re-review runs after the 016e commit, from the orchestrator.
+016e ran the docs, the live CDP smoke, and the compile/test/build run. The final two-axis Standards + Spec re-review found the residuals closed in 016f; that commit closes the phase. `smoke.md` holds the reproducible CDP procedure.
 
 ## Test matrix
 
@@ -24,3 +25,4 @@ Policy: one ticket = one conventional commit; tests ship with it. The 015 histor
 | Panel meta | `1 element` / `N elements` wording |
 | DOM sessions | happy-dom: picker, composer, wiring |
 | Standards | rename, shared queue/count helper, dead code removed |
+| Error surfacing | removal + clear failures warn; composer chip stays on failure |

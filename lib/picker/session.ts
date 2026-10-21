@@ -90,21 +90,21 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
   function disarm(): void {
     if (!armed && setID === null) return;
-    const cleared = setID;
-    setID = null;
-    picks.clear();
-    stopPicking();
-    stopWatching();
-    options.onClear(cleared);
+    options.onClear(clearSet());
   }
 
   function end(): void {
+    const cleared = clearSet();
+    if (cleared !== null) options.onClear(cleared);
+  }
+
+  function clearSet(): string | null {
     const cleared = setID;
-    picks.clear();
     setID = null;
+    picks.clear();
     stopPicking();
     stopWatching();
-    if (cleared !== null) options.onClear(cleared);
+    return cleared;
   }
 
   function toggle(): boolean {
@@ -241,11 +241,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
   function onRouteChange(): void {
     if (!armed && setID === null) return;
 
-    const cleared = setID;
-    setID = null;
-    picks.clear();
-    stopPicking();
-    stopWatching();
+    const cleared = clearSet();
     options.onRouteChange();
     options.onClear(cleared);
   }

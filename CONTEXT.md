@@ -11,7 +11,7 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Core facts | The always-captured subset: URL, title, element tag/id/classes, selector, text, attributes, box |
 | Extras | Optional captures: element screenshot, component name, computed styles + ARIA |
 | Element set | The ordered elements one feedback carries, one to five, all from the same page and tab. Click order is pick order. The composer and panel rows read `1 element` or `N elements`; up to four screenshots attach |
-| Pick state | The picker's live element set while it is armed. `createPickState` owns it; finish turns it into a feedback; dismiss, route change, or composer close clears it and the background pending |
+| Pick state | The picker's live element set, spanning arm → finish → composer. `createPickState` owns it; finish hands it to the composer as chips; sending, dismissing, route change, or composer close clears it and the background pending |
 | Multi-pick | Holding Cmd (macOS) or Ctrl elsewhere while clicking to build an element set |
 | Picker | The content-script mode for selecting elements. Hover highlights; a plain click picks one; Cmd/Ctrl+click accumulates a set |
 | Arm | Verb: turn the picker on ("arm the picker", "armed") |

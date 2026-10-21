@@ -75,9 +75,9 @@ One feedback can carry up to five elements from the same page. The comment is wr
 
 Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer count line and the panel outbox/sent rows read `1 element` or `N elements`.
 
-Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue. At most four shots attach per feedback.
+Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue. At most four shots attach per feedback. The 016 live smoke attached 4 shots on five picks 1.5 s apart; a faster 015 burst attached 2.
 
-Route detection needs no extra permission. A MAIN-world content script (`picker-route.content.ts`, `document_start`) wraps the page's own `history.pushState`/`replaceState` and dispatches one event; the isolated picker listens for it plus `popstate`/`hashchange`. A page-world `pushState` closes an open composer and clears an armed set, confirmed live (016a).
+Route detection needs no extra permission. A MAIN-world content script (`picker-route.content.ts`, `document_start`) wraps the page's own `history.pushState`/`replaceState` and dispatches one event; the isolated picker listens for it plus `popstate`/`hashchange`. A page-world `pushState` closes an open composer and clears an armed set, confirmed live (016a). A page script can dispatch the same event by name and clear an armed set; accepted as a nuisance — it exposes no data and the worst case is a discarded unsent set.
 
 ## What gets captured
 
@@ -264,7 +264,7 @@ The MAIN-world route bridge (`picker-route.content.ts`) runs under the existing 
 ## Open questions
 
 - Pi bridge shape: new daemon vs. an existing pi server mode. Unconfirmed.
-- Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`). The 015 live run attached 2 shots; the four-shot cap is unit-tested (five shots → four attachments).
+- Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`). Live runs: 016e attached 4 shots on five picks 1.5 s apart; 015 attached 2 on a faster burst. The four-attachment cap is unit-tested (five shots → four attachments). Procedure: `plans/016-review-fixes/smoke.md`.
 - Component-name detection coverage (React 19 dev fibers, Vue production builds).
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.

@@ -15,7 +15,7 @@ export interface PickerWiringDeps {
     captureID: string,
     elementCount: number,
   ) => Promise<ComposerQueueResult>;
-  notifyCleared: (setID: string) => Promise<unknown>;
+  notifyCleared: (setID: string) => Promise<CaptureResult>;
   page: () => ComposerPageRequest;
 }
 
@@ -54,11 +54,22 @@ export function createPickerWiring(deps: PickerWiringDeps): PickerWiring {
       });
     },
     onRemove: (_setID, index) => {
-      void submission.remove(index);
+      submission.remove(index).then(
+        (outcome) => {
+          if (!outcome.ok) reportFailure('remove the element', outcome.error);
+        },
+        (error: unknown) => reportFailure('remove the element', error),
+      );
     },
     onClear: (setID) => {
       submission.clear();
-      if (setID !== null) void deps.notifyCleared(setID);
+      if (setID === null) return;
+      deps.notifyCleared(setID).then(
+        (outcome) => {
+          if (!outcome.ok) reportFailure('clear the pending set', outcome.error);
+        },
+        (error: unknown) => reportFailure('clear the pending set', error),
+      );
     },
     onRouteChange: () => composer.close(),
   });
@@ -77,4 +88,9 @@ export function createPickerWiring(deps: PickerWiringDeps): PickerWiring {
 function chipLabel(feedback: PickerFeedback): string {
   const facts = feedback.elements[0]?.element;
   return facts === undefined ? 'element' : formatChipLabel(facts);
+}
+
+function reportFailure(action: string, reason: unknown): void {
+  const detail = reason instanceof Error ? reason.message : String(reason);
+  console.warn(`Browsertalk: couldn't ${action} — ${detail}`);
 }

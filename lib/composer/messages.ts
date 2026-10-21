@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { captureQueuedDestination } from '@/lib/connection/destinations';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
+import { BACKGROUND_UNAVAILABLE, sendSafely } from '@/lib/runtime-message';
 import { requestSend } from '@/lib/send/trigger';
 import { isQuotaExceeded } from '@/lib/storage/budgets';
 import { clearPendingFeedback, getPendingFeedback, removePendingElement } from '@/lib/storage/pending';
@@ -24,7 +25,6 @@ import {
   type OutboxCountResult,
 } from './protocol';
 
-const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_ACTIVE_PAGE = 'No active page to comment on';
 const NO_PAGE_URL = "Can't read this page's URL";
 export const SET_COUNT_MISMATCH_ERROR = 'The element set changed — pick again';
@@ -194,12 +194,4 @@ export function onOutboxChanged(listener: () => void): () => void {
   };
   browser.runtime.onMessage.addListener(handler);
   return () => browser.runtime.onMessage.removeListener(handler);
-}
-
-async function sendSafely(message: ComposerRequest): Promise<unknown> {
-  try {
-    return await browser.runtime.sendMessage(message);
-  } catch {
-    return null;
-  }
 }

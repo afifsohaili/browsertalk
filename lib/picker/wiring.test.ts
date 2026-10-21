@@ -101,6 +101,7 @@ afterEach(() => {
   document.getElementById(PICKER_OVERLAY_ID)?.remove();
   document.getElementById(COMPOSER_HOST_ID)?.remove();
   document.body.innerHTML = '';
+  vi.restoreAllMocks();
 });
 
 describe('picker wiring arm', () => {
@@ -204,6 +205,62 @@ describe('picker wiring finish', () => {
 
     expect(stub.removeElement).toHaveBeenCalledWith(stub.notifyCaptured.mock.calls[0]?.[0].id, 0);
   });
+
+  it('keeps the chip and shows the error when a chip removal fails', async () => {
+    const stub = spies();
+    stub.removeElement.mockResolvedValue({ ok: false, error: 'No picked element to comment on' });
+    const wiring = wiringFor(stub);
+
+    armAndPick(mount('checkout', 'Checkout'), mount('title', 'Plans'));
+
+    const remove = Array.from(composer()?.querySelectorAll('button[aria-label^="Remove "]') ?? [])[0]!;
+    remove.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    await vi.waitFor(() => expect(composer()?.textContent).toContain('No picked element to comment on'));
+
+    expect(chipLabels()).toEqual(['button#checkout · "Checkout"', 'button#title · "Plans"']);
+    expect(wiring.composer.isOpen()).toBe(true);
+  });
+});
+
+describe('picker wiring removal failures', () => {
+  it('warns and keeps the pending element when a modifier removal fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stub = spies();
+    stub.removeElement.mockResolvedValue({ ok: false, error: 'No picked element to comment on' });
+    const wiring = wiringFor(stub);
+    const button = mount('checkout');
+
+    wiring.arm();
+    pick(button);
+    pick(button);
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+
+    expect(warn).toHaveBeenCalledWith(
+      "Browsertalk: couldn't remove the element — No picked element to comment on",
+    );
+    expect(stub.removeElement).toHaveBeenCalledWith(stub.notifyCaptured.mock.calls[0]?.[0].id, 0);
+    expect(wiring.session.isArmed()).toBe(true);
+  });
+
+  it('warns when the modifier removal throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stub = spies();
+    stub.removeElement.mockRejectedValue(new Error('Receiving end does not exist'));
+    const wiring = wiringFor(stub);
+
+    wiring.arm();
+    const button = mount('checkout');
+    pick(button);
+    pick(button);
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+
+    expect(warn).toHaveBeenCalledWith(
+      "Browsertalk: couldn't remove the element — Receiving end does not exist",
+    );
+  });
 });
 
 describe('picker wiring close', () => {
@@ -253,5 +310,37 @@ describe('picker wiring close', () => {
     expect(composer()).toBeNull();
     expect(stub.notifyCleared).toHaveBeenCalledTimes(1);
     expect(stub.notifyCleared).toHaveBeenCalledWith(setID);
+  });
+
+  it('warns when the background rejects the clear', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stub = spies();
+    stub.notifyCleared.mockRejectedValue(new Error('Receiving end does not exist'));
+    const wiring = wiringFor(stub);
+
+    armAndPick(mount('checkout'));
+    wiring.composer.close();
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+
+    expect(warn).toHaveBeenCalledWith(
+      "Browsertalk: couldn't clear the pending set — Receiving end does not exist",
+    );
+  });
+
+  it('warns when the background reports a failed clear', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stub = spies();
+    stub.notifyCleared.mockResolvedValue({ ok: false, error: 'Background unavailable' } as CaptureResult);
+    const wiring = wiringFor(stub);
+
+    armAndPick(mount('checkout'));
+    wiring.composer.close();
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
+
+    expect(warn).toHaveBeenCalledWith(
+      "Browsertalk: couldn't clear the pending set — Background unavailable",
+    );
   });
 });

@@ -6,16 +6,13 @@ export interface PickClick {
   modifier: boolean;
   selected: boolean;
   count: number;
-  limit?: number;
 }
 
 export function pickAction(click: PickClick): PickAction {
-  const limit = click.limit ?? MAX_PICKED_ELEMENTS;
-
   if (click.modifier) {
     if (click.selected) return 'remove';
-    if (click.count >= limit) return 'ignore';
-    return click.count + 1 >= limit ? 'add-and-finish' : 'add';
+    if (click.count >= MAX_PICKED_ELEMENTS) return 'ignore';
+    return click.count + 1 >= MAX_PICKED_ELEMENTS ? 'add-and-finish' : 'add';
   }
 
   return click.count === 0 ? 'add-and-finish' : 'finish';
