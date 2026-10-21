@@ -5,7 +5,7 @@ Source: two-axis review of `be30179..e3944f0` (2026-10-21): Standards, Spec, and
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 016a | `ticket-01-spec.md` | shipped · sha pending (016d) | 015 |
-| 016b | `ticket-02-coverage.md` | ready | 016a |
+| 016b | `ticket-02-coverage.md` | shipped · sha pending (016d) | 016a |
 | 016c | `ticket-03-standards.md` | ready | 016b |
 | 016d | `ticket-04-docs-review.md` | ready | 016a–016c |
 

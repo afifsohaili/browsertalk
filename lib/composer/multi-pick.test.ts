@@ -146,6 +146,43 @@ describe('multi-element set end to end', () => {
     expect(prompt).toContain('Elements (2):');
   });
 
+  it('serialises a chip removal behind a capture that is still in flight', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    setElementScreenshotter({
+      captureFor: vi.fn(async (feedback: PickerFeedback) => {
+        if (feedback.elements[0]!.element.selector === 'h1') await gate;
+        return {
+          dataUrl: shotFor(feedback.elements[0]!.element.selector),
+          width: 120,
+          height: 32,
+        };
+      }),
+    });
+
+    await capture(picked('button#start-trial', 'Start a 14-day trial'), 0);
+    const inFlight = capture(picked('h1', 'Plans that scale'), 1);
+    const removal = remove(0);
+
+    let removed = false;
+    void removal.then(() => {
+      removed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(removed).toBe(false);
+
+    release();
+    await inFlight;
+
+    await expect(removal).resolves.toEqual({ ok: true, elementCount: 1 });
+    expect((await getPendingFeedback(1))?.elements.map((entry) => entry.element.selector)).toEqual(['h1']);
+
+    await expect(queue('Only the heading', 1)).resolves.toEqual({ ok: true, outboxCount: 1 });
+    expect((await readOutbox())[0]?.facts.elements?.map((entry) => entry.element.selector)).toEqual(['h1']);
+  });
+
   it('rejects the queue when the set count no longer matches the pending set', async () => {
     await pickThreeOutOfOrder();
     await remove(1);
