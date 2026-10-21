@@ -44,6 +44,27 @@ export function formatTimestamp(iso: string, now: Date = new Date()): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
 }
 
+export function elementCountLabel(count: number | undefined): string {
+  if (count === undefined || count <= 0) return '';
+  return `${count} ${count === 1 ? 'element' : 'elements'}`;
+}
+
+export function outboxMeta(item: OutboxItem, now: Date = new Date()): string {
+  return metaLine([
+    elementCountLabel(item.facts.elements?.length),
+    formatTimestamp(item.capturedAt, now),
+    item.facts.page.title || item.facts.page.url,
+  ]);
+}
+
+export function sentMeta(entry: SentItem, now: Date = new Date()): string {
+  return metaLine([elementCountLabel(entry.elementCount), formatTimestamp(entry.sentAt, now), entry.session.title]);
+}
+
+function metaLine(parts: string[]): string {
+  return parts.filter((part) => part.length > 0).join(' · ');
+}
+
 export interface Panel {
   loaded: Ref<boolean>;
   target: Ref<PanelTarget | null>;

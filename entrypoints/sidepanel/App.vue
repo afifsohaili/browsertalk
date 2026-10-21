@@ -6,7 +6,7 @@ import ConsentGate from '@/components/ConsentGate.vue';
 import ConnectionPanel from '@/components/ConnectionPanel.vue';
 import SettingsLink from '@/components/SettingsLink.vue';
 import { useConsent } from '@/lib/consent/use-consent';
-import { formatTimestamp, targetState, usePanel } from '@/lib/panel/use-panel';
+import { outboxMeta, sentMeta, targetState, usePanel } from '@/lib/panel/use-panel';
 import { projectName } from '@/lib/session-strategy/interface';
 
 const {
@@ -217,9 +217,7 @@ const sessionText = computed(() => {
       <ul v-else class="items">
         <li v-for="item in outbox" :key="item.id" class="item outbox-item">
           <span class="item-title">{{ item.comment || '(no comment)' }}</span>
-          <span class="item-meta">
-            {{ formatTimestamp(item.capturedAt) }} · {{ item.facts.page.title || item.facts.page.url }}
-          </span>
+          <span class="item-meta">{{ outboxMeta(item) }}</span>
           <p v-if="item.error" class="item-error">{{ item.error }}</p>
           <div class="item-actions">
             <button type="button" :disabled="retrying !== null" @click="retry(item.id)">
@@ -238,7 +236,7 @@ const sessionText = computed(() => {
       <ul v-else class="items">
         <li v-for="entry in sent" :key="entry.id" class="item sent-item">
           <span class="item-title">{{ entry.comment || entry.page.title || '(no comment)' }}</span>
-          <span class="item-meta">{{ formatTimestamp(entry.sentAt) }} · {{ entry.session.title }}</span>
+          <span class="item-meta">{{ sentMeta(entry) }}</span>
         </li>
       </ul>
     </section>

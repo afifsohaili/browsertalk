@@ -8,6 +8,7 @@ import { OpenCodeBackend } from '@/lib/agent-backend/opencode';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { acceptConsent } from '@/lib/consent/consent';
 import { registerConnectionHandler } from '@/lib/connection/messages';
+import type { PickerElementCapture } from '@/lib/picker/facts';
 import { sendQueuedItem } from '@/lib/send/send';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { setToken } from '@/lib/storage/auth';
@@ -16,9 +17,10 @@ import { getStoredSession } from '@/lib/storage/sessions';
 import { writeStoredSession } from '@/lib/storage/writer';
 import { setSettings } from '@/lib/storage/settings';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
+import type { SentItem } from '@/lib/storage/sent';
 import { appendToOutbox } from '@/lib/storage/writer';
 import { registerPanelHandler } from './messages';
-import { formatTimestamp, targetState, usePanel, type Panel } from './use-panel';
+import { elementCountLabel, formatTimestamp, outboxMeta, sentMeta, targetState, usePanel, type Panel } from './use-panel';
 
 type Tab = Browser.tabs.Tab;
 
@@ -1066,6 +1068,94 @@ describe('targetState', () => {
     expect(targetState({ origin: ORIGIN, project: null, session: null })).toBe('unbound');
     expect(targetState({ origin: ORIGIN, project: DIRECTORY, session: null })).toBe('no-session');
     expect(targetState({ origin: ORIGIN, project: DIRECTORY, session: { id: 'ses_1', title: 't' } })).toBe('ready');
+  });
+});
+
+describe('elementCountLabel', () => {
+  it('names a multi-element set', () => {
+    expect(elementCountLabel(3)).toBe('3 elements');
+  });
+
+  it('names a single element', () => {
+    expect(elementCountLabel(1)).toBe('1 element');
+  });
+
+  it('names the five-element cap', () => {
+    expect(elementCountLabel(5)).toBe('5 elements');
+  });
+
+  it('shows no count for a page-only send', () => {
+    expect(elementCountLabel(0)).toBe('');
+  });
+
+  it('shows no count when the record predates element counts', () => {
+    expect(elementCountLabel(undefined)).toBe('');
+  });
+});
+
+describe('panel row meta', () => {
+  const now = new Date(2026, 9, 10, 12, 0);
+  const capturedAt = new Date(2026, 9, 10, 9, 5).toISOString();
+
+  function capture(selector: string): PickerElementCapture {
+    return {
+      element: {
+        tag: 'button',
+        id: null,
+        classes: [],
+        selector,
+        text: 'Checkout',
+        attributes: {},
+        box: { x: 0, y: 0, width: 10, height: 10 },
+        viewport: { width: 1280, height: 800 },
+        scroll: { x: 0, y: 0 },
+      },
+    };
+  }
+
+  const page = { url: PAGE_URL, path: '/cart', query: [], title: 'Cart' };
+
+  function outboxRow(elements?: PickerElementCapture[]): OutboxItem {
+    return item({ capturedAt, facts: { page, ...(elements === undefined ? {} : { elements }) } });
+  }
+
+  function sentRow(elementCount?: number): SentItem {
+    return {
+      id: 'ob_1',
+      comment: 'Checkout button is broken',
+      sentAt: capturedAt,
+      session: { id: 'ses_1', title: 'Browsertalk · example' },
+      page: { title: 'Cart', url: PAGE_URL },
+      ...(elementCount === undefined ? {} : { elementCount }),
+    };
+  }
+
+  it('puts the outbox element count before time and page title', () => {
+    const row = outboxRow([capture('button#a'), capture('button#b'), capture('button#c')]);
+
+    expect(outboxMeta(row, now)).toBe('3 elements · 09:05 · Cart');
+  });
+
+  it('puts the sent element count before time and session title', () => {
+    expect(sentMeta(sentRow(3), now)).toBe('3 elements · 09:05 · Browsertalk · example');
+  });
+
+  it('shows no count for a page-only outbox row', () => {
+    expect(outboxMeta(outboxRow(), now)).toBe('09:05 · Cart');
+  });
+
+  it('shows no count for a page-only sent record', () => {
+    expect(sentMeta(sentRow(0), now)).toBe('09:05 · Browsertalk · example');
+  });
+
+  it('shows no count for an old sent record', () => {
+    expect(sentMeta(sentRow(), now)).toBe('09:05 · Browsertalk · example');
+  });
+
+  it('falls back to the page url when the outbox page has no title', () => {
+    const row = item({ capturedAt, facts: { page: { ...page, title: '' } } });
+
+    expect(outboxMeta(row, now)).toBe('09:05 · https://example.com/cart?step=2');
   });
 });
 
