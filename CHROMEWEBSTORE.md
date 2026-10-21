@@ -21,8 +21,9 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 > Browsertalk turns browser feedback into opencode work. Browse and test your app, point at the element that looks wrong (or comment on the whole page), and the feedback lands in the opencode session bound to that project — with the URL, selector, element facts, and an optional screenshot crop the agent needs to find the code.
 >
 > - Point at an element or comment on the page: hover, click, type, send.
+> - Point at several elements on one page: hold Cmd (Ctrl on Windows/Linux), click up to five, comment once, send one feedback with an element set.
 > - Facts captured automatically: URL and query parameters, page title, tag and classes, CSS selector, text, key attributes, bounding box.
-> - Optional element screenshot crop, detected component name, and a small ARIA/computed-style subset.
+> - Optional element screenshot crop per element (up to four), detected component name, and a small ARIA/computed-style subset.
 > - Sessions per project: one per day, or sticky, configurable per backend.
 > - Queue delivery: feedback waits for the agent to be idle instead of interrupting it.
 > - Remote servers: off by default; settings can allow a server on another machine (encrypted links like Tailscale or an SSH tunnel recommended).
@@ -42,10 +43,10 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 ### Permission justifications (exact text, one per dashboard field)
 
 - **storage**: Stores the extension's own settings, the pairing token for the user's local opencode server, origin-to-project bindings, session references, the queued outbox, and recent sent summaries. All of it stays in the browser on the user's machine.
-- **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the comment box for page-level feedback, the outbox, and the sent list.
+- **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the comment box for page-level feedback, the outbox, and the sent list. Outbox and sent rows show the element count for feedback that carries an element set.
 - **contextMenus**: Adds a right-click menu item, "Browsertalk: point at element", that starts element selection on the current page.
 - **Host permission `<all_urls>`** (locked decision: keep; justify per feature):
-  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected element's facts, (2) capture the visible tab for the optional element screenshot crop, and (3) call the user's own opencode server — loopback by default (http://127.0.0.1:15001), or another machine the user explicitly allows in settings (off by default). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's own server.
+  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected elements' facts, (2) capture the visible tab for the optional element screenshot crops, and (3) call the user's own opencode server — loopback by default (http://127.0.0.1:15001), or another machine the user explicitly allows in settings (off by default). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's own server.
 
 Rationale: `activeTab` was removed from the manifest in this phase — it is unused with `<all_urls>` present (content script matches, `captureVisibleTab`, and `tabs.sendMessage` are all covered by host access), and the dashboard guidance says to delete permissions not required (research §2.1, checklist C.16).
 
@@ -87,7 +88,7 @@ Check all three (all true for this extension):
 > 1. Install opencode from https://opencode.ai and start its server on the default URL: `opencode serve --port 15001`
 > 2. In another terminal, create a pairing code: `opencode api post /api/pair --server http://127.0.0.1:15001`
 > 3. Click the extension's toolbar icon to open the side panel. First run shows the feedback disclosure; click Accept. Paste the pairing code into the connection form and click Pair — the status shows "connected". (If pairing fails, set the server URL in the options page to the URL opencode printed.)
-> 4. Visit any page, then click "Point at element" (or press Alt+Shift+F, or right-click → "Browsertalk: point at element"). Hover highlights elements; click one, type a comment, press Queue (or Enter).
+> 4. Visit any page, then click "Point at element" (or press Alt+Shift+F, or right-click → "Browsertalk: point at element"). Hover highlights elements; click one, type a comment, press Queue (or Enter). For several elements on one page: hold Cmd (Ctrl on Windows/Linux), click up to five, release, then comment once and Queue.
 > 5. The feedback appears in the side panel's Outbox and is delivered to the opencode server. Right-click → "Browsertalk: point at element" exercises the context-menu entry point.
 >
 > UI check without a server: options page → Agent backend → "Fake", then repeat steps 4-5 (feedback queues locally; delivery to a session requires a project binding).

@@ -2,14 +2,34 @@
 
 Chrome extension that sends browser feedback straight into an opencode session bound to the right project. You browse, point at or describe what looks wrong, and the feedback lands in opencode with the facts the agent needs to find the code.
 
-Status: MVP complete through phase 011 (pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
+Status: MVP complete through phase 015 (pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
 
 ## Surfaces
 
 - **Side panel** — primary; opens on toolbar icon click. Current target (project + session), session chooser, comment box, outbox, sent list.
-- **In-page overlay** — picker highlight and inline composer.
+- **In-page overlay** — picker highlight, numbered badges, count pill, and inline composer with element chips.
 - **Context menu / `Alt+Shift+F`** — arm the picker without opening the panel.
 - **Options page** — backend, server URL, session-strategy override.
+
+## Picking elements
+
+1. Arm the picker — panel button, `Alt+Shift+F`, or right-click → "Browsertalk: point at element".
+2. Plain click one element for the single-element flow. The composer opens next to it.
+3. For several elements on the same page, hold **Cmd** (macOS) or **Ctrl** (Windows/Linux) and click each one. Numbered badges and the count pill track the set.
+4. Release the modifier, press Enter, or pick the fifth element. The composer opens anchored to the last pick.
+5. Type one comment for the set. Chip `×` drops an element; Enter or Queue sends.
+
+Limits and exit paths:
+
+| Rule | Value |
+|---|---|
+| Elements per feedback | 5 |
+| Screenshots per feedback | 4, best effort (Chrome allows 2 captures per second; fast picks skip the shot) |
+| Scope | One page and tab; click order is kept |
+| After the composer opens | No adding; chip `×` is the only change |
+| Clear in the pill, or Escape | Discards the set and disarms |
+| Window blur | Discards the set and disarms |
+| Navigation (`popstate`, `hashchange`) | Discards the set; closes an open composer |
 
 ## Architecture
 

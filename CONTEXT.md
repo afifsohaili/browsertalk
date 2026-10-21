@@ -6,13 +6,17 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 
 | Term | Meaning |
 |---|---|
-| Feedback | One comment plus its captured facts. The unit Browsertalk produces and sends |
-| Facts | The data captured about the page and element, attached to a feedback. Split into core facts and extras |
+| Feedback | One comment plus the page facts and the element set it describes. The unit Browsertalk produces and sends |
+| Facts | The data captured about the page and elements, attached to a feedback. Split into core facts and extras |
 | Core facts | The always-captured subset: URL, title, element tag/id/classes, selector, text, attributes, box |
 | Extras | Optional captures: element screenshot, component name, computed styles + ARIA |
-| Picker | The content-script mode for selecting an element. Hover highlights, click selects |
+| Element set | The ordered elements one feedback carries, one to five, all from the same page and tab. Click order is pick order |
+| Multi-pick | Holding Cmd (macOS) or Ctrl elsewhere while clicking to build an element set |
+| Picker | The content-script mode for selecting elements. Hover highlights; a plain click picks one; Cmd/Ctrl+click accumulates a set |
 | Arm | Verb: turn the picker on ("arm the picker", "armed") |
-| Composer | The inline box next to the selected element where the comment is typed |
+| Composer | The inline card anchored to the last picked element. Chips show the element set, the textarea takes the one comment |
+| Chip | One element's row in the composer: label plus `×` to drop that element from the set |
+| Count pill | The fixed bottom-centre indicator while picking: `N selected · release <modifier> to comment` (`⌘` or `Ctrl`), with Clear |
 | Comment box | The panel's textarea for page-level feedback; an empty box sends the URL only |
 | Outbox | Feedback that has not been sent yet |
 | Sent | Feedback already delivered to a session, shown as a summary line |
@@ -50,6 +54,8 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | `SessionStrategy`, `SessionStrategyId` | `lib/session-strategy/interface.ts` |
 | `adoptSession`, `adoptStoredSession` | `lib/session-strategy/interface.ts`, `persist.ts` — the pick path |
 | `registerSessionStrategy`, `getSessionStrategy`, `listSessionStrategies` | `lib/session-strategy/registry.ts` |
+| `createPickSelection`, `pickAction`, `MAX_PICKED_ELEMENTS` | `lib/picker/selection.ts` |
+| `MAX_ELEMENT_ATTACHMENTS` | `lib/picker/limits.ts` |
 | `picker.content.ts` | The content script entrypoint |
 
 File naming follows the seam convention: `interface.ts` (contract), `registry.ts`, one file per adapter, `fake.ts`, `builtins.ts`. The session-strategy seam reuses the shape: one file per strategy (`per-day.ts`, `sticky.ts`).
@@ -65,3 +71,5 @@ File naming follows the seam convention: `interface.ts` (contract), `registry.ts
 | Configuration, settings (in prose) | Config | Global convention. "Settings page" is fine as a UI surface name |
 | Session per comment | Session strategy names | Name the rule, not the anecdote |
 | Thread (as our unit) | Session | One word per idea; thread is other agents' vocabulary |
+| Selection | Element set | Selection reads as text or marquee selection; the unit is a set of elements |
+| Batch | Element set | Batch suggests queued processing; one feedback carries the set |

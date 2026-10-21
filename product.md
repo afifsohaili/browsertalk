@@ -1,6 +1,6 @@
 # opencode Browsertalk — product definition
 
-Status: 001 shipped. Decisions locked 2026-10-10. Phase tracking lives in `plans/` — one folder and ticket per phase.
+Status: MVP shipped through phase 015 (element sets). Decisions locked 2026-10-10; element-set decisions locked 2026-10-21. Phase tracking lives in `plans/` — one folder and ticket per phase.
 
 ## What it is
 
@@ -42,7 +42,7 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 | Surface | Role |
 |---|---|
 | Side panel | Primary. The toolbar icon opens it. Target display with the session chooser and the comment box, outbox, sent list |
-| In-page overlay | Picker highlight + inline composer (element comments) |
+| In-page overlay | Picker highlight, numbered badges, count pill, inline composer with element chips |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
 | Options page | Settings: backend, server URL, remote-server opt-in, session-strategy override |
 
@@ -56,6 +56,26 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 
 To comment on the page as a whole instead of an element, type in the panel's comment box and send; an empty box sends the URL only.
 
+## Element set (one comment, many elements)
+
+One feedback can carry up to five elements from the same page. The comment is written once for the whole set.
+
+| Gesture | Result |
+|---|---|
+| Cmd on macOS / Ctrl elsewhere + click | Adds the element; numbered badge, outline, count pill |
+| Cmd/Ctrl+click an element already picked | Removes it |
+| Release Cmd/Ctrl, press Enter, or pick the fifth element | Opens the composer with the set; the textarea takes focus |
+| Plain click with an empty set | Adds the element and opens the composer — the single-element flow |
+| Plain click with a set | Opens the composer; does not add the clicked element |
+| Clear in the count pill, or Escape | Discards the set and disarms |
+| Window blur | Discards the set and disarms |
+| Route change (`popstate`, `hashchange`) | Discards the set and disarms; an open composer closes |
+| Chip × in the composer | Removes one element before sending |
+
+Limits: five elements, four element screenshots, one page and tab per set, no elements added after the composer opens, click order kept as pick order. The count pill reads `N selected · release <modifier> to comment` (`⌘` on macOS, `Ctrl` elsewhere); the composer shows the chips and `N elements`.
+
+Screenshots are best effort per element: Chrome allows two `captureVisibleTab` calls per one-second window (extension-wide), so a fast burst skips the shot for later picks and keeps the element. The first pick of a set may wait for a token; later picks never queue.
+
 ## What gets captured
 
 Core facts, always:
@@ -68,13 +88,13 @@ Core facts, always:
 | Unique-ish CSS selector path | generated from the ancestor chain |
 | Trimmed text content | `textContent` |
 | Key attributes: href, src, role, aria-label, data-testid, placeholder | element attributes |
-| Bounding box, viewport, scroll | `getBoundingClientRect` |
+| Bounding box, viewport, scroll | `getBoundingClientRect`; used for the screenshot crop, not rendered in the prompt |
 
-Extras (agreed; land in phase 004):
+Extras (shipped in phase 004b):
 
 | Extra | Source | Caveat |
 |---|---|---|
-| Screenshot crop of the element | `captureVisibleTab` + canvas crop | Fidelity under zoom and hi-DPI needs checking |
+| Screenshot crop of each element | `captureVisibleTab` + canvas crop | Best effort; 2 captures per second; at most four per feedback. Fidelity under zoom and hi-DPI needs checking |
 | Component name | `__reactFiber$*` / `__vueParentComponent` | Dev builds only; best effort |
 | Computed styles subset + ARIA role/name | `getComputedStyle`; accessibility info | Keep the subset small or the prompt gets noisy |
 
@@ -82,27 +102,48 @@ Cross-origin iframe content is not reachable from the content script. Feedback t
 
 ## Prompt template
 
+One compact shape for every N. N=1:
+
 ```
 ## Browser feedback — <project name>
 
 Comment: <user text>
 
-Element: <tag>.<classes> — "<text>"
-  selector  <generated path>
-  box       <w>×<h> @ (<x>,<y>) · viewport <vw>×<vh> · scroll (<sx>,<sy>)
-  attrs     <k=v> · <k=v>
+Element: <tag>.<classes> — "<text>" · <selector> · <attrs>
+  extras    <component · aria · styles, only when captured>
 
 Page: <full URL including query params>
   title     <page title>
-
-Sent by Browsertalk · <timestamp>
 ```
 
-A screenshot, when captured, is attached as an image file. Component name and styles/ARIA add lines to the Element block.
+N>1:
+
+```
+## Browser feedback — <project name>
+
+Comment: <user text>
+
+Elements (<N>):
+1. <tag>.<classes> — "<text>" · <selector> · <attrs>
+2. <tag>.<classes> — "<text>" · <selector> · <attrs>
+   extras    <component · aria · styles, only when captured>
+
+Page: <full URL including query params>
+  title     <page title>
+```
+
+- Classes render as `.class` segments after the tag; the attrs segment is dropped when empty.
+- No box, viewport, or scroll lines.
+- One indented `extras` line per element, only when component, ARIA, or styles were captured.
+- No `Sent by Browsertalk` footer. `SentItem.sentAt` still drives the panel timestamp.
+- `Comment:` has no trailing space when the comment is empty; the `title` line is dropped when the title is empty.
+- Screenshots attach as `element-1.png` … in pick order, at most four. The byte budget counts every attachment; a storage-quota drop strips from the last element backward.
 
 ## Session model
 
 The mapping from feedback to sessions is a seam, `lib/session-strategy/` (interface + registry + one file per strategy), mirroring the AgentBackend seam. Each backend declares its default strategy; settings override per backend.
+
+One feedback is one comment for one page and its element set. The set never spans pages, tabs, or sessions; every send routes the whole set to the active session as a single prompt, regardless of the number of elements.
 
 Strategies that ship:
 
@@ -179,8 +220,8 @@ Pairing code creation requires an authenticated client, so the user runs one com
 | `auth.token` | Pairing token |
 | `projects.byOrigin` | `origin → project directory` |
 | `sessions` | Session refs per strategy: per-day `<directory>::<date>`, sticky `<directory>` → `{ sessionID, title }` |
-| `outbox` | Unsent feedback items |
-| `sent` | Recent sent summaries, capped |
+| `outbox` | Unsent feedback items. `facts.elements[]` holds the ordered element set; a legacy `facts.element` is normalized to a one-entry set on read |
+| `sent` | Recent sent summaries, capped. `elementCount` records the set size (0 for page-only, N for element sets); old records have no count |
 
 ## Permissions rationale
 
@@ -204,10 +245,21 @@ Pairing code creation requires an authenticated client, so the user runs one com
 - Attachments beyond the element screenshot.
 - Multi-user, shared sessions.
 
+### Out of scope for element sets (015)
+
+- Cross-page pick sets, cross-tab collection, per-element session routing.
+- Marquee, area, or text-range selection.
+- More than five elements, or more than four screenshots, per feedback.
+- Adding elements after the composer opens.
+- Page-level feedback carrying an element set; the panel comment box stays page-only.
+- Reordering the set; click order is kept.
+- Changing delivery; `queue` stays the default.
+
 ## Open questions
 
 - Pi bridge shape: new daemon vs. an existing pi server mode. Unconfirmed.
-- Screenshot crop fidelity under browser zoom and hi-DPI displays.
+- Screenshot crop fidelity under browser zoom and hi-DPI displays. The capture budget is settled: 2 captures per 1-second window, 4 shots per set, fast picks skip the shot (`plans/015-element-set/research-screenshot-capture.md`).
+- SPA route changes: the picker patches `pushState`/`replaceState` from the content-script world. The live smoke saw `popstate` clear the set, but a page-world `pushState` did not; a page that navigates only via `pushState` may leave the set armed. Unconfirmed in a real SPA.
 - Component-name detection coverage (React 19 dev fibers, Vue production builds).
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.
