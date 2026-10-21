@@ -6,11 +6,12 @@ One comment attached to up to five elements on the same page, picked with Cmd/Ct
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 015a | `ticket-01-data-prompt.md` | shipped · sha pending (015e) | — |
-| 015b | `ticket-02-multi-pick.md` | ready | 015a |
-| 015c | `ticket-03-capture-budget.md` | ready | 015b |
-| 015d | `ticket-04-panel-counts.md` | ready | 015a |
-| 015e | `ticket-05-docs-verification.md` | ready | 015a–015d |
+| 015a | `ticket-01-data-prompt.md` | shipped · 2a905e9 + e1dfccf | — |
+| 015b | `ticket-02-composer-plumbing.md` | ready | 015a |
+| 015c | `ticket-03-multi-pick.md` | ready | 015b |
+| 015d | `ticket-04-capture-budget.md` | ready | 015c |
+| 015e | `ticket-05-panel-counts.md` | ready | 015a |
+| 015f | `ticket-06-docs-verification.md` | ready | 015a–015e |
 
 Policy: one ticket = one conventional commit; tests ship with it. Vocabulary: `CONTEXT.md`. Decisions: `product.md` and the map.
 

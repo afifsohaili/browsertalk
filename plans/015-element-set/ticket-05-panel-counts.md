@@ -1,4 +1,4 @@
-# 015d: Panel element counts
+# 015e: Panel element counts
 
 **What to build:** Outbox and Sent rows say how many elements a feedback carries. Page-only sends show no count; old sent records without `elementCount` show none.
 

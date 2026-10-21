@@ -18,7 +18,7 @@ A ready-to-implement `plans/015-element-set/` phase plan for one comment attache
 - [Multi-pick loop and edge cases](issues/02-pick-loop.md): Cmd/Ctrl+click accumulates; release, Enter, or the fifth pick opens the composer; blur and route changes clear and disarm; Clear disarms; chip × is the only post-open change.
 - [Element set data shape and prompt](issues/01-data-and-prompt.md): ordered `elements[]` with per-element extras; compact prompt for N=1 and N>1, attrs on the element line, one extras line, no box, no Browsertalk footer; panel rows show the element count.
 - [Multi-pick visual affordance](issues/03-visual-affordance.md): variant A wins — numbered badges, bottom-centre count pill, composer card anchored to the last element, chips with ×, transient clear toast. B (right dock) and C (bottom sheet) rejected.
-- [Assemble the 015 phase plan](issues/05-phase-plan.md): five subphases (data/prompt, multi-pick composer, capture budget, panel counts, docs/verification); plan at `README.md`.
+- [Assemble the 015 phase plan](issues/05-phase-plan.md): six subphases (data/prompt, composer plumbing, multi-pick, capture budget, panel counts, docs/verification); plan at `README.md`.
 
 ## Not yet specified
 

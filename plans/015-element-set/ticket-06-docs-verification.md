@@ -1,8 +1,8 @@
-# 015e: Docs, live verification, phase close
+# 015f: Docs, live verification, phase close
 
 **What to build:** Document the shipped element set, run the final checks, and close the phase. No feature code.
 
-**Blocked by:** 015a–015d.
+**Blocked by:** 015a–015e.
 
 **Status:** ready.
 

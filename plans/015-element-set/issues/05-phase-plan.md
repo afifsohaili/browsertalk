@@ -20,12 +20,13 @@ Do not implement the feature.
 
 ## Answer
 
-Plan cut at `../README.md` (five subphases):
+Plan cut at `../README.md`, then 015b split into composer plumbing and multi-pick:
 
-- **015a** — element set data and compact prompt. Blocked by none.
-- **015b** — multi-pick selection and element-set composer. Blocked by 015a.
-- **015c** — capture budget and multi-element attachments. Blocked by 015b.
-- **015d** — panel element counts. Blocked by 015a.
-- **015e** — docs, live verification, phase close. Blocked by 015a–015d.
+- **015a** — element set data and compact prompt. Shipped (`2a905e9` + `e1dfccf`).
+- **015b** — element-set composer plumbing (N=1). Blocked by 015a.
+- **015c** — multi-pick selection (N>1). Blocked by 015b.
+- **015d** — capture budget and multi-element attachments. Blocked by 015c.
+- **015e** — panel element counts. Blocked by 015a.
+- **015f** — docs, live verification, phase close. Blocked by 015a–015e.
 
-No code yet. Each ticket is one conventional commit with tests; the phase README carries the test matrix.
+Each ticket is one conventional commit with tests; the phase README carries the test matrix.

@@ -1,10 +1,10 @@
-# 015c: Capture budget and multi-element attachments
+# 015d: Capture budget and multi-element attachments
 
 **What to build:** Screenshots for an element set are best effort. Capture at pick time on Chrome's 2-per-1-second fixed window; the first pick waits for a token, later picks skip when the window is empty. Hide the picker overlay around each capture. Attach up to four crops as `element-1.png` …; storage-quota drops strip from the last element.
 
 **Owner decisions (2026-10-21):** [Screenshot capture under rapid multi-pick](issues/04-screenshot-capture.md). 2-per-1s fixed window; no single frame at finish; skip fast picks; no user-gesture reliance.
 
-**Blocked by:** 015b.
+**Blocked by:** 015c.
 
 **Status:** ready.
 

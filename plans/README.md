@@ -21,7 +21,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 012 | `012-session-picker/` | `ticket.md` | shipped · 6ac9f55 | — |
 | 013 | `013-panel-comment/` | `ticket.md` | shipped · 40fb88a | — |
 | 014 | `014-remote-server/` | `ticket.md` | shipped · 05151fa | — |
-| 015 | `015-element-set/` | `ticket-01..05` | ready | — |
+| 015 | `015-element-set/` | `ticket-01..06` | ready | — |
 
 Policy:
 
