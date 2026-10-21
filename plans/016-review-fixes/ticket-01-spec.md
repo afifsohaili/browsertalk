@@ -55,4 +55,4 @@
 - The isolated content script no longer patches history at all, so `route.ts` lost the isolated patch instead of keeping it as a fallback. Main-world only, per the ticket.
 - `happy-dom@21.0.4` is a new dev dependency for the session lifecycle test.
 
-**Sha:** recorded by 016d.
+**Sha:** recorded by 016e.

@@ -13,13 +13,6 @@ export interface CaptureBudget {
   waitForToken: () => Promise<boolean>;
 }
 
-/**
- * Chrome's `tabs.captureVisibleTab` allows two calls per one-second fixed window,
- * shared by the whole extension. A token is spent when the call starts, before any
- * visibility check, because Chrome spends it either way. The window resets only on
- * a clock strictly past its expiry (`QuotaService::TimedLimit`), so `now === expiresAt`
- * is still inside the window.
- */
 export function createCaptureBudget(deps: CaptureBudgetDeps): CaptureBudget {
   let windowStart: number | null = null;
   let used = 0;

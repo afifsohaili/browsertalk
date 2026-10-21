@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createPickSelection, MAX_PICKED_ELEMENTS, pickAction } from './selection';
+import { createPickState, MAX_PICKED_ELEMENTS, pickAction } from './pick-state';
 
 function element(name: string): { name: string } {
   return { name };
@@ -34,82 +34,82 @@ describe('pick action', () => {
   });
 });
 
-describe('pick selection', () => {
+describe('pick state', () => {
   it('starts empty', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
 
-    expect(selection.count()).toBe(0);
-    expect(selection.items()).toEqual([]);
-    expect(selection.isFull()).toBe(false);
+    expect(state.count()).toBe(0);
+    expect(state.items()).toEqual([]);
+    expect(state.isFull()).toBe(false);
   });
 
   it('adds elements in pick order and reports their position', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
     const first = element('first');
     const second = element('second');
 
-    expect(selection.add(first)).toBe(0);
-    expect(selection.add(second)).toBe(1);
-    expect(selection.items()).toEqual([first, second]);
-    expect(selection.indexOf(second)).toBe(1);
-    expect(selection.has(first)).toBe(true);
+    expect(state.add(first)).toBe(0);
+    expect(state.add(second)).toBe(1);
+    expect(state.items()).toEqual([first, second]);
+    expect(state.indexOf(second)).toBe(1);
+    expect(state.has(first)).toBe(true);
   });
 
   it('dedupes by node identity, not by shape', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
     const first = element('button');
     const lookalike = element('button');
 
-    selection.add(first);
+    state.add(first);
 
-    expect(selection.add(lookalike)).toBe(1);
-    expect(selection.count()).toBe(2);
+    expect(state.add(lookalike)).toBe(1);
+    expect(state.count()).toBe(2);
   });
 
   it('toggles a selected element off and reports the removal', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
     const first = element('first');
     const second = element('second');
-    selection.add(first);
-    selection.add(second);
+    state.add(first);
+    state.add(second);
 
-    expect(selection.toggle(first)).toBe('removed');
-    expect(selection.items()).toEqual([second]);
-    expect(selection.has(first)).toBe(false);
+    expect(state.toggle(first)).toBe('removed');
+    expect(state.items()).toEqual([second]);
+    expect(state.has(first)).toBe(false);
   });
 
   it('toggles a new element on and appends it', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
     const first = element('first');
     const second = element('second');
 
-    expect(selection.toggle(first)).toBe('added');
-    expect(selection.toggle(second)).toBe('added');
-    expect(selection.items()).toEqual([first, second]);
+    expect(state.toggle(first)).toBe('added');
+    expect(state.toggle(second)).toBe('added');
+    expect(state.items()).toEqual([first, second]);
   });
 
   it('reports full instead of adding a sixth element', () => {
-    const selection = createPickSelection<{ name: string }>();
+    const state = createPickState<{ name: string }>();
 
     for (let index = 0; index < MAX_PICKED_ELEMENTS; index += 1) {
-      expect(selection.add(element(`pick-${index}`))).toBe(index);
+      expect(state.add(element(`pick-${index}`))).toBe(index);
     }
 
-    expect(selection.isFull()).toBe(true);
-    expect(selection.add(element('pick-sixth'))).toBeNull();
-    expect(selection.toggle(element('pick-sixth'))).toBe('full');
-    expect(selection.count()).toBe(MAX_PICKED_ELEMENTS);
+    expect(state.isFull()).toBe(true);
+    expect(state.add(element('pick-sixth'))).toBeNull();
+    expect(state.toggle(element('pick-sixth'))).toBe('full');
+    expect(state.count()).toBe(MAX_PICKED_ELEMENTS);
   });
 
   it('clears every element', () => {
-    const selection = createPickSelection<{ name: string }>();
-    selection.add(element('first'));
-    selection.add(element('second'));
+    const state = createPickState<{ name: string }>();
+    state.add(element('first'));
+    state.add(element('second'));
 
-    selection.clear();
+    state.clear();
 
-    expect(selection.count()).toBe(0);
-    expect(selection.items()).toEqual([]);
-    expect(selection.isFull()).toBe(false);
+    expect(state.count()).toBe(0);
+    expect(state.items()).toEqual([]);
+    expect(state.isFull()).toBe(false);
   });
 });

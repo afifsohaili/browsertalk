@@ -4,6 +4,7 @@ import type { Project, SessionRef } from '@/lib/agent-backend/interface';
 import { onOutboxChanged } from '@/lib/composer/messages';
 import { requestBind, requestProjects } from '@/lib/connection/messages';
 import { sameConnection, type ConnectionIdentity } from '@/lib/connection/identity';
+import { formatElementCount } from '@/lib/element-count';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { readSent, type SentItem } from '@/lib/storage/sent';
@@ -44,21 +45,16 @@ export function formatTimestamp(iso: string, now: Date = new Date()): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${time}`;
 }
 
-export function elementCountLabel(count: number | undefined): string {
-  if (count === undefined || count <= 0) return '';
-  return `${count} ${count === 1 ? 'element' : 'elements'}`;
-}
-
 export function outboxMeta(item: OutboxItem, now: Date = new Date()): string {
   return metaLine([
-    elementCountLabel(item.facts.elements?.length),
+    formatElementCount(item.facts.elements?.length),
     formatTimestamp(item.capturedAt, now),
     item.facts.page.title || item.facts.page.url,
   ]);
 }
 
 export function sentMeta(entry: SentItem, now: Date = new Date()): string {
-  return metaLine([elementCountLabel(entry.elementCount), formatTimestamp(entry.sentAt, now), entry.session.title]);
+  return metaLine([formatElementCount(entry.elementCount), formatTimestamp(entry.sentAt, now), entry.session.title]);
 }
 
 function metaLine(parts: string[]): string {

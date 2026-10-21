@@ -1,8 +1,8 @@
-# 016d: Docs, live verification, re-review
+# 016e: Docs, live verification, re-review
 
 **What to build:** Document the fixes, verify live, and re-run the two-axis review. No feature code.
 
-**Blocked by:** 016a–016c.
+**Blocked by:** 016a–016d.
 
 **Status:** ready.
 

@@ -9,11 +9,6 @@ export interface OverlayHolds {
   guard: <T>(operation: () => Promise<T>) => Promise<T>;
 }
 
-/**
- * Ref-counted overlay hiding. A pick's capture can overlap the next pick's capture,
- * so the overlay may only come back when the last hold is released. A release is
- * idempotent: a double release must not show the overlay while another capture runs.
- */
 export function createOverlayHolds(visibility: OverlayVisibility): OverlayHolds {
   let held = 0;
 

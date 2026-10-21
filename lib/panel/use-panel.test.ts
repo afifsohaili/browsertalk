@@ -20,7 +20,7 @@ import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import type { SentItem } from '@/lib/storage/sent';
 import { appendToOutbox } from '@/lib/storage/writer';
 import { registerPanelHandler } from './messages';
-import { elementCountLabel, formatTimestamp, outboxMeta, sentMeta, targetState, usePanel, type Panel } from './use-panel';
+import { formatTimestamp, outboxMeta, sentMeta, targetState, usePanel, type Panel } from './use-panel';
 
 type Tab = Browser.tabs.Tab;
 
@@ -1068,28 +1068,6 @@ describe('targetState', () => {
     expect(targetState({ origin: ORIGIN, project: null, session: null })).toBe('unbound');
     expect(targetState({ origin: ORIGIN, project: DIRECTORY, session: null })).toBe('no-session');
     expect(targetState({ origin: ORIGIN, project: DIRECTORY, session: { id: 'ses_1', title: 't' } })).toBe('ready');
-  });
-});
-
-describe('elementCountLabel', () => {
-  it('names a multi-element set', () => {
-    expect(elementCountLabel(3)).toBe('3 elements');
-  });
-
-  it('names a single element', () => {
-    expect(elementCountLabel(1)).toBe('1 element');
-  });
-
-  it('names the five-element cap', () => {
-    expect(elementCountLabel(5)).toBe('5 elements');
-  });
-
-  it('shows no count for a page-only send', () => {
-    expect(elementCountLabel(0)).toBe('');
-  });
-
-  it('shows no count when the record predates element counts', () => {
-    expect(elementCountLabel(undefined)).toBe('');
   });
 });
 

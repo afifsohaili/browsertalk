@@ -1,6 +1,5 @@
 export const MAX_SCREENSHOT_BYTES = 1_500_000;
 
-/** Chrome allows two captures per window, so a five-element set cannot attach more than four. */
 export const MAX_ELEMENT_ATTACHMENTS = 4;
 
 export const MAX_SCREENSHOT_DATA_URL_CHARS = Math.ceil(MAX_SCREENSHOT_BYTES / 3) * 4 + 64;

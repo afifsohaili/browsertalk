@@ -23,7 +23,7 @@ export function pickAction(click: PickClick): PickAction {
 
 export type PickToggle = 'added' | 'removed' | 'full';
 
-export interface PickSelection<T> {
+export interface PickState<T> {
   items: () => readonly T[];
   count: () => number;
   indexOf: (item: T) => number;
@@ -34,7 +34,7 @@ export interface PickSelection<T> {
   clear: () => void;
 }
 
-export function createPickSelection<T>(limit = MAX_PICKED_ELEMENTS): PickSelection<T> {
+export function createPickState<T>(limit = MAX_PICKED_ELEMENTS): PickState<T> {
   let items: T[] = [];
 
   function indexOf(item: T): number {

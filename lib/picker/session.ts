@@ -1,10 +1,11 @@
 import { assembleFeedback, formatElementLabel } from './collect';
 import type { PickerFeedback } from './facts';
 import { createOverlayHolds } from './overlay-visibility';
-import { formatPickCount, modifierLabel } from './platform';
+import { formatPickCount } from './pill-copy';
+import { modifierLabel } from './platform';
 import { readCapture } from './read';
 import { watchWindowRoutes } from './route';
-import { createPickSelection, pickAction } from './selection';
+import { createPickState, pickAction } from './pick-state';
 
 export const PICKER_OVERLAY_ID = 'browsertalk-picker-overlay';
 export const PICKER_COUNT_ID = 'browsertalk-picker-count';
@@ -43,7 +44,7 @@ export interface PickerSession {
 }
 
 export function createPickerSession(options: PickerSessionOptions): PickerSession {
-  const selection = createPickSelection<PickerPick>();
+  const picks = createPickState<PickerPick>();
   let armed = false;
   let setID: string | null = null;
   let nextIndex = 0;
@@ -74,7 +75,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     armed = true;
     setID = crypto.randomUUID();
     nextIndex = 0;
-    selection.clear();
+    picks.clear();
     hovered = null;
     modifier = modifierLabel(navigator.platform, navigator.userAgent);
     previousCursor = document.documentElement.style.cursor;
@@ -121,7 +122,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     if (!armed && setID === null) return;
     const cleared = setID;
     setID = null;
-    selection.clear();
+    picks.clear();
     stopPicking();
     stopWatching();
     options.onClear(cleared);
@@ -129,7 +130,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
   function end(): void {
     const cleared = setID;
-    selection.clear();
+    picks.clear();
     setID = null;
     stopPicking();
     stopWatching();
@@ -144,18 +145,18 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
   function finish(): void {
     if (setID === null) return;
-    const picks = selection.items();
-    if (picks.length === 0) {
+    const picked = picks.items();
+    if (picked.length === 0) {
       disarm();
       return;
     }
 
-    const anchor = picks[picks.length - 1]!.element;
+    const anchor = picked[picked.length - 1]!.element;
     stopPicking();
-    options.onFinish({ setID, picks: [...picks], anchor });
+    options.onFinish({ setID, picks: [...picked], anchor });
   }
 
-  function clearSelection(): void {
+  function clearPicks(): void {
     disarm();
   }
 
@@ -181,7 +182,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
       index,
     };
 
-    if (selection.add(pick) === null) {
+    if (picks.add(pick) === null) {
       nextIndex = index;
       return;
     }
@@ -201,11 +202,11 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     const element = event.target instanceof Element ? event.target : null;
     if (element === null) return;
 
-    const existing = selection.items().find((pick) => pick.element === element);
+    const existing = picks.items().find((pick) => pick.element === element);
     const action = pickAction({
       modifier: isModifier(event),
       selected: existing !== undefined,
-      count: selection.count(),
+      count: picks.count(),
     });
 
     switch (action) {
@@ -213,7 +214,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
         return;
       case 'remove':
         if (existing !== undefined) {
-          selection.toggle(existing);
+          picks.toggle(existing);
           render();
           if (setID !== null) options.onRemove(setID, existing.index);
         }
@@ -248,11 +249,11 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      clearSelection();
+      clearPicks();
       return;
     }
 
-    if (event.key === 'Enter' && selection.count() > 0) {
+    if (event.key === 'Enter' && picks.count() > 0) {
       event.preventDefault();
       event.stopPropagation();
       finish();
@@ -262,7 +263,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
   function onKeyUp(event: KeyboardEvent): void {
     if (!armed) return;
     if (event.key !== 'Meta' && event.key !== 'Control') return;
-    if (selection.count() > 0) finish();
+    if (picks.count() > 0) finish();
     else disarm();
   }
 
@@ -276,7 +277,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
     const cleared = setID;
     setID = null;
-    selection.clear();
+    picks.clear();
     stopPicking();
     stopWatching();
     options.onRouteChange();
@@ -353,7 +354,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     clearButton.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      clearSelection();
+      clearPicks();
     });
 
     const cursorStyle = document.createElement('style');
@@ -375,7 +376,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     if (boxes === null) return;
     boxes.textContent = '';
 
-    selection.items().forEach((pick, position) => {
+    picks.items().forEach((pick, position) => {
       const element = pick.element;
       if (!element.isConnected) return;
       const rect = element.getBoundingClientRect();
@@ -415,7 +416,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
     if (hoverBox === null || hoverLabel === null) return;
 
     const candidate = hovered;
-    const selected = candidate !== null && selection.items().some((pick) => pick.element === candidate);
+    const selected = candidate !== null && picks.items().some((pick) => pick.element === candidate);
     if (candidate === null || !candidate.isConnected || selected) {
       hoverBox.style.display = 'none';
       hoverLabel.style.display = 'none';
@@ -447,7 +448,7 @@ export function createPickerSession(options: PickerSessionOptions): PickerSessio
 
   function renderPill(): void {
     if (pill === null || clearButton === null) return;
-    const count = selection.count();
+    const count = picks.count();
     if (count === 0) {
       pill.style.display = 'none';
       return;

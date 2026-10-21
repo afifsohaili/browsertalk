@@ -1,37 +1,22 @@
 import { browser } from 'wxt/browser';
+import { createPerTabQueue } from '@/lib/per-tab-queue';
 import { isPickerFeedback, type PickerFeedback } from '@/lib/picker/facts';
 import { isQuotaExceeded } from './budgets';
 import { STORAGE_KEYS } from './keys';
 
-const tails = new Map<number, Promise<unknown>>();
-const captureTails = new Map<number, Promise<unknown>>();
+const captures = createPerTabQueue({ continueOnError: true });
+const mutations = createPerTabQueue({ continueOnError: true });
 
 export function pendingFeedbackKey(tabId: number): string {
   return `${STORAGE_KEYS.pending.feedback}.${tabId}`;
 }
 
-/**
- * Serialises a full pick (screenshot plus merge) per tab. Removals and clears wait
- * on this tail, so a capture that is already in flight cannot land after the set
- * it belonged to was cleared or had the element removed.
- */
 export function queuePendingCapture<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
-  const previous = captureTails.get(tabId) ?? Promise.resolve();
-  const result = previous.then(operation, operation);
-  const tail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  captureTails.set(tabId, tail);
-  void tail.then(() => {
-    if (captureTails.get(tabId) === tail) captureTails.delete(tabId);
-  });
-  return result;
+  return captures.enqueue(tabId, operation);
 }
 
 function afterPendingCaptures<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
-  const previous = captureTails.get(tabId) ?? Promise.resolve();
-  return previous.then(operation, operation);
+  return captures.settled(tabId).then(operation);
 }
 
 export function setPendingFeedback(
@@ -39,7 +24,7 @@ export function setPendingFeedback(
   feedback: PickerFeedback,
   fallback?: PickerFeedback,
 ): Promise<void> {
-  return enqueuePendingMutation(tabId, async () => {
+  return mutations.enqueue(tabId, async () => {
     try {
       await browser.storage.session.set({ [pendingFeedbackKey(tabId)]: feedback });
     } catch (error) {
@@ -55,7 +40,7 @@ export function mergePendingElement(
   index: number,
   fallback?: PickerFeedback,
 ): Promise<void> {
-  return enqueuePendingMutation(tabId, async () => {
+  return mutations.enqueue(tabId, async () => {
     const current = await getPendingFeedback(tabId);
     const merged = mergeElements(current, feedback, index);
     if (merged === null) return;
@@ -97,7 +82,7 @@ function mergeElements(
 
 export function removePendingElement(tabId: number, setID: string, index: number): Promise<number | null> {
   return afterPendingCaptures(tabId, () =>
-    enqueuePendingMutation(tabId, async () => {
+    mutations.enqueue(tabId, async () => {
       const pending = await getPendingFeedback(tabId);
       if (pending === null || pending.id !== setID) return null;
 
@@ -125,7 +110,7 @@ export async function getPendingFeedback(tabId: number): Promise<PickerFeedback 
 
 export function clearPendingFeedback(tabId: number, captureID?: string): Promise<void> {
   return afterPendingCaptures(tabId, () =>
-    enqueuePendingMutation(tabId, async () => {
+    mutations.enqueue(tabId, async () => {
       if (captureID !== undefined) {
         const pending = await getPendingFeedback(tabId);
         if (pending === null || pending.id !== captureID) return;
@@ -133,18 +118,4 @@ export function clearPendingFeedback(tabId: number, captureID?: string): Promise
       await browser.storage.session.remove(pendingFeedbackKey(tabId));
     }),
   );
-}
-
-function enqueuePendingMutation<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
-  const previous = tails.get(tabId) ?? Promise.resolve();
-  const result = previous.then(operation);
-  const tail = result.then(
-    () => undefined,
-    () => undefined,
-  );
-  tails.set(tabId, tail);
-  void tail.then(() => {
-    if (tails.get(tabId) === tail) tails.delete(tabId);
-  });
-  return result;
 }

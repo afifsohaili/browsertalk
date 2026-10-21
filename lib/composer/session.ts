@@ -1,4 +1,4 @@
-import { formatCountLabel } from './chips';
+import { formatElementCount } from '@/lib/element-count';
 import { createComposerController, type ComposerQueueResult as ControllerQueueResult } from './controller';
 import type { ComposerQueueResult, ComposerRemoveResult } from './protocol';
 export const COMPOSER_HOST_ID = 'browsertalk-composer';
@@ -193,7 +193,7 @@ export function createComposerSession(options: ComposerSessionOptions): Composer
     emptyLine.style.display = empty ? 'block' : 'none';
 
     if (countLine !== null) {
-      countLine.textContent = empty ? '' : formatCountLabel(entries.length);
+      countLine.textContent = empty ? '' : formatElementCount(entries.length);
       countLine.style.display = empty ? 'none' : 'block';
     }
 
