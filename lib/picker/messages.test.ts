@@ -72,11 +72,21 @@ function sampleFeedback(): PickerFeedback {
   };
 }
 
-function captured(feedback: PickerFeedback, tabId: number, windowId?: number): ReturnType<typeof respondToPickerRequest> {
+function captured(
+  feedback: PickerFeedback,
+  tabId: number,
+  options: { windowId?: number; index?: number } = {},
+): ReturnType<typeof respondToPickerRequest> {
+  const context = options.windowId === undefined ? { tabId } : { tabId, windowId: options.windowId };
   return respondToPickerRequest(
-    { type: 'picker/captured', feedback },
-    windowId === undefined ? { tabId } : { tabId, windowId },
+    { type: 'picker/captured', feedback, elementIndex: options.index ?? 0 },
+    context,
   );
+}
+
+function pickedElement(selector: string, text: string): PickerFeedback['elements'][number] {
+  const base = sampleFeedback().elements[0]!;
+  return { element: { ...base.element, selector, text } };
 }
 
 describe('picker messaging', () => {
@@ -163,11 +173,71 @@ describe('picker messaging', () => {
   });
 
   it('rejects a capture that does not name the sender tab', async () => {
-    await expect(respondToPickerRequest({ type: 'picker/captured', feedback: sampleFeedback() })).resolves.toEqual({
+    await expect(
+      respondToPickerRequest({ type: 'picker/captured', feedback: sampleFeedback(), elementIndex: 0 }),
+    ).resolves.toEqual({
       ok: false,
       error: 'No page sent this capture',
     });
     expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('merges each picked element into the tab set by index', async () => {
+    const first: PickerFeedback = { ...sampleFeedback(), elements: [pickedElement('button#first', 'First')] };
+    const second: PickerFeedback = { ...sampleFeedback(), elements: [pickedElement('button#second', 'Second')] };
+
+    await expect(captured(first, 1, { index: 0 })).resolves.toEqual({ ok: true });
+    await expect(captured(second, 1, { index: 1 })).resolves.toEqual({ ok: true });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.id).toBe('fb_1');
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#first', 'button#second']);
+  });
+
+  it('replaces the element at an index that already landed', async () => {
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#first', 'First')] }, 1, { index: 0 });
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#again', 'Again')] }, 1, { index: 0 });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#again']);
+  });
+
+  it('attaches the screenshot to the element at its index', async () => {
+    const shot = { dataUrl: 'data:image/png;base64,BBBB', width: 240, height: 64 };
+    setElementScreenshotter({ captureFor: vi.fn(async () => shot) });
+
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#first', 'First')] }, 1, { index: 0 });
+    await captured({ ...sampleFeedback(), elements: [pickedElement('button#second', 'Second')] }, 1, { index: 1 });
+
+    const pending = await getPendingFeedback(1);
+    expect(pending?.elements[0]?.extras?.screenshot).toEqual(shot);
+    expect(pending?.elements[1]?.extras?.screenshot).toEqual(shot);
+  });
+
+  it('rejects a capture without a valid element index', async () => {
+    for (const elementIndex of [undefined, -1, 1.5, '0']) {
+      const response = await browser.runtime.sendMessage({
+        type: 'picker/captured',
+        feedback: sampleFeedback(),
+        elementIndex,
+      });
+
+      expect(response).toEqual({ ok: false, error: 'The captured element index was invalid' });
+    }
+
+    expect(await getPendingFeedback(1)).toBeNull();
+  });
+
+  it('sends the picked index with the capture', async () => {
+    const originalSendMessage = browser.runtime.sendMessage;
+    const send = vi.fn(async () => ({ ok: true }));
+    browser.runtime.sendMessage = send as unknown as typeof browser.runtime.sendMessage;
+    const item = sampleFeedback();
+
+    await expect(notifyCaptured(item, 0)).resolves.toEqual({ ok: true });
+
+    expect(send).toHaveBeenCalledWith({ type: 'picker/captured', feedback: item, elementIndex: 0 });
+    browser.runtime.sendMessage = originalSendMessage;
   });
 
   it('rejects malformed captured feedback', async () => {
@@ -293,7 +363,7 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor });
     const item = sampleFeedback();
 
-    await expect(captured(item, 1, 7)).resolves.toEqual({ ok: true });
+    await expect(captured(item, 1, { windowId: 7 })).resolves.toEqual({ ok: true });
     expect(captureFor).toHaveBeenCalledWith(item, {
       windowId: 7,
       isVisible: expect.any(Function),
@@ -305,7 +375,7 @@ describe('picker messaging', () => {
     setElementScreenshotter({ captureFor });
     stubQuery([tab(9)]);
 
-    await captured(sampleFeedback(), 1, 7);
+    await captured(sampleFeedback(), 1, { windowId: 7 });
 
     const request = captureFor.mock.calls[0]?.[1];
     expect(request).toBeDefined();
@@ -381,7 +451,7 @@ describe('picker messaging', () => {
       const captureFor = vi.fn(async () => null);
       setElementScreenshotter({ captureFor });
 
-      await expect(notifyCaptured(sampleFeedback())).resolves.toEqual({
+      await expect(notifyCaptured(sampleFeedback(), 0)).resolves.toEqual({
         ok: false,
         error: CONSENT_REQUIRED_ERROR,
       });

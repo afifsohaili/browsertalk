@@ -9,6 +9,7 @@ describe('composer request guard', () => {
         comment: 'Looks off',
         page: { url: 'https://example.com/', title: 'Example' },
         captureID: 'fb_1',
+        elementCount: 1,
       }),
     ).toBe(true);
     expect(isComposerRequest({ type: 'outbox/page-comment', comment: 'Layout jumps' })).toBe(true);
@@ -18,11 +19,27 @@ describe('composer request guard', () => {
 
   it('rejects malformed queue requests', () => {
     const page = { url: 'https://example.com/', title: 'Example' };
-    expect(isComposerRequest({ type: 'composer/queue', comment: 7, page, captureID: 'fb_1' })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: '' })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page: { url: 1 }, captureID: 'fb_1' })).toBe(false);
-    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 7, page, captureID: 'fb_1', elementCount: 1 })).toBe(
+      false,
+    );
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: '', elementCount: 1 })).toBe(
+      false,
+    );
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, elementCount: 1 })).toBe(false);
+    expect(
+      isComposerRequest({ type: 'composer/queue', comment: 'x', page: { url: 1 }, captureID: 'fb_1', elementCount: 1 }),
+    ).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', captureID: 'fb_1', elementCount: 1 })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: 'fb_1' })).toBe(false);
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: 'fb_1', elementCount: 0 })).toBe(
+      false,
+    );
+    expect(isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: 'fb_1', elementCount: 1.5 })).toBe(
+      false,
+    );
+    expect(
+      isComposerRequest({ type: 'composer/queue', comment: 'x', page, captureID: 'fb_1', elementCount: '1' }),
+    ).toBe(false);
     expect(isComposerRequest({ type: 'outbox/page-comment' })).toBe(false);
     expect(isComposerRequest({ type: 'outbox/page-comment', comment: 7 })).toBe(false);
     expect(isComposerRequest({ type: 'composer/open' })).toBe(false);

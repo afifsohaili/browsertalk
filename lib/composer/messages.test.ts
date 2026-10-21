@@ -78,12 +78,13 @@ function secondElement(): PickerFeedback['elements'][number] {
   };
 }
 
-function elementQueue(captureID: string, comment: string): ComposerQueueRequest {
+function elementQueue(captureID: string, comment: string, elementCount = 1): ComposerQueueRequest {
   return {
     type: 'composer/queue',
     comment,
     page: { url: 'https://example.com/cart', title: 'Cart' },
     captureID,
+    elementCount,
   };
 }
 
@@ -161,7 +162,7 @@ describe('composer messaging', () => {
     };
     await setPendingFeedback(1, pending);
 
-    await expect(respondToComposerRequest(elementQueue('fb_1', 'Two problems'), { tabId: 1 })).resolves.toEqual({
+    await expect(respondToComposerRequest(elementQueue('fb_1', 'Two problems', 2), { tabId: 1 })).resolves.toEqual({
       ok: true,
       outboxCount: 1,
     });
@@ -170,6 +171,24 @@ describe('composer messaging', () => {
     expect(item?.facts.elements?.map((entry) => entry.element.selector)).toEqual(['button#checkout', 'h1.title']);
     expect(item?.facts.elements?.[0]?.extras?.screenshot).toEqual(pending.elements[0]?.extras?.screenshot);
     expect(item?.facts.elements?.[1]?.extras).toBeUndefined();
+  });
+
+  it('refuses a set whose count does not match the pending elements', async () => {
+    const pending: PickerFeedback = {
+      ...sampleFeedback(),
+      elements: [sampleFeedback().elements[0]!, secondElement()],
+    };
+    await setPendingFeedback(1, pending);
+
+    for (const elementCount of [1, 3]) {
+      await expect(
+        respondToComposerRequest(elementQueue('fb_1', 'Two problems', elementCount), { tabId: 1 }),
+      ).resolves.toEqual({ ok: false, error: 'The element set changed — pick again' });
+    }
+
+    expect(await readOutbox()).toEqual([]);
+    expect(requestedSends).toEqual([]);
+    expect((await getPendingFeedback(1))?.elements).toHaveLength(2);
   });
 
   it('captures the destination connection and binding when queued', async () => {
@@ -362,7 +381,7 @@ describe('composer messaging', () => {
     await expect(requestOutboxCount()).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(requestPageComment('Fix this')).resolves.toEqual({ ok: false, error: 'Background unavailable' });
     await expect(
-      requestQueueComment('Fix this', { url: 'https://example.com/', title: 'Example' }, 'fb_1'),
+      requestQueueComment('Fix this', { url: 'https://example.com/', title: 'Example' }, 'fb_1', 1),
     ).resolves.toEqual({ ok: false, error: 'Background unavailable' });
   });
 
@@ -428,7 +447,7 @@ describe('composer messaging', () => {
       };
       await setPendingFeedback(1, pending);
 
-      await expect(respondToComposerRequest(elementQueue('fb_1', 'Fix this'), { tabId: 1 })).resolves.toEqual({
+      await expect(respondToComposerRequest(elementQueue('fb_1', 'Fix this', 2), { tabId: 1 })).resolves.toEqual({
         ok: true,
         outboxCount: 2,
         screenshotDropped: true,

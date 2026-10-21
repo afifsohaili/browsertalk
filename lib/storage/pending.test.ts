@@ -5,6 +5,7 @@ import type { PickerFeedback } from '@/lib/picker/facts';
 import {
   clearPendingFeedback,
   getPendingFeedback,
+  mergePendingElement,
   pendingFeedbackKey,
   setPendingFeedback,
 } from './pending';
@@ -136,6 +137,121 @@ describe('pending feedback storage', () => {
 
     expect(stored[key]).toEqual(feedback('fb_b'));
     expect((await getPendingFeedback(1))?.id).toBe('fb_b');
+  });
+
+  describe('merging one picked element', () => {
+    function picked(id: string, selector: string): PickerFeedback {
+      const base = feedback(id);
+      return { ...base, elements: [{ element: { ...base.elements[0]!.element, selector } }] };
+    }
+
+    it('initializes the tab set on the first pick', async () => {
+      const pick = picked('fb_set', 'button#first');
+
+      await mergePendingElement(1, pick, 0);
+
+      expect(await getPendingFeedback(1)).toEqual(pick);
+    });
+
+    it('appends later picks in index order', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+      await mergePendingElement(1, picked('fb_set', 'button#second'), 1);
+      await mergePendingElement(1, picked('fb_set', 'button#third'), 2);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual([
+        'button#first',
+        'button#second',
+        'button#third',
+      ]);
+    });
+
+    it('keeps the set identity from the first pick', async () => {
+      const first = picked('fb_set', 'button#first');
+      await mergePendingElement(1, first, 0);
+      const later: PickerFeedback = {
+        ...picked('fb_set', 'button#second'),
+        capturedAt: '2026-10-10T09:00:09.999Z',
+        page: { url: 'https://example.com/other', path: '/other', query: [], title: 'Other' },
+      };
+
+      await mergePendingElement(1, later, 1);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.id).toBe('fb_set');
+      expect(pending?.capturedAt).toBe(first.capturedAt);
+      expect(pending?.page).toEqual(first.page);
+    });
+
+    it('upserts the element at an index that already landed', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+      await mergePendingElement(1, picked('fb_set', 'button#second'), 1);
+
+      await mergePendingElement(1, picked('fb_set', 'button#replaced'), 1);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#first', 'button#replaced']);
+    });
+
+    it('clamps an index past the end so the set stays dense', async () => {
+      await mergePendingElement(1, picked('fb_set', 'button#first'), 0);
+
+      await mergePendingElement(1, picked('fb_set', 'button#gap'), 4);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#first', 'button#gap']);
+    });
+
+    it('starts a new set when the feedback id changes', async () => {
+      await mergePendingElement(1, picked('fb_old', 'button#old'), 0);
+
+      await mergePendingElement(1, picked('fb_new', 'button#new'), 0);
+
+      const pending = await getPendingFeedback(1);
+      expect(pending?.id).toBe('fb_new');
+      expect(pending?.elements.map((entry) => entry.element.selector)).toEqual(['button#new']);
+    });
+
+    it('writes the fallback set when the screenshot write hits the quota', async () => {
+      const setSpy = vi.spyOn(browser.storage.session, 'set').mockRejectedValueOnce(new Error('quota exceeded'));
+      const withShot = picked('fb_set', 'button#first');
+      const withoutShot = picked('fb_set', 'button#first');
+
+      await mergePendingElement(1, withShot, 0, withoutShot);
+
+      expect(setSpy).toHaveBeenCalledTimes(2);
+      expect((await getPendingFeedback(1))?.elements[0]?.element.selector).toBe('button#first');
+      setSpy.mockRestore();
+    });
+
+    it('keeps a newer set written while an older screenshot write hits the quota', async () => {
+      const key = pendingFeedbackKey(1);
+      let release: () => void = () => {};
+      let started: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const entered = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const setSpy = vi
+        .spyOn(browser.storage.session, 'set')
+        .mockImplementationOnce(async () => {
+          started();
+          await gate;
+          throw new Error('QUOTA_BYTES quota exceeded');
+        });
+
+      const older = mergePendingElement(1, picked('fb_old', 'button#old'), 0, picked('fb_old', 'button#old'));
+      await entered;
+      const newer = setPendingFeedback(1, picked('fb_new', 'button#new'));
+      release();
+      await Promise.all([older, newer]);
+
+      expect(await getPendingFeedback(1)).toEqual(picked('fb_new', 'button#new'));
+      expect(await browser.storage.session.get(key)).toEqual({ [key]: picked('fb_new', 'button#new') });
+      setSpy.mockRestore();
+    });
   });
 
   it('applies a quota fallback before a replacement queued behind it', async () => {

@@ -31,22 +31,34 @@ function feedback(id: string): PickerFeedback {
 
 function deps() {
   return {
-    notify: vi.fn(async () => ({ ok: true }) as CaptureResult),
-    send: vi.fn(async () => ({ ok: true, outboxCount: 1 }) as ComposerQueueResult),
+    notify: vi.fn(async (_feedback: PickerFeedback, _index: number) => ({ ok: true }) as CaptureResult),
+    send: vi.fn(
+      async (_input: {
+        comment: string;
+        page: ComposerPageRequest;
+        captureID: string;
+        elementCount: number;
+      }) => ({ ok: true, outboxCount: 1 }) as ComposerQueueResult,
+    ),
   };
 }
 
 describe('element submission', () => {
-  it('queues the capture id after the capture settles', async () => {
+  it('queues the capture id with the set count after the capture settles', async () => {
     const stub = deps();
     const submission = createElementSubmission(stub);
     const pick = feedback('fb_a');
 
-    submission.track(pick);
+    submission.track(pick, 0);
 
-    await expect(submission.submit('Fix this', PAGE)).resolves.toEqual({ ok: true, outboxCount: 1 });
-    expect(stub.notify).toHaveBeenCalledWith(pick);
-    expect(stub.send).toHaveBeenCalledWith({ comment: 'Fix this', page: PAGE, captureID: 'fb_a' });
+    await expect(submission.submit('Fix this', PAGE, 1)).resolves.toEqual({ ok: true, outboxCount: 1 });
+    expect(stub.notify).toHaveBeenCalledWith(pick, 0);
+    expect(stub.send).toHaveBeenCalledWith({
+      comment: 'Fix this',
+      page: PAGE,
+      captureID: 'fb_a',
+      elementCount: 1,
+    });
   });
 
   it('does not submit when the capture was rejected', async () => {
@@ -55,9 +67,9 @@ describe('element submission', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const submission = createElementSubmission(stub);
 
-    submission.track(feedback('fb_a'));
+    submission.track(feedback('fb_a'), 0);
 
-    await expect(submission.submit('Fix this', PAGE)).resolves.toEqual({
+    await expect(submission.submit('Fix this', PAGE, 1)).resolves.toEqual({
       ok: false,
       error: 'The captured feedback was invalid',
     });
@@ -75,10 +87,10 @@ describe('element submission', () => {
         }),
     );
     const submission = createElementSubmission(stub);
-    submission.track(feedback('fb_a'));
+    submission.track(feedback('fb_a'), 0);
 
     let settled = false;
-    const pending = submission.submit('Fix this', PAGE).then((result) => {
+    const pending = submission.submit('Fix this', PAGE, 1).then((result) => {
       settled = true;
       return result;
     });
@@ -94,7 +106,7 @@ describe('element submission', () => {
     const stub = deps();
     const submission = createElementSubmission(stub);
 
-    await expect(submission.submit('Fix this', PAGE)).resolves.toEqual({
+    await expect(submission.submit('Fix this', PAGE, 1)).resolves.toEqual({
       ok: false,
       error: NO_PICKED_ELEMENT_ERROR,
     });
@@ -104,11 +116,88 @@ describe('element submission', () => {
   it('submits the latest capture when a second pick replaces the first', async () => {
     const stub = deps();
     const submission = createElementSubmission(stub);
-    submission.track(feedback('fb_a'));
-    submission.track(feedback('fb_b'));
+    submission.track(feedback('fb_a'), 0);
+    submission.track(feedback('fb_b'), 0);
 
-    await submission.submit('Fix this', PAGE);
+    await submission.submit('Fix this', PAGE, 1);
 
-    expect(stub.send).toHaveBeenCalledWith({ comment: 'Fix this', page: PAGE, captureID: 'fb_b' });
+    expect(stub.notify).toHaveBeenLastCalledWith(feedback('fb_b'), 0);
+    expect(stub.send).toHaveBeenCalledWith({ comment: 'Fix this', page: PAGE, captureID: 'fb_b', elementCount: 1 });
+  });
+
+  it('awaits every tracked capture and sends the set id and count', async () => {
+    const stub = deps();
+    const submission = createElementSubmission(stub);
+    submission.track(feedback('fb_set'), 0);
+    submission.track(feedback('fb_set'), 1);
+
+    await expect(submission.submit('Both', PAGE, 2)).resolves.toEqual({ ok: true, outboxCount: 1 });
+
+    expect(stub.notify.mock.calls.map(([, index]) => index)).toEqual([0, 1]);
+    expect(stub.send).toHaveBeenCalledWith({ comment: 'Both', page: PAGE, captureID: 'fb_set', elementCount: 2 });
+  });
+
+  it('fails on the first capture error and sends nothing', async () => {
+    const stub = deps();
+    stub.notify.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false, error: 'Capture failed' });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const submission = createElementSubmission(stub);
+    submission.track(feedback('fb_set'), 0);
+    submission.track(feedback('fb_set'), 1);
+
+    await expect(submission.submit('Both', PAGE, 2)).resolves.toEqual({ ok: false, error: 'Capture failed' });
+    expect(stub.send).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it('drops a removed chip from the awaited set', async () => {
+    const stub = deps();
+    const submission = createElementSubmission(stub);
+    submission.track(feedback('fb_set'), 0);
+    submission.track(feedback('fb_set'), 1);
+
+    submission.remove(1);
+
+    await submission.submit('Only the first', PAGE, 1);
+
+    expect(stub.notify).toHaveBeenCalledTimes(2);
+    expect(stub.send).toHaveBeenCalledWith({
+      comment: 'Only the first',
+      page: PAGE,
+      captureID: 'fb_set',
+      elementCount: 1,
+    });
+  });
+
+  it('refuses to submit after the only chip is removed', async () => {
+    const stub = deps();
+    const submission = createElementSubmission(stub);
+    submission.track(feedback('fb_a'), 0);
+
+    submission.remove(0);
+
+    await expect(submission.submit('Fix this', PAGE, 0)).resolves.toEqual({
+      ok: false,
+      error: NO_PICKED_ELEMENT_ERROR,
+    });
+    expect(stub.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps the set id from the lowest remaining index after a removal', async () => {
+    const stub = deps();
+    const submission = createElementSubmission(stub);
+    submission.track(feedback('fb_set'), 0);
+    submission.track(feedback('fb_set'), 1);
+
+    submission.remove(0);
+
+    await submission.submit('Only the second', PAGE, 1);
+
+    expect(stub.send).toHaveBeenCalledWith({
+      comment: 'Only the second',
+      page: PAGE,
+      captureID: 'fb_set',
+      elementCount: 1,
+    });
   });
 });

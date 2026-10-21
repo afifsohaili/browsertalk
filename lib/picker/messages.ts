@@ -1,10 +1,11 @@
 import { browser } from 'wxt/browser';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
-import { clearPendingFeedback, setPendingFeedback } from '@/lib/storage/pending';
+import { clearPendingFeedback, mergePendingElement } from '@/lib/storage/pending';
 import { isPickerFeedback, type PickerFeedback, type PickerScreenshotFacts } from './facts';
 import {
   isArmPickerResult,
   isCaptureResult,
+  isElementIndex,
   isPickerMessage,
   type ArmPickerResult,
   type CaptureResult,
@@ -17,6 +18,7 @@ const NO_ACTIVE_PAGE = 'No active page to arm the picker on';
 const NO_CONTENT_SCRIPT = "Can't arm the picker on this page";
 const NO_SENDER_TAB = 'No page sent this capture';
 const INVALID_CAPTURE = 'The captured feedback was invalid';
+const INVALID_INDEX = 'The captured element index was invalid';
 const CONTEXT_MENU_ID = 'arm-picker';
 
 const defaultScreenshotter = createElementScreenshotter({
@@ -50,6 +52,7 @@ export async function respondToPickerRequest(
     case 'picker/captured': {
       if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
       if (!isPickerFeedback(request.feedback)) return { ok: false, error: INVALID_CAPTURE };
+      if (!isElementIndex(request.elementIndex)) return { ok: false, error: INVALID_INDEX };
 
       const tabId = context.tabId;
       if (tabId === undefined) return { ok: false, error: NO_SENDER_TAB };
@@ -60,7 +63,7 @@ export async function respondToPickerRequest(
       });
       if (!(await hasConsent())) return { ok: false, error: CONSENT_REQUIRED_ERROR };
 
-      await persistPendingCapture(tabId, request.feedback, screenshot);
+      await persistPendingCapture(tabId, request.feedback, request.elementIndex, screenshot);
       return { ok: true };
     }
   }
@@ -69,13 +72,14 @@ export async function respondToPickerRequest(
 async function persistPendingCapture(
   tabId: number,
   feedback: PickerFeedback,
+  elementIndex: number,
   screenshot: PickerScreenshotFacts | null,
 ): Promise<void> {
   if (screenshot === null) {
-    await setPendingFeedback(tabId, feedback);
+    await mergePendingElement(tabId, feedback, elementIndex);
     return;
   }
-  await setPendingFeedback(tabId, withScreenshot(feedback, screenshot), feedback);
+  await mergePendingElement(tabId, withScreenshot(feedback, screenshot), elementIndex, feedback);
 }
 
 async function isSenderTabVisible(tabId: number, windowId: number | undefined): Promise<boolean> {
@@ -162,8 +166,8 @@ export async function requestArmPicker(): Promise<ArmPickerResult> {
   return isArmPickerResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 
-export async function notifyCaptured(feedback: PickerFeedback): Promise<CaptureResult> {
-  const response = await sendSafely({ type: 'picker/captured', feedback });
+export async function notifyCaptured(feedback: PickerFeedback, elementIndex: number): Promise<CaptureResult> {
+  const response = await sendSafely({ type: 'picker/captured', feedback, elementIndex });
   return isCaptureResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 

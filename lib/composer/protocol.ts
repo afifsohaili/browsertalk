@@ -10,6 +10,7 @@ export interface ComposerQueueRequest {
   comment: string;
   page: ComposerPageRequest;
   captureID: string;
+  elementCount: number;
 }
 
 export type ComposerRequest =
@@ -40,7 +41,8 @@ export function isComposerRequest(value: unknown): value is ComposerRequest {
       return (
         typeof value.comment === 'string' &&
         isComposerPageRequest(value.page) &&
-        isCaptureID(value.captureID)
+        isCaptureID(value.captureID) &&
+        isElementCount(value.elementCount)
       );
     default:
       return false;
@@ -68,6 +70,10 @@ export function isOutboxCountResult(value: unknown): value is OutboxCountResult 
 
 function isCaptureID(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function isElementCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
 function isComposerPageRequest(value: unknown): value is ComposerPageRequest {

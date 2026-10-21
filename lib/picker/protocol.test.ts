@@ -8,7 +8,7 @@ import {
   type PickerFeedback,
 } from './facts';
 import { MAX_SCREENSHOT_DATA_URL_CHARS } from './limits';
-import { isArmPickerResult, isCaptureResult, isPickerMessage } from './protocol';
+import { isArmPickerResult, isCaptureResult, isElementIndex, isPickerMessage } from './protocol';
 
 export function sampleExtras(): PickerExtras {
   return {
@@ -58,7 +58,7 @@ describe('picker message guard', () => {
   });
 
   it('accepts a captured feedback message', () => {
-    expect(isPickerMessage({ type: 'picker/captured', feedback: sampleFeedback() })).toBe(true);
+    expect(isPickerMessage({ type: 'picker/captured', feedback: sampleFeedback(), elementIndex: 0 })).toBe(true);
   });
 
   it('leaves other messages alone', () => {
@@ -66,6 +66,24 @@ describe('picker message guard', () => {
     expect(isPickerMessage('picker/arm')).toBe(false);
     expect(isPickerMessage(null)).toBe(false);
     expect(isPickerMessage({ type: 'picker/other' })).toBe(false);
+  });
+});
+
+describe('element index guard', () => {
+  it('accepts a whole index from zero', () => {
+    expect(isElementIndex(0)).toBe(true);
+    expect(isElementIndex(1)).toBe(true);
+    expect(isElementIndex(4)).toBe(true);
+  });
+
+  it('rejects anything else', () => {
+    expect(isElementIndex(-1)).toBe(false);
+    expect(isElementIndex(1.5)).toBe(false);
+    expect(isElementIndex(Number.NaN)).toBe(false);
+    expect(isElementIndex(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isElementIndex('0')).toBe(false);
+    expect(isElementIndex(undefined)).toBe(false);
+    expect(isElementIndex(null)).toBe(false);
   });
 });
 

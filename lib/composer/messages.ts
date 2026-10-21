@@ -24,6 +24,7 @@ import {
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 const NO_ACTIVE_PAGE = 'No active page to comment on';
 const NO_PAGE_URL = "Can't read this page's URL";
+export const SET_COUNT_MISMATCH_ERROR = 'The element set changed — pick again';
 
 export type ComposerResponse = ComposerQueueResult | OutboxCountResult;
 
@@ -64,6 +65,7 @@ async function queueComment(request: ComposerQueueRequest, context: ComposerRequ
 
   const pending = await getPendingFeedback(tabId);
   if (pending === null || pending.id !== request.captureID) return { ok: false, error: NO_PICKED_ELEMENT_ERROR };
+  if (pending.elements.length !== request.elementCount) return { ok: false, error: SET_COUNT_MISMATCH_ERROR };
 
   const destination = await captureQueuedDestination(pending.page.url);
   const item = buildElementOutboxItem(pending, request.comment, {
@@ -141,8 +143,9 @@ export async function requestQueueComment(
   comment: string,
   page: ComposerPageRequest,
   captureID: string,
+  elementCount: number,
 ): Promise<ComposerQueueResult> {
-  const request: ComposerRequest = { type: 'composer/queue', comment, page, captureID };
+  const request: ComposerRequest = { type: 'composer/queue', comment, page, captureID, elementCount };
   const response = await sendSafely(request);
   return isComposerQueueResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
