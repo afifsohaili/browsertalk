@@ -16,6 +16,8 @@ registerBuiltinBackends();
 
 const SAVED = 'http://127.0.0.1:15001';
 const SAVED_KEY = `opencode@${SAVED}`;
+const LOCAL = 'http://127.0.0.1:29422';
+const LOCAL_LINK = `${LOCAL}/auth/connect/local123`;
 const REMOTE = 'http://100.64.0.5:4096';
 const REMOTE_LINK = `${REMOTE}/auth/connect/remote123`;
 const COPY_FAILED = 'Could not copy. Select the command and copy it.';
@@ -63,7 +65,7 @@ describe('welcome setup surface', () => {
   });
 
   function mountWelcome(): VueWrapper {
-    wrapper = mount(App);
+    wrapper = mount(App, { attachTo: document.body });
     return wrapper;
   }
 
@@ -82,6 +84,25 @@ describe('welcome setup surface', () => {
     expect(view.text()).toContain(SETUP_COPY.credentialLabel);
     expect(view.text()).toContain(SETUP_COPY.linkWarning);
     expect(buttonLabels(view)).toEqual(expect.arrayContaining(['Check again', 'Pair', 'Copy']));
+  });
+
+  it('pairs a pasted link from the form and renders the project handoff', async () => {
+    const fetchFn = respondWith('2.0.32');
+    setOpenCodeFetch(fetchFn);
+    const view = mountWelcome();
+
+    await vi.waitFor(() => expect(view.text()).toContain('Not paired'));
+    await view.get('[data-testid="pairing-input"]').setValue(LOCAL_LINK);
+    await button(view, 'Pair').trigger('click');
+
+    await vi.waitFor(() => expect(view.text()).toContain('3. Pick a project'));
+
+    expect(view.text()).toContain('Connected: opencode 2.0.32 at 127.0.0.1:29422');
+    expect(view.text()).toContain(SETUP_COPY.handoff);
+    expect(view.find('[data-testid="pairing-input"]').exists()).toBe(false);
+    expect(fetchFn).toHaveBeenCalledWith(`${LOCAL}/auth/connect/local123`, expect.anything());
+    expect(await getToken(`opencode@${LOCAL}`)).toBe('tok_new');
+    expect((await getSettings()).serverUrl).toBe(LOCAL);
   });
 
   it('keeps the form during upgrade and recovers through Check again', async () => {
@@ -106,6 +127,33 @@ describe('welcome setup surface', () => {
     expect(view.text()).toContain('Connected: opencode 2.0.32 at 127.0.0.1:15001');
   });
 
+  it('recovers from an incompatible server by pairing a supported link', async () => {
+    const supported = 'http://127.0.0.1:29422';
+    await setToken(SAVED_KEY, 'tok_old');
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        const href = String(url);
+        if (href.endsWith('/auth/connect/recover')) return jsonResponse({ token: 'tok_2' });
+        if (href.startsWith(supported)) return jsonResponse({ version: '2.0.32' });
+        return jsonResponse({ version: '3.0.0' });
+      }),
+    );
+    const view = mountWelcome();
+
+    await vi.waitFor(() => expect(view.text()).toContain('Wrong opencode version'));
+    expect(view.text()).toContain(SETUP_COPY.upgrade);
+
+    await view.get('[data-testid="pairing-input"]').setValue(`${supported}/auth/connect/recover`);
+    await button(view, 'Pair').trigger('click');
+
+    await vi.waitFor(() => expect(view.text()).toContain('3. Pick a project'));
+
+    expect(view.text()).toContain('Connected: opencode 2.0.32 at 127.0.0.1:29422');
+    expect(view.text()).toContain(SETUP_COPY.handoff);
+    expect(await getToken(`opencode@${supported}`)).toBe('tok_2');
+    expect((await getSettings()).serverUrl).toBe(supported);
+  });
+
   it('names the remote origin and warning before pairing it', async () => {
     const fetchFn = respondWith('2.0.32');
     setOpenCodeFetch(fetchFn);
@@ -125,11 +173,35 @@ describe('welcome setup surface', () => {
     expect(await getToken(`opencode@${REMOTE}`)).toBeNull();
   });
 
-  it('returns to the pair form when a remote link is cancelled', async () => {
-    setOpenCodeFetch(respondWith('2.0.32'));
+  it('pairs the remote server after confirmation and renders the handoff', async () => {
+    const fetchFn = respondWith('2.0.32');
+    setOpenCodeFetch(fetchFn);
     const view = mountWelcome();
 
     await vi.waitFor(() => expect(view.text()).toContain('Not paired'));
+    await view.get('[data-testid="pairing-input"]').setValue(REMOTE_LINK);
+    await view.get('form').trigger('submit');
+    await vi.waitFor(() => expect(buttonLabels(view)).toContain('Pair this server'));
+    expect(view.text()).toContain(REMOTE_PAIRING_WARNING);
+
+    await button(view, 'Pair this server').trigger('click');
+
+    await vi.waitFor(() => expect(view.text()).toContain('3. Pick a project'));
+
+    expect(view.text()).toContain('Connected: opencode 2.0.32 at 100.64.0.5:4096');
+    expect(view.text()).toContain(SETUP_COPY.handoff);
+    expect(fetchFn).toHaveBeenCalledWith(`${REMOTE}/auth/connect/remote123`, expect.anything());
+    expect(await getToken(`opencode@${REMOTE}`)).toBe('tok_new');
+    expect(await getSettings()).toMatchObject({ serverUrl: REMOTE, allowRemote: true });
+  });
+
+  it('returns to the pair form when a remote link is cancelled', async () => {
+    const fetchFn = respondWith('2.0.32');
+    setOpenCodeFetch(fetchFn);
+    const view = mountWelcome();
+
+    await vi.waitFor(() => expect(view.text()).toContain('Not paired'));
+    const callsBefore = vi.mocked(fetchFn).mock.calls.length;
     await view.get('[data-testid="pairing-input"]').setValue(REMOTE_LINK);
     await view.get('form').trigger('submit');
     await vi.waitFor(() => expect(buttonLabels(view)).toContain('Cancel'));
@@ -139,8 +211,9 @@ describe('welcome setup surface', () => {
     await vi.waitFor(() => expect(view.text()).not.toContain(REMOTE));
     expect(view.find('[data-testid="pairing-input"]').exists()).toBe(true);
     expect(buttonLabels(view)).toContain('Pair');
+    expect(fetchFn).toHaveBeenCalledTimes(callsBefore);
     expect(await getToken(`opencode@${REMOTE}`)).toBeNull();
-    expect((await getSettings()).serverUrl).toBe(SAVED);
+    expect(await getSettings()).toMatchObject({ serverUrl: SAVED, allowRemote: false });
   });
 
   it('shows the project handoff when connected', async () => {
