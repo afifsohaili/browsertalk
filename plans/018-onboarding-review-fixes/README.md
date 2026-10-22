@@ -10,7 +10,7 @@ Scope: all findings, including the inherited R7 consent issue. R5 gets real comp
 |---|---|---|---|
 | 018a | `ticket-01-blocking.md` | shipped · 0ecd272 | 017 |
 | 018b | `ticket-02-migration-version-copy.md` | shipped · 5175153 | 018a |
-| 018c | `ticket-03-component-tests.md` | ready | 018a |
+| 018c | `ticket-03-component-tests.md` | shipped · 456ffea | 018a |
 | 018d | `ticket-04-consent-gate.md` | ready | 018c |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
@@ -54,3 +54,12 @@ Shipped 2026-10-22 in `5175153`.
 - ConsentGate, README, and the store record use pairing-endpoint wording; `15001` stays documented as the legacy fallback.
 - Divergences: the SHA lives in the follow-up docs commit; the migration owner identity is normalized too. `2.0.32+build` metadata is accepted.
 - 018c must-know: the ConsentGate copy is now the exact store-recorded text; render specs should assert it verbatim.
+
+## Closeout 018c
+
+Shipped 2026-10-22 in `456ffea`.
+
+- Welcome spec mounts the real tab with `fakeBrowser`, real connection messaging, and injected opencode fetch. Covers the unreachable pair form, upgrade plus Check again recovery, remote origin/warning, cancel, connected handoff, clipboard success/rejection, and the side-panel fallback.
+- Panel card spec covers all five states, the fake backend's Connected result without network, Finish setup opening the welcome tab, and the absence of a pairing form.
+- Divergences: clipboard rejection now renders visible `copyFailed` copy, because the surface previously swallowed it; `@vitejs/plugin-vue` joins `@vue/test-utils` so Vitest can mount SFCs. The SHA lives in the follow-up docs commit.
+- 018d must-know: panel-card specs stop at the card, so consent gating still needs its own rendered proof. Mounted specs must unmount to release the connection listeners.
