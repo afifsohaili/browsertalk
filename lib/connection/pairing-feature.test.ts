@@ -121,6 +121,34 @@ describe('pairing from an opencode pair link', () => {
     expect(await getToken(LINK_KEY)).toBeNull();
   });
 
+  it('keeps every setting and token when a malformed version suffix follows redemption', async () => {
+    await setSettings({
+      serverUrl: 'http://127.0.0.1:4096',
+      allowRemote: true,
+      sessionStrategy: { opencode: 'sticky' },
+    });
+    await setToken('opencode@http://127.0.0.1:4096', 'tok_saved');
+    await setToken('opencode@http://127.0.0.1:5000', 'tok_other');
+    const before = await getSettings();
+
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
+        return jsonResponse({ version: '2.0.32+.' });
+      }),
+    );
+
+    await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({
+      ok: false,
+      error: 'Browsertalk needs opencode 2 — run opencode upgrade',
+    });
+
+    expect(await getSettings()).toEqual(before);
+    expect(await getToken(LINK_KEY)).toBeNull();
+    expect(await getToken('opencode@http://127.0.0.1:4096')).toBe('tok_saved');
+    expect(await getToken('opencode@http://127.0.0.1:5000')).toBe('tok_other');
+  });
+
   it('keeps the saved settings and token when the version lookup fails after redemption', async () => {
     setOpenCodeFetch(
       vi.fn<FetchLike>(async (url) => {

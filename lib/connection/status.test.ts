@@ -17,6 +17,7 @@ describe('isSupportedOpenCodeVersion', () => {
     expect(isSupportedOpenCodeVersion('2.0.24')).toBe(true);
     expect(isSupportedOpenCodeVersion('2.0.32')).toBe(true);
     expect(isSupportedOpenCodeVersion('2.1.0-beta')).toBe(true);
+    expect(isSupportedOpenCodeVersion('2.0.0-rc.1+build.5')).toBe(true);
   });
 
   it('rejects other majors and empty values', () => {
@@ -33,6 +34,14 @@ describe('isSupportedOpenCodeVersion', () => {
     expect(isSupportedOpenCodeVersion('2.0')).toBe(false);
     expect(isSupportedOpenCodeVersion('2.0.32-')).toBe(false);
     expect(isSupportedOpenCodeVersion('2.0.32 extra')).toBe(false);
+  });
+
+  it('rejects empty dot-separated prerelease and build identifiers', () => {
+    expect(isSupportedOpenCodeVersion('2.0.32-.')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32-beta..1')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32+.')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32-')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32+')).toBe(false);
   });
 });
 
