@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { browser, type Browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { registerConnectionHandler } from '@/lib/connection/messages';
-import { acceptConsent, declineConsent } from '@/lib/consent/consent';
+import { acceptConsent, declineConsent, readConsentStatus } from '@/lib/consent/consent';
 import { registerPanelHandler } from '@/lib/panel/messages';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
@@ -152,5 +152,46 @@ describe('side panel consent boundary', () => {
     await triggerEvent(browser.storage.local.onChanged, { [STORAGE_KEYS.sessions]: { newValue: {} } });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(query).toHaveBeenCalledTimes(reads);
+  });
+
+  it('ignores a delayed accepted read that lands after a newer decline', async () => {
+    await acceptConsent();
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let releaseAccepted: () => void = () => {};
+    let acceptedStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      acceptedStarted = resolve;
+    });
+    let consentReads = 0;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      if (keys === STORAGE_KEYS.consent.status && consentReads++ === 0) {
+        acceptedStarted();
+        await new Promise<void>((resolve) => {
+          releaseAccepted = resolve;
+        });
+        return { [STORAGE_KEYS.consent.status]: 'accepted' };
+      }
+      return originalGet(keys);
+    }) as unknown as typeof browser.storage.local.get);
+
+    const view = mountSidePanel();
+    await started;
+
+    await browser.storage.local.set({ [STORAGE_KEYS.consent.status]: 'declined' });
+    await triggerEvent(browser.storage.local.onChanged, {
+      [STORAGE_KEYS.consent.status]: { newValue: 'declined' },
+    });
+    await vi.waitFor(() => expect(view.text()).toContain('You declined.'));
+    expect(view.find('main.panel').exists()).toBe(false);
+
+    releaseAccepted();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(view.find('main.panel').exists()).toBe(false);
+    expectNoPanelReads();
+    expect(await readConsentStatus()).toBe('declined');
   });
 });

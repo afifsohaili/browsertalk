@@ -15,23 +15,32 @@ export function useConsent(): ConsentView {
   const loaded = ref(false);
   const status = ref<ConsentStatus | null>(null);
   const accepted = computed(() => status.value === 'accepted');
+  let generation = 0;
 
   async function refresh(): Promise<void> {
+    const read = ++generation;
     try {
-      status.value = await readConsentStatus();
+      const next = await readConsentStatus();
+      if (read === generation) status.value = next;
     } finally {
-      loaded.value = true;
+      if (read === generation) loaded.value = true;
     }
   }
 
   async function accept(): Promise<void> {
+    const write = ++generation;
     await acceptConsent();
+    if (write !== generation) return;
     status.value = 'accepted';
+    loaded.value = true;
   }
 
   async function decline(): Promise<void> {
+    const write = ++generation;
     await declineConsent();
+    if (write !== generation) return;
     status.value = 'declined';
+    loaded.value = true;
   }
 
   function onStorageChanged(changes: Record<string, unknown>): void {
