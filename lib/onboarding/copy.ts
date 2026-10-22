@@ -11,6 +11,7 @@ export const SETUP_COPY = {
   handoff: 'Switch to your dev site, then pick a project in the side panel.',
   pin: 'Pin Browsertalk to the toolbar: open the extensions menu, then pin Browsertalk.',
   openPanel: 'Open side panel',
+  copyFailed: 'Could not copy. Select the command and copy it.',
 } as const;
 
 /** Names the remote origin before the user confirms the link. */

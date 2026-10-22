@@ -20,6 +20,7 @@ const {
 } = useSetup();
 
 const copied = ref(false);
+const copyError = ref(false);
 const panelError = ref(false);
 
 const state = computed(() => (status.value === null ? null : connectionState(status.value)));
@@ -31,8 +32,10 @@ async function copyCommand(): Promise<void> {
   try {
     await navigator.clipboard.writeText(command.value);
     copied.value = true;
+    copyError.value = false;
   } catch {
     copied.value = false;
+    copyError.value = true;
   }
 }
 
@@ -70,6 +73,7 @@ async function openPanel(): Promise<void> {
         <code>{{ command }}</code>
         <button type="button" @click="copyCommand">{{ copied ? 'Copied' : 'Copy' }}</button>
       </div>
+      <p v-if="copyError" class="error">{{ SETUP_COPY.copyFailed }}</p>
       <p class="warning">{{ SETUP_COPY.linkWarning }}</p>
       <p class="hint">{{ SETUP_COPY.expiry }}</p>
 
