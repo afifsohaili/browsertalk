@@ -6,7 +6,8 @@ export const PAIRING_LINK_ERRORS = {
   prose: 'Paste the pairing link or the code on its own',
 } as const;
 
-const URL_PATTERN = /https?:\/\/[^\s"'<>]+/i;
+const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
+const OTHER_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 export interface PairingCredential {
   /** Code to redeem at `/auth/connect/{code}`. */
@@ -27,9 +28,12 @@ export function parsePairingCredential(value: string): PairingCredentialCheck {
   const trimmed = value.trim();
   if (trimmed.length === 0) return { ok: false, error: PAIRING_LINK_ERRORS.empty };
 
-  const match = URL_PATTERN.exec(trimmed);
-  if (match !== null) return parseLink(stripTrailingPunctuation(match[0]));
+  const urls = trimmed.match(URL_PATTERN) ?? [];
+  if (urls.length > 1) return { ok: false, error: PAIRING_LINK_ERRORS.prose };
+  const first = urls[0];
+  if (first !== undefined) return parseLink(stripTrailingPunctuation(first));
 
+  if (OTHER_SCHEME_PATTERN.test(trimmed)) return { ok: false, error: PAIRING_LINK_ERRORS.notPairingLink };
   if (/\s/.test(trimmed)) return { ok: false, error: PAIRING_LINK_ERRORS.prose };
 
   return { ok: true, credential: { code: trimmed, endpoint: null, origin: null, remote: false } };
@@ -74,5 +78,5 @@ function parseLink(raw: string): PairingCredentialCheck {
 }
 
 function stripTrailingPunctuation(value: string): string {
-  return value.replace(/[.,;:]+$/, '');
+  return value.replace(/[.,;:!?)\]}>]+$/, '');
 }

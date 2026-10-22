@@ -73,7 +73,7 @@ WXT + Vue 3 + TypeScript. The background service worker is the only client of th
 
 ## Where it connects
 
-Browsertalk talks only to the opencode server you pair with — loopback by default. The pairing link carries the server URL, so a non-default port needs no configuration. `opencode serve` defaults to 4096; the background service picks a dynamic port and `opencode service status` prints it. There are no external servers, no analytics, and no third-party sharing; all network traffic stays on loopback. Settings can allow a server on another machine ("Allow a remote server", off by default) — the pairing token and feedback then cross your network, so keep that link encrypted (Tailscale, SSH tunnel) or trusted.
+Browsertalk talks only to the opencode server you pair with. The pairing link carries the server URL, so a non-default port needs no configuration. `opencode serve` defaults to 4096; the background service picks a dynamic port and `opencode service status` prints it. There are no external servers, no analytics, and no third-party sharing. Traffic stays on this machine by default (loopback). Settings can allow a server on another machine ("Allow a remote server", off by default) — the pairing token and feedback then cross your network, so keep that link encrypted (Tailscale, SSH tunnel) or trusted.
 
 ## Privacy summary
 

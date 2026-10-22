@@ -39,6 +39,20 @@ describe('OpenCodeBackend.ping', () => {
     });
   });
 
+  it('rejects a malformed 2.x version with the upgrade action', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.garbage' })));
+
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Browsertalk needs opencode 2',
+      state: 'incompatible',
+      action: 'Run opencode upgrade',
+      endpoint: BASE,
+      version: '2.garbage',
+    });
+  });
+
   it('reports not paired when an unauthenticated probe is rejected', async () => {
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)));
 
@@ -65,6 +79,33 @@ describe('OpenCodeBackend.ping', () => {
     });
     expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/info`);
     expect(fetchFn.mock.calls[0]?.[1]?.headers).toEqual({ Accept: 'application/json' });
+  });
+
+  it('reports an unreachable server when the unpaired probe fails to connect', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => {
+      throw new TypeError('fetch failed');
+    }));
+
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: `Cannot reach the opencode server at ${BASE}`,
+      state: 'unreachable',
+      action: 'Start opencode, then test again',
+      endpoint: BASE,
+    });
+  });
+
+  it('reports an incompatible server from the unpaired probe', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '3.0.0' })));
+
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Browsertalk needs opencode 2',
+      state: 'incompatible',
+      action: 'Run opencode upgrade',
+      endpoint: BASE,
+      version: '3.0.0',
+    });
   });
 
   it('reports the server version with a stored token', async () => {
@@ -357,6 +398,19 @@ describe('OpenCodeBackend.onboarding', () => {
 
     await expect(onboarding.authenticate({ credential: 'ABC123' })).resolves.toEqual({ token: 'tok_new' });
     expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/auth/connect/ABC123`);
+  });
+
+  it('rejects a malformed 2.x version after redeeming the code', async () => {
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_new' });
+      return jsonResponse({ version: '2.garbage' });
+    });
+    const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    await expect(onboarding.authenticate({ credential: 'ABC123' })).rejects.toThrow(
+      'Browsertalk needs opencode 2 — run opencode upgrade',
+    );
   });
 
   it('gates a new pairing on an opencode 2 version', async () => {

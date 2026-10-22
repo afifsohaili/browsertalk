@@ -1,13 +1,15 @@
 import { browser } from 'wxt/browser';
 import type { AgentBackendId } from '@/lib/agent-backend/interface';
+import { getAgentBackend, hasAgentBackend } from '@/lib/agent-backend/registry';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import type { OriginBindings } from '@/lib/storage/projects';
-import { getSettings } from '@/lib/storage/settings';
+import { DEFAULT_BACKEND_ID, getSettings, setSettings } from '@/lib/storage/settings';
 import { parseServerUrl } from './endpoint';
 import { connectionKey, type ConnectionIdentity } from './identity';
 import { isConnectionIdentity } from './protocol';
 
 export async function migrateLegacyConnectionStorage(): Promise<void> {
+  await normalizeStoredBackend();
   const owner = await readMigrationOwner();
   if (owner.state === 'owner') {
     await migrateForConnection(owner.connection);
@@ -26,6 +28,20 @@ export async function migrateLegacyConnectionStorage(): Promise<void> {
   await migrateForConnection(connection);
 }
 
+/**
+ * A test-only backend has no product path. Boot moves a stored one to the default user choice so
+ * ping, pairing, and delivery never reach the fake before the settings page loads.
+ */
+async function normalizeStoredBackend(): Promise<void> {
+  const { backendId } = await getSettings();
+  if (isSelectableBackend(backendId)) return;
+  await setSettings({ backendId: DEFAULT_BACKEND_ID });
+}
+
+function isSelectableBackend(id: AgentBackendId): boolean {
+  return hasAgentBackend(id) && getAgentBackend(id).userSelectable !== false;
+}
+
 async function migrateForConnection(connection: ConnectionIdentity): Promise<void> {
   const key = connectionKey(connection);
   await migrateLegacyToken(key);
@@ -42,8 +58,14 @@ async function readMigrationOwner(): Promise<MigrationOwner> {
   const stored = await browser.storage.local.get(STORAGE_KEYS.migration.owner);
   const value = stored[STORAGE_KEYS.migration.owner];
   if (value === undefined) return { state: 'none' };
-  if (isConnectionIdentity(value)) return { state: 'owner', connection: value };
+  if (isConnectionIdentity(value)) return { state: 'owner', connection: normalizeIdentity(value) };
   return { state: 'unreadable' };
+}
+
+function normalizeIdentity(identity: ConnectionIdentity): ConnectionIdentity {
+  return isSelectableBackend(identity.backendId)
+    ? identity
+    : { ...identity, backendId: DEFAULT_BACKEND_ID };
 }
 
 async function hasLegacyConnectionData(backendId: AgentBackendId): Promise<boolean> {

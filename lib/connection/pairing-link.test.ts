@@ -93,4 +93,68 @@ describe('parsePairingCredential', () => {
       error: 'Remove the username and password from the server URL',
     });
   });
+
+  it('refuses a malformed percent escape in the code', () => {
+    expect(parsePairingCredential('http://127.0.0.1:29422/auth/connect/abc%ZZ')).toEqual({
+      ok: false,
+      error: 'That link is not a pairing link — copy the link opencode pair prints',
+    });
+  });
+
+  it('accepts an IPv6 loopback link as local', () => {
+    expect(parsePairingCredential('http://[::1]:4096/auth/connect/ABC123')).toEqual({
+      ok: true,
+      credential: {
+        code: 'ABC123',
+        endpoint: 'http://[::1]:4096',
+        origin: 'http://[::1]:4096',
+        remote: false,
+      },
+    });
+  });
+
+  it('marks a lookalike localhost host as remote', () => {
+    const parsed = parsePairingCredential('http://localhost.evil.example:4096/auth/connect/ABC123');
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      credential: {
+        endpoint: 'http://localhost.evil.example:4096',
+        remote: true,
+      },
+    });
+  });
+
+  it('refuses two links in one paste', () => {
+    const output = [
+      'http://127.0.0.1:29422/auth/connect/AAA111',
+      'http://127.0.0.1:29423/auth/connect/BBB222',
+    ].join('\n');
+
+    expect(parsePairingCredential(output)).toEqual({
+      ok: false,
+      error: 'Paste the pairing link or the code on its own',
+    });
+  });
+
+  it('strips punctuation wrapped around the link', () => {
+    const parsed = parsePairingCredential('See (http://127.0.0.1:29422/auth/connect/ABC123).');
+
+    expect(parsed).toEqual({
+      ok: true,
+      credential: {
+        code: 'ABC123',
+        endpoint: 'http://127.0.0.1:29422',
+        origin: 'http://127.0.0.1:29422',
+        remote: false,
+      },
+    });
+  });
+
+  it('refuses a link with an unsupported scheme', () => {
+    expect(parsePairingCredential('ftp://127.0.0.1:29422/auth/connect/ABC123')).toEqual({
+      ok: false,
+      error: 'That link is not a pairing link — copy the link opencode pair prints',
+    });
+  });
 });

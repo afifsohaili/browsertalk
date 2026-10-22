@@ -1,14 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import { captureQueuedDestination } from '@/lib/connection/destinations';
+import { bindOrigin, pairWithServer, pingConnection } from '@/lib/connection/service';
+import { resolveConfiguredConnection } from '@/lib/connection/resolve';
 import { getToken } from '@/lib/storage/auth';
 import { getBoundProject, getOriginBindings } from '@/lib/storage/projects';
 import { getStoredSession } from '@/lib/storage/sessions';
+import { getSettings } from '@/lib/storage/settings';
 import { migrateLegacyConnectionStorage } from './migrate';
 
 const BASE = 'http://127.0.0.1:15001';
 const KEY = `opencode@${BASE}`;
 const LEGACY_REF = { sessionID: 'ses_old', title: 'Browsertalk · example · 2026-10-09' };
+
+registerBuiltinBackends();
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 async function seedLegacy(): Promise<void> {
   await browser.storage.local.set({
@@ -26,6 +41,10 @@ async function seedLegacy(): Promise<void> {
 describe('migrateLegacyConnectionStorage', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
   });
 
   it('claims legacy tokens, bindings, and refs for the configured connection', async () => {
@@ -187,6 +206,46 @@ describe('migrateLegacyConnectionStorage', () => {
 
   it('does nothing when there is no legacy data', async () => {
     await migrationNoop();
+  });
+
+  it('normalizes a stored test-only backend to opencode before ping, pairing, or delivery', async () => {
+    await browser.storage.local.set({ 'settings.backendId': 'fake', 'settings.serverUrl': BASE });
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_live' });
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+
+    await migrateLegacyConnectionStorage();
+
+    expect((await getSettings()).backendId).toBe('opencode');
+
+    await expect(resolveConfiguredConnection()).resolves.toMatchObject({
+      ok: true,
+      connection: { backendId: 'opencode', endpoint: BASE },
+    });
+
+    await expect(pingConnection()).resolves.toMatchObject({
+      ok: false,
+      state: 'unpaired',
+      endpoint: BASE,
+    });
+
+    await expect(pairWithServer('ABC123')).resolves.toEqual({ ok: true });
+    expect(await getToken(KEY)).toBe('tok_live');
+
+    const resolved = await resolveConfiguredConnection();
+    if (!resolved.ok) throw new Error(resolved.error);
+    await bindOrigin({
+      origin: 'https://example.com',
+      projectDirectory: '/home/afif/example',
+      connection: resolved.connection,
+    });
+    await expect(captureQueuedDestination('https://example.com/page')).resolves.toEqual({
+      backendId: 'opencode',
+      endpoint: BASE,
+      directory: '/home/afif/example',
+    });
   });
 });
 

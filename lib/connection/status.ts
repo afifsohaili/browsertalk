@@ -27,7 +27,7 @@ export const REMOTE_PAIRING_WARNING =
 
 /** The opencode 2 line, matching `2.0.32` and `2.1.0-beta` but not `3.0.0` or `20.1`. */
 export function isSupportedOpenCodeVersion(version: string): boolean {
-  return /^2\./.test(version);
+  return /^2\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version);
 }
 
 /** Older adapters omit `state`; treat an ok status as connected and a failure as unpaired. */

@@ -222,6 +222,36 @@ describe('useConnection', () => {
     scope.stop();
   });
 
+  it('cancelling a remote link leaves settings and tokens untouched and makes confirm inert', async () => {
+    const remote = 'http://100.64.0.5:4096';
+    const link = `${remote}/auth/connect/ABC123`;
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401));
+    setOpenCodeFetch(fetchFn);
+
+    const scope = effectScope();
+    const connection = scope.run(() => useConnection())!;
+    await vi.waitFor(() => expect(connection.status.value).not.toBeNull());
+    const callsBefore = fetchFn.mock.calls.length;
+    const settingsBefore = await getSettings();
+
+    await expect(connection.pair(link)).resolves.toBe(false);
+    expect(connection.remoteConfirmation.value).not.toBeNull();
+
+    connection.cancelRemote();
+
+    expect(connection.remoteConfirmation.value).toBeNull();
+    expect(fetchFn).toHaveBeenCalledTimes(callsBefore);
+    expect(await getSettings()).toEqual(settingsBefore);
+    expect(await getToken(`opencode@${remote}`)).toBeNull();
+
+    await expect(connection.confirmRemote()).resolves.toBe(false);
+    expect(fetchFn).toHaveBeenCalledTimes(callsBefore);
+    expect(await getSettings()).toEqual(settingsBefore);
+    expect(await getToken(`opencode@${remote}`)).toBeNull();
+
+    scope.stop();
+  });
+
   it('holds each remote link: cancel keeps the old endpoint, confirm pairs the new one', async () => {
     const remoteA = 'http://100.64.0.5:4096';
     const remoteB = 'http://100.64.0.6:4096';

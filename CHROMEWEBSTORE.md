@@ -113,7 +113,7 @@ From `components/ConsentGate.vue` — the first-run gate; also used as the "Revi
 > - your comment
 > - facts about the page and element — URL, title, DOM details, optional element screenshot
 >
-> It sends them only to the opencode server you run (default http://127.0.0.1:15001; another machine only if you turn on "Allow a remote server"). Nothing goes to external servers. No analytics.
+> It sends them only to the opencode server you pair with — the pairing link carries its address. Loopback is the default; another machine only if you turn on the remote-server option in settings. Nothing goes to external servers. No analytics.
 >
 > Nothing is captured before you accept.
 >
@@ -129,7 +129,7 @@ Declined state:
 
 Consent is stored as `consent.status` in `chrome.storage.local`; picker arming, capture, and both queue paths refuse with "Accept the feedback disclosure first" until the status is `accepted`.
 
-Note: the recorded text still names `http://127.0.0.1:15001` as the default. The shipped setting keeps that value only as a fallback for a bare code or a pre-017 install; a pairing link sets the endpoint. Align `ConsentGate.vue` and this record in a follow-up.
+Note: `http://127.0.0.1:15001` remains only a legacy fallback for a bare code or a pre-017 install; a pairing link sets the endpoint. It is not presented as the default.
 
 ## 6. Human steps (pending)
 

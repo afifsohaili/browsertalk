@@ -293,4 +293,27 @@ describe('connection status and the setup badge', () => {
     await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: false, state: 'unreachable' });
     expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
   });
+
+  it('restores the setup badge after a reset', async () => {
+    await setToken(KEY, 'tok_live');
+    await fakeBrowser.action.setBadgeText({ text: '' });
+
+    await expect(requestReset()).resolves.toEqual({ ok: true });
+
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+  });
+
+  it('reports a reset error without changing the badge or the token', async () => {
+    await setToken(KEY, 'tok_live');
+    await browser.storage.local.set({ 'settings.serverUrl': 'https://example.com' });
+    await fakeBrowser.action.setBadgeText({ text: '' });
+
+    await expect(requestReset()).resolves.toEqual({
+      ok: false,
+      error: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
+    });
+
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+    expect(await getToken(KEY)).toBe('tok_live');
+  });
 });

@@ -22,8 +22,17 @@ describe('isSupportedOpenCodeVersion', () => {
   it('rejects other majors and empty values', () => {
     expect(isSupportedOpenCodeVersion('3.0.0')).toBe(false);
     expect(isSupportedOpenCodeVersion('1.9.9')).toBe(false);
+    expect(isSupportedOpenCodeVersion('20.0.0')).toBe(false);
     expect(isSupportedOpenCodeVersion('20.1')).toBe(false);
     expect(isSupportedOpenCodeVersion('')).toBe(false);
+  });
+
+  it('rejects malformed 2.x forms', () => {
+    expect(isSupportedOpenCodeVersion('2.')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.garbage')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32-')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32 extra')).toBe(false);
   });
 });
 

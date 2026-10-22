@@ -103,6 +103,41 @@ describe('pairing from an opencode pair link', () => {
     expect((await getSettings()).serverUrl).toBe('http://127.0.0.1:15001');
     expect(await getToken(LINK_KEY)).toBeNull();
   });
+
+  it('rejects a malformed version after redemption without persisting anything', async () => {
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
+        return jsonResponse({ version: '2.garbage' });
+      }),
+    );
+
+    await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({
+      ok: false,
+      error: 'Browsertalk needs opencode 2 — run opencode upgrade',
+    });
+
+    expect(await getSettings()).toMatchObject({ serverUrl: 'http://127.0.0.1:15001', allowRemote: false });
+    expect(await getToken(LINK_KEY)).toBeNull();
+  });
+
+  it('keeps the saved settings and token when the version lookup fails after redemption', async () => {
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
+        throw new TypeError('fetch failed');
+      }),
+    );
+
+    await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({
+      ok: false,
+      error: `Cannot reach the opencode server at ${LINK_ENDPOINT}`,
+    });
+
+    expect(await getSettings()).toMatchObject({ serverUrl: 'http://127.0.0.1:15001', allowRemote: false });
+    expect(await getToken(LINK_KEY)).toBeNull();
+    expect(await getToken(`opencode@http://127.0.0.1:15001`)).toBeNull();
+  });
 });
 
 describe('pairing from a remote link', () => {
