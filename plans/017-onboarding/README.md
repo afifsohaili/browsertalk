@@ -35,6 +35,15 @@ Policy: one ticket = one conventional commit; tests ship with it. Feature specs 
 5. "Connected: opencode 2.0.32 at 127.0.0.1:29422."
 6. "Switch to your dev site, then pick a project in the side panel."
 
+## Follow-up after 017c
+
+- `af03b52` `fix(onboarding): keep the pair form visible when the server is unreachable`
+  - The welcome page hid the pairing form at `prerequisite`. That blocked the link-based discovery path: the user runs `opencode pair`, but cannot paste the link because the saved URL is unreachable.
+  - `showsPairForm` now keeps the form visible for `prerequisite`, `pair`, and `remote`; a unit test pins it.
+  - The prerequisite section links to the opencode 2 install docs.
+
+Known gap, not fixed here: the settings page migrates a stored `fake` backend to `opencode`, but the connection layer still reads `fake` directly. A dev install that selected `fake` would show the fake connection until the options page loads. Public installs cannot select `fake`. Review may decide whether to fix it.
+
 ## Test matrix
 
 | Behaviour | Seam | Kind |
