@@ -20,7 +20,7 @@ Source: exploration 2026-10-22. The extension assumes a fixed server URL and a l
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 017a | `ticket-01-connection-core.md` | shipped | — |
+| 017a | `ticket-01-connection-core.md` | shipped · cd6caf8 | — |
 | 017b | `ticket-02-welcome-tab.md` | ready | 017a |
 | 017c | `ticket-03-docs-store.md` | ready | 017a, 017b |
 
@@ -57,3 +57,13 @@ Policy: one ticket = one conventional commit; tests ship with it. Feature specs 
 - A doctor view with raw diagnostics.
 - Password auth.
 - `pi` adapter changes.
+
+## Closeout 017a
+
+Shipped 2026-10-22 in `cd6caf8`.
+
+- Connection service: parse link/code, confirm remote links, persist the link endpoint and token after a successful exchange, reset, version gate.
+- opencode probe: unauthenticated `/api/info` separates down from unpaired; every state carries a next action.
+- Panel setup card; options Test connection, Forget pairing, advanced server URL; fake backend hidden with a stored-fake fallback.
+- Divergences: "Finish setup" opens the options page until 017b adds the welcome tab. Docs SHA lives in the follow-up commit because a commit cannot contain its own hash.
+- 017b must-know: import `useConnection` for pairing state; it exposes `pair`, `remoteConfirmation`, `confirmRemote`, `cancelRemote`, and `forget`. Reuse `CONNECTION_LABELS`, `CONNECTION_ACTIONS`, `connectedSummary`, and `connectionState`. The panel no longer hosts the pairing form.
