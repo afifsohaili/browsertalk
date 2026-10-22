@@ -9,7 +9,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 019a | `ticket-01-security-correctness.md` | shipped · F3 · aae5154 | 018 |
-| 019b | `ticket-02-test-hardening.md` | ready | 019a |
+| 019b | `ticket-02-test-hardening.md` | in progress · F7 · 1580fab | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
 
@@ -57,3 +57,12 @@ F3 shipped 2026-10-22 in `aae5154`. 019a is complete; the SHA lives in the follo
 - Regressions cover both directions: delayed A-unreachable after B-connected stays clear; delayed A-connected after B-unreachable stays set. Delayed probes after pair and reset are ignored too.
 - Divergences: the generation is module scope in `messages.ts`; `use-connection.ts` is unchanged because its refresh generation owns surface refs and cannot undo a background write. The status handler reads settings twice per probe, which exposed a timing assumption in `keeps the surface error from a failed pairing`; that assertion now waits with `vi.waitFor`. A badge write already in flight when a newer generation starts cannot be retracted.
 - 019b must-know: the badge generation is not exported as a shared utility. F4–F7 remain in 019b.
+
+## Closeout 019b (F7)
+
+F7 shipped 2026-10-22 in `1580fab`. 019b remains open for F4–F6.
+
+- `isSupportedOpenCodeVersion` now requires non-empty, dot-separated prerelease and build identifiers. `2.0.32-.`, `2.0.32-beta..1`, and `2.0.32+.` reject; `2.0.0-rc.1+build.5` still passes.
+- Coverage lands at the status unit, paired `ping`, `authenticate` after redemption, and `pairWithServer` persistence. The persistence case seeds nondefault settings plus saved-endpoint and unrelated tokens, then asserts the full settings snapshot and every token are unchanged after a malformed suffix.
+- Divergence: numeric prerelease identifiers with leading zeros (for example `2.0.32-01`) remain accepted. Strict semver forbids them; the finding required non-empty dot-separated identifiers.
+- 019b must-know: the gate is one module-level regex. Both ping branches and authenticate call it, so a change there needs all four seams rerun.
