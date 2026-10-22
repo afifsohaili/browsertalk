@@ -21,7 +21,7 @@ Source: exploration 2026-10-22. The extension assumes a fixed server URL and a l
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 017a | `ticket-01-connection-core.md` | shipped · cd6caf8 | — |
-| 017b | `ticket-02-welcome-tab.md` | shipped | 017a |
+| 017b | `ticket-02-welcome-tab.md` | shipped · 6fb7802 | 017a |
 | 017c | `ticket-03-docs-store.md` | ready | 017a, 017b |
 
 Policy: one ticket = one conventional commit; tests ship with it. Feature specs verify the public seam; unit tests cover edge cases. `bun run compile` and `bun run test` must pass before each commit.
@@ -70,7 +70,7 @@ Shipped 2026-10-22 in `cd6caf8`.
 
 ## Closeout 017b
 
-Shipped 2026-10-22.
+Shipped 2026-10-22 in `6fb7802`.
 
 - Install handler runs before the background's first await: `reason=install` only, development and admin skipped via `browser.management.getSelf()`. It opens `welcome.html` and sets the setup badge.
 - Badge: set on install, cleared after a successful pair, set again on Forget pairing, restored on startup when the probe is not connected.
