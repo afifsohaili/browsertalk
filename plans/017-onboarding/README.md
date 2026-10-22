@@ -22,7 +22,7 @@ Source: exploration 2026-10-22. The extension assumes a fixed server URL and a l
 |---|---|---|---|
 | 017a | `ticket-01-connection-core.md` | shipped · cd6caf8 | — |
 | 017b | `ticket-02-welcome-tab.md` | shipped · 6fb7802 | 017a |
-| 017c | `ticket-03-docs-store.md` | shipped | 017a, 017b |
+| 017c | `ticket-03-docs-store.md` | shipped · 8a9b0f7 | 017a, 017b |
 
 Policy: one ticket = one conventional commit; tests ship with it. Feature specs verify the public seam; unit tests cover edge cases. `bun run compile` and `bun run test` must pass before each commit.
 
@@ -81,7 +81,7 @@ Shipped 2026-10-22 in `6fb7802`.
 
 ## Closeout 017c
 
-Shipped 2026-10-22. Docs and store copy only; no app or test changes.
+Shipped 2026-10-22 in `8a9b0f7`. Docs and store copy only; no app or test changes.
 
 - README gains Setup and the dynamic-port note: `opencode pair` link → welcome tab → side panel on the dev site → pick a project. `opencode serve` defaults to 4096; `opencode service status` prints the background service URL. `15001` is no longer presented as the default.
 - `CHROMEWEBSTORE.md`: test instructions use `opencode pair` and opencode 2.x, explain the reviewer path, drop the fake-backend step, and drop the "binding UI is not shipped yet" caveat from §3, §4, and §6.
