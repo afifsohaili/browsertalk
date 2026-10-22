@@ -9,7 +9,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 019a | `ticket-01-security-correctness.md` | shipped · F3 · aae5154 | 018 |
-| 019b | `ticket-02-test-hardening.md` | in progress · F7 · 1580fab | 019a |
+| 019b | `ticket-02-test-hardening.md` | in progress · F6 · eda7d80 | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
 
@@ -66,3 +66,13 @@ F7 shipped 2026-10-22 in `1580fab`. 019b remains open for F4–F6.
 - Coverage lands at the status unit, paired `ping`, `authenticate` after redemption, and `pairWithServer` persistence. The persistence case seeds nondefault settings plus saved-endpoint and unrelated tokens, then asserts the full settings snapshot and every token are unchanged after a malformed suffix.
 - Divergence: numeric prerelease identifiers with leading zeros (for example `2.0.32-01`) remain accepted. Strict semver forbids them; the finding required non-empty dot-separated identifiers.
 - 019b must-know: the gate is one module-level regex. Both ping branches and authenticate call it, so a change there needs all four seams rerun.
+
+## Closeout 019b (F6)
+
+F6 shipped 2026-10-22 in `eda7d80`. 019b remains open for F4–F5.
+
+- The post-redemption case now seeds server `http://127.0.0.1:4096`, `allowRemote: true`, a `sticky` strategy, saved-endpoint and unrelated tokens, and a target-endpoint token.
+- Rejected (401) and unreachable `/api/info` both assert the full `getSettings()` snapshot, the complete raw `storage.local` snapshot, and all three tokens. The fetch log proves redemption ran, then the lookup failed.
+- A third case seeds no target token and asserts the same snapshots plus no target key, covering accidental token creation.
+- Sensitivity was checked by temporarily clearing the target token in the `pairWithServer` catch: both seeded cases failed, then the change was reverted. No production change shipped.
+- Divergence: none. Must-know: the raw-storage equality is exact; any new write on the lookup-failure path will fail it by design.
