@@ -8,7 +8,7 @@ Scope: all findings, including the inherited R7 consent issue. R5 gets real comp
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 018a | `ticket-01-blocking.md` | ready | 017 |
+| 018a | `ticket-01-blocking.md` | shipped · 0ecd272 | 017 |
 | 018b | `ticket-02-migration-version-copy.md` | ready | 018a |
 | 018c | `ticket-03-component-tests.md` | ready | 018a |
 | 018d | `ticket-04-consent-gate.md` | ready | 018c |
@@ -34,3 +34,13 @@ Policy: one ticket = one conventional commit; tests ship with it. `bun run compi
 - New onboarding features.
 - Store submission.
 - `pi` adapter.
+
+## Closeout 018a
+
+Shipped 2026-10-22 in `0ecd272`.
+
+- Every remote link confirms its origin, independent of the saved remote policy. A second remote link confirms again; cancel writes nothing.
+- `upgrade` keeps the pairing form and Check again; a supported 2.x link recovers.
+- `connection/status` applies the probe to the badge in both directions.
+- Divergences: the SHA lives in the follow-up docs commit; rendered welcome specs stay in 018c.
+- 018b must-know: `resolvePairingEndpoint` confirms on `credential.remote` alone. Do not reintroduce the `allowRemote` shortcut. `showsRecheck` gates Check again; `showsPairForm` now includes `upgrade`.
