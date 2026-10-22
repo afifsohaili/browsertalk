@@ -21,7 +21,7 @@ Source: exploration 2026-10-22. The extension assumes a fixed server URL and a l
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 017a | `ticket-01-connection-core.md` | shipped · cd6caf8 | — |
-| 017b | `ticket-02-welcome-tab.md` | ready | 017a |
+| 017b | `ticket-02-welcome-tab.md` | shipped | 017a |
 | 017c | `ticket-03-docs-store.md` | ready | 017a, 017b |
 
 Policy: one ticket = one conventional commit; tests ship with it. Feature specs verify the public seam; unit tests cover edge cases. `bun run compile` and `bun run test` must pass before each commit.
@@ -67,3 +67,14 @@ Shipped 2026-10-22 in `cd6caf8`.
 - Panel setup card; options Test connection, Forget pairing, advanced server URL; fake backend hidden with a stored-fake fallback.
 - Divergences: "Finish setup" opens the options page until 017b adds the welcome tab. Docs SHA lives in the follow-up commit because a commit cannot contain its own hash.
 - 017b must-know: import `useConnection` for pairing state; it exposes `pair`, `remoteConfirmation`, `confirmRemote`, `cancelRemote`, and `forget`. Reuse `CONNECTION_LABELS`, `CONNECTION_ACTIONS`, `connectedSummary`, and `connectionState`. The panel no longer hosts the pairing form.
+
+## Closeout 017b
+
+Shipped 2026-10-22.
+
+- Install handler runs before the background's first await: `reason=install` only, development and admin skipped via `browser.management.getSelf()`. It opens `welcome.html` and sets the setup badge.
+- Badge: set on install, cleared after a successful pair, set again on Forget pairing, restored on startup when the probe is not connected.
+- `useSetup` is the one setup state machine. The welcome page and the panel card both read it; the card's "Finish setup" opens the welcome tab.
+- Welcome page: prerequisite, pair command with copy, link/code field, live state with Check again, version, link warning, remote origin confirmation, project handoff, Open side panel, pin instructions.
+- Divergences: badge text is `1`; the welcome page has a manual Check again because live state does not poll; the SHA lives in the follow-up docs commit.
+- 017c must-know: the setup surface is `welcome.html`; docs and store copy should link there. `SETUP_COPY` in `lib/onboarding/copy.ts` holds the shared setup lines.

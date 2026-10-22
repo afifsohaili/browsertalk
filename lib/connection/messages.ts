@@ -1,5 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
+import { clearSetupBadge, setSetupBadge } from '@/lib/onboarding/badge';
 import type { ConnectionIdentity } from './identity';
 import {
   isBackendStatus,
@@ -32,7 +33,10 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
   switch (request.type) {
     case 'connection/pair': {
       const result = await pairWithServer(request.code, { confirmRemote: request.confirmRemote === true });
-      if (result.ok) broadcastConnectionChanged();
+      if (result.ok) {
+        await clearSetupBadge();
+        broadcastConnectionChanged();
+      }
       return result;
     }
     case 'connection/status':
@@ -41,7 +45,10 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
       return connectionOnboarding();
     case 'connection/reset': {
       const result = await resetConnection();
-      if (result.ok) broadcastConnectionChanged();
+      if (result.ok) {
+        await setSetupBadge();
+        broadcastConnectionChanged();
+      }
       return result;
     }
     case 'connection/projects':

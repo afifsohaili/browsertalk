@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { browser } from 'wxt/browser';
 import {
   CONNECTION_ACTIONS,
   CONNECTION_LABELS,
   connectedSummary,
   connectionState,
 } from '@/lib/connection/status';
-import { useConnection } from '@/lib/connection/use-connection';
+import { useSetup } from '@/lib/onboarding/use-setup';
+import { openWelcomeTab } from '@/lib/onboarding/welcome';
 
-const { status } = useConnection();
+const { step, status } = useSetup();
 
 const state = computed(() => (status.value === null ? null : connectionState(status.value)));
 const label = computed(() => (state.value === null ? 'Checking…' : CONNECTION_LABELS[state.value]));
@@ -17,9 +17,10 @@ const action = computed(() => {
   if (state.value === null || status.value === null) return null;
   return status.value.action ?? CONNECTION_ACTIONS[state.value];
 });
+const setupIncomplete = computed(() => step.value !== 'checking' && step.value !== 'project');
 
 function openSetup(): void {
-  void browser.runtime.openOptionsPage();
+  void openWelcomeTab();
 }
 </script>
 
@@ -33,9 +34,7 @@ function openSetup(): void {
 
     <p v-if="action && state !== 'connected'" class="next">{{ action }}</p>
 
-    <button v-if="state !== null && state !== 'connected'" type="button" class="setup" @click="openSetup">
-      Finish setup
-    </button>
+    <button v-if="setupIncomplete" type="button" class="setup" @click="openSetup">Finish setup</button>
   </section>
 </template>
 
