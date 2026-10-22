@@ -4,7 +4,7 @@
 
 **Blocked by:** 018.
 
-**Status:** F1 shipped · 154f1ed. F2 and F3 pending.
+**Status:** F1 shipped · 154f1ed. F2 shipped · e494eb8. F3 pending.
 
 ## Shipped: F1
 
@@ -22,12 +22,28 @@
 - Boot migration → delivery: stored fake destination, normalized opencode selection, accepted consent.
 - Delivery: error recorded on the item, outbox retained, Sent empty, zero fetch calls.
 
+## Shipped: F2
+
+- `useConsent` keeps a generation counter. Every read captures the counter; a newer read, accept, decline, or consent storage change bumps it. Only the current generation writes `status` and `loaded`.
+- The rendered regression holds the initial stored-`accepted` read, completes a newer `declined` refresh, then releases the accepted reply. The gate stays declined, `main.panel` never mounts, no tab query or tab listener appears, and stored consent remains `declined`.
+
+## Divergences: F2
+
+- `accept` and `decline` bump the generation before their storage write, so a read that lands during the write cannot overwrite the user's choice. On write failure the outstanding read is already stale, leaving `loaded` false; the UI can only call either action after `loaded` is true.
+- `accept` and `decline` now set `loaded` when their write succeeds. This preserves the gate boundary if an outstanding read was invalidated.
+- No new status source was added. Stale replies are dropped, not reconciled.
+
+## Seams under test: F2
+
+- Rendered side panel: delayed accepted read + newer decline → gate shown, no panel mount, no `browser.tabs.query`, stored consent declined.
+- Composable: existing undecided, accept, decline, cross-surface change, unrelated change, and scope-stop cases still pass.
+
 ## Acceptance criteria
 
 - [x] F1: `sendQueuedItem` refuses a stored destination whose backend is not user-selectable. It records an actionable error, leaves the item queued, writes no Sent entry, and makes no HTTP call.
 - [x] F1: the migration does not silently reroute a frozen fake destination to opencode. Add a migration → send test.
-- [ ] F2: `useConsent` ignores older reads. A delayed accepted snapshot cannot overwrite a newer declined state.
-- [ ] F2: after a declined snapshot wins, the panel does not mount and makes no active-tab read. Add a rendered delayed-read regression.
+- [x] F2: `useConsent` ignores older reads. A delayed accepted snapshot cannot overwrite a newer declined state.
+- [x] F2: after a declined snapshot wins, the panel does not mount and makes no active-tab read. Add a rendered delayed-read regression.
 - [ ] F3: badge writes apply only for the latest status generation and current connection. Pair and reset invalidate older probes.
 - [ ] F3: an out-of-order A-unreachable after B-connected leaves the badge cleared. The reverse order sets it. Add both regressions.
 - [ ] F4: not in this ticket.
