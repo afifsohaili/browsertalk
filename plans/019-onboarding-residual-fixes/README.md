@@ -8,7 +8,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 019a | `ticket-01-security-correctness.md` | in progress · F2 · e494eb8 | 018 |
+| 019a | `ticket-01-security-correctness.md` | shipped · F3 · aae5154 | 018 |
 | 019b | `ticket-02-test-hardening.md` | ready | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
@@ -33,7 +33,7 @@ Policy: one ticket = one conventional commit; tests ship with it. `bun run compi
 
 ## Closeout 019a (F1)
 
-F1 shipped 2026-10-22 in `154f1ed`. F3 remains in 019a; the SHA lives in the follow-up docs commit.
+F1 shipped 2026-10-22 in `154f1ed`.
 
 - Delivery refuses a stored destination whose backend is no longer user-selectable. It records `This feedback was queued for the "<id>" backend, which this build no longer offers — discard it and queue it again`, leaves the item queued with its frozen destination, writes no Sent entry, and makes no HTTP call.
 - The regression runs boot migration first: a stored fake selection becomes opencode, then the queued fake destination is quarantined rather than delivered.
@@ -42,9 +42,18 @@ F1 shipped 2026-10-22 in `154f1ed`. F3 remains in 019a; the SHA lives in the fol
 
 ## Closeout 019a (F2)
 
-F2 shipped 2026-10-22 in `e494eb8`. F3 remains in 019a; the SHA lives in the follow-up docs commit.
+F2 shipped 2026-10-22 in `e494eb8`.
 
 - `useConsent` keeps a generation counter. Every read captures it; a newer read, accept, decline, or consent storage change bumps it. Only the current generation writes `status` and `loaded`. A stale accepted read can no longer overwrite a newer decline.
 - The rendered regression delays the initial stored-`accepted` read, completes a newer `declined` refresh, then releases the accepted reply. The gate stays declined, `main.panel` never mounts, no `browser.tabs.query` or tab listener appears, and stored consent remains `declined`.
 - Divergences: accept and decline bump the generation before writing, so a read landing during the write cannot overwrite the user's choice; a failed write leaves any outstanding read stale. Accept and decline now also set `loaded` on success. No reconciliation path was added for stale replies.
-- F3 must-know: the guard is local to `useConsent`. It does not provide a shared generation utility; `use-connection.ts` needs its own status generation plus connection identity checks.
+
+## Closeout 019a (F3)
+
+F3 shipped 2026-10-22 in `aae5154`. 019a is complete; the SHA lives in the follow-up docs commit.
+
+- The background `connection/status` handler captures a generation and the configured connection before the probe. It writes the badge only when the generation is still the newest and the configured `backendId`/`serverUrl` still match at completion.
+- Successful pair and reset bump the generation before their badge write, so older probes cannot repaint afterwards.
+- Regressions cover both directions: delayed A-unreachable after B-connected stays clear; delayed A-connected after B-unreachable stays set. Delayed probes after pair and reset are ignored too.
+- Divergences: the generation is module scope in `messages.ts`; `use-connection.ts` is unchanged because its refresh generation owns surface refs and cannot undo a background write. The status handler reads settings twice per probe, which exposed a timing assumption in `keeps the surface error from a failed pairing`; that assertion now waits with `vi.waitFor`. A badge write already in flight when a newer generation starts cannot be retracted.
+- 019b must-know: the badge generation is not exported as a shared utility. F4–F7 remain in 019b.
