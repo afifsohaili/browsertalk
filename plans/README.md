@@ -30,7 +30,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 018b | `018-onboarding-review-fixes/` | `ticket-02-migration-version-copy.md` | shipped · 5175153 | 018a |
 | 018c | `018-onboarding-review-fixes/` | `ticket-03-component-tests.md` | shipped · 456ffea | 018a |
 | 018d | `018-onboarding-review-fixes/` | `ticket-04-consent-gate.md` | shipped · f55ee9d | 018c |
-| 019a | `019-onboarding-residual-fixes/` | `ticket-01-security-correctness.md` | ready | 018 |
+| 019a | `019-onboarding-residual-fixes/` | `ticket-01-security-correctness.md` | in progress · F1 · 154f1ed | 018 |
 | 019b | `019-onboarding-residual-fixes/` | `ticket-02-test-hardening.md` | ready | 019a |
 
 Policy:

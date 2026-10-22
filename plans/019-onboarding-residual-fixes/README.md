@@ -8,7 +8,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 019a | `ticket-01-security-correctness.md` | ready | 018 |
+| 019a | `ticket-01-security-correctness.md` | in progress · F1 · 154f1ed | 018 |
 | 019b | `ticket-02-test-hardening.md` | ready | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
@@ -30,3 +30,12 @@ Policy: one ticket = one conventional commit; tests ship with it. `bun run compi
 - New onboarding features.
 - Real-Chrome or store submission.
 - Session cleanup.
+
+## Closeout 019a (F1)
+
+F1 shipped 2026-10-22 in `154f1ed`. F2 and F3 remain in 019a; the SHA lives in the follow-up docs commit.
+
+- Delivery refuses a stored destination whose backend is no longer user-selectable. It records `This feedback was queued for the "<id>" backend, which this build no longer offers — discard it and queue it again`, leaves the item queued with its frozen destination, writes no Sent entry, and makes no HTTP call.
+- The regression runs boot migration first: a stored fake selection becomes opencode, then the queued fake destination is quarantined rather than delivered.
+- Divergences: a frozen nonselectable destination still delivers while that same backend is the configured selection, which keeps explicit fake tests working; boot migration makes that state unreachable in production. Already-admitted items skip the quarantine so their receipt can commit without a backend. Two send specs now use two opencode endpoints instead of a captured fake destination under an opencode selection.
+- F2/F3 must-know: the quarantine sits in `route` after destination resolution and applies to any stored nonselectable backend, including unregistered ids. `isUserSelectableBackend` is now the single registry check; `migrate.ts` delegates to it.
