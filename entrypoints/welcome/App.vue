@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { CONNECTION_LABELS, connectedSummary, connectionState } from '@/lib/connection/status';
 import { remoteConfirmationCopy, SETUP_COPY } from '@/lib/onboarding/copy';
 import { openSidePanel } from '@/lib/onboarding/panel';
-import { useSetup } from '@/lib/onboarding/use-setup';
+import { showsPairForm, useSetup } from '@/lib/onboarding/use-setup';
 
 const {
   step,
@@ -56,11 +56,14 @@ async function openPanel(): Promise<void> {
     <section class="step prerequisite">
       <h2>1. opencode 2</h2>
       <p>{{ SETUP_COPY.prerequisite }}</p>
+      <p class="hint">
+        <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer">Install opencode 2</a>
+      </p>
       <p v-if="step === 'upgrade'" class="warning">{{ SETUP_COPY.upgrade }}</p>
       <button v-if="step === 'prerequisite'" type="button" @click="refresh">Check again</button>
     </section>
 
-    <section v-if="step === 'pair' || step === 'remote'" class="step">
+    <section v-if="showsPairForm(step)" class="step">
       <h2>2. Pair</h2>
       <p>{{ SETUP_COPY.runCommand }}</p>
       <div class="command-row">
@@ -70,7 +73,7 @@ async function openPanel(): Promise<void> {
       <p class="warning">{{ SETUP_COPY.linkWarning }}</p>
       <p class="hint">{{ SETUP_COPY.expiry }}</p>
 
-      <form v-if="step === 'pair'" class="pair-form" @submit.prevent="submit">
+      <form v-if="step === 'pair' || step === 'prerequisite'" class="pair-form" @submit.prevent="submit">
         <label for="credential">{{ credentialLabel }}</label>
         <input
           id="credential"

@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
 import type { RemotePairingConfirmation } from '@/lib/connection/protocol';
 import type { Connection } from '@/lib/connection/use-connection';
-import { setupStep, useSetup } from './use-setup';
+import { setupStep, showsPairForm, useSetup } from './use-setup';
 
 function connectionStub(status: BackendStatus | null): Connection {
   const remoteConfirmation = ref<RemotePairingConfirmation | null>(null);
@@ -39,6 +39,23 @@ describe('setup step', () => {
     const remote = { origin: 'http://100.64.0.5:4096', warning: 'crosses your network' };
 
     expect(setupStep({ ok: false, detail: 'Not paired', state: 'unpaired' }, remote)).toBe('remote');
+  });
+});
+
+describe('pair form visibility', () => {
+  it('shows the form when the saved server is unreachable', () => {
+    expect(showsPairForm('prerequisite')).toBe(true);
+  });
+
+  it('shows the form when unpaired or confirming a remote link', () => {
+    expect(showsPairForm('pair')).toBe(true);
+    expect(showsPairForm('remote')).toBe(true);
+  });
+
+  it('hides the form while checking, upgrading, or connected', () => {
+    expect(showsPairForm('checking')).toBe(false);
+    expect(showsPairForm('upgrade')).toBe(false);
+    expect(showsPairForm('project')).toBe(false);
   });
 });
 

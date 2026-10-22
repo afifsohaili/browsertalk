@@ -26,6 +26,11 @@ export function setupStep(
   }
 }
 
+/** The pairing form must stay visible when the saved server is unreachable: the link sets the endpoint. */
+export function showsPairForm(step: SetupStep): boolean {
+  return step === 'prerequisite' || step === 'pair' || step === 'remote';
+}
+
 export interface Setup {
   step: ComputedRef<SetupStep>;
   status: Connection['status'];
