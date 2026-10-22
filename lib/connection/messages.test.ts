@@ -28,6 +28,7 @@ import {
 const BASE = 'http://127.0.0.1:15001';
 const BASE_B = 'http://127.0.0.1:4096';
 const KEY = `opencode@${BASE}`;
+const KEY_B = `opencode@${BASE_B}`;
 const CONNECTION = { backendId: 'opencode', endpoint: BASE };
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -315,5 +316,112 @@ describe('connection status and the setup badge', () => {
 
     expect(await fakeBrowser.action.getBadgeText({})).toBe('');
     expect(await getToken(KEY)).toBe('tok_live');
+  });
+
+  it('keeps the badge clear when an older unreachable probe finishes after a newer connected one', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((resolve) => {
+      releaseStale = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).startsWith(BASE_B)) return jsonResponse({ version: '2.0.32' });
+      await staleGate;
+      throw new TypeError('fetch failed');
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const stale = requestConnectionStatus();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled());
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseStale();
+    await expect(stale).resolves.toMatchObject({ state: 'unreachable' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+  });
+
+  it('keeps the badge set when an older connected probe finishes after a newer unreachable one', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((resolve) => {
+      releaseStale = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).startsWith(BASE_B)) throw new TypeError('fetch failed');
+      await staleGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const stale = requestConnectionStatus();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled());
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ state: 'unreachable' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    releaseStale();
+    await expect(stale).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+  });
+
+  it('ignores an older status probe after a successful pair', async () => {
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((resolve) => {
+      releaseStale = resolve;
+    });
+    let gateStatus = true;
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_live' });
+      if (gateStatus) {
+        await staleGate;
+        throw new TypeError('fetch failed');
+      }
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const stale = requestConnectionStatus();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled());
+
+    gateStatus = false;
+    await expect(requestPair('ABC123')).resolves.toEqual({ ok: true });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseStale();
+    await expect(stale).resolves.toMatchObject({ state: 'unreachable' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+  });
+
+  it('ignores an older status probe after a reset', async () => {
+    await setToken(KEY, 'tok_live');
+
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((resolve) => {
+      releaseStale = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      await staleGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+    await fakeBrowser.action.setBadgeText({ text: '' });
+
+    const stale = requestConnectionStatus();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalled());
+
+    await expect(requestReset()).resolves.toEqual({ ok: true });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    releaseStale();
+    await expect(stale).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
   });
 });

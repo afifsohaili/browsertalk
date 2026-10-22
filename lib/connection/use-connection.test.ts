@@ -87,7 +87,9 @@ describe('useConnection', () => {
 
     await expect(connection.pair('WRONG')).resolves.toBe(false);
     expect(connection.pairError.value).toBe('That pairing code is wrong or expired');
-    expect(connection.status.value).toMatchObject({ ok: false, detail: 'Not paired', state: 'unpaired' });
+    await vi.waitFor(() => {
+      expect(connection.status.value).toMatchObject({ ok: false, detail: 'Not paired', state: 'unpaired' });
+    });
 
     scope.stop();
   });
