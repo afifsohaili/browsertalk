@@ -95,6 +95,8 @@ describe('useConnection', () => {
   });
 
   it('exposes the backend onboarding copy for the pairing hint', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
     const scope = effectScope();
     const connection = scope.run(() => useConnection())!;
 
@@ -124,6 +126,8 @@ describe('useConnection', () => {
   });
 
   it('reads the connection again when the backend changes', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
     const scope = effectScope();
     const connection = scope.run(() => useConnection())!;
 
