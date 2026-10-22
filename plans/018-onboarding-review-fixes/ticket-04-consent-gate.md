@@ -4,17 +4,17 @@
 
 **Blocked by:** 018c.
 
-**Status:** ready-for-agent
+**Status:** shipped · f55ee9d
 
 ## Acceptance criteria
 
-- [ ] With consent unset or declined, mounting the side panel performs no active-tab read and adds no tab/storage listeners.
-- [ ] After acceptance, the panel mounts and reads the active page.
-- [ ] Consent changes in another surface are followed without retaining stale listeners.
-- [ ] Component spec spies on `browser.tabs.query` and `storage.local.onChanged` for unset, accepted, and declined states.
-- [ ] The existing consent gate still blocks picker arming, capture, and queueing.
-- [ ] `bun run compile` and `bun run test` pass.
-- [ ] One conventional commit; ticket status and phase README updated with the SHA.
+- [x] With consent unset or declined, mounting the side panel performs no active-tab read and adds no tab/storage listeners.
+- [x] After acceptance, the panel mounts and reads the active page.
+- [x] Consent changes in another surface are followed without retaining stale listeners.
+- [x] Component spec spies on `browser.tabs.query` and `storage.local.onChanged` for unset, accepted, and declined states.
+- [x] The existing consent gate still blocks picker arming, capture, and queueing.
+- [x] `bun run compile` and `bun run test` pass.
+- [x] One conventional commit; ticket status and phase README updated with the SHA.
 
 ## Notes
 

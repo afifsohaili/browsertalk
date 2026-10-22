@@ -11,7 +11,7 @@ Scope: all findings, including the inherited R7 consent issue. R5 gets real comp
 | 018a | `ticket-01-blocking.md` | shipped · 0ecd272 | 017 |
 | 018b | `ticket-02-migration-version-copy.md` | shipped · 5175153 | 018a |
 | 018c | `ticket-03-component-tests.md` | shipped · 456ffea | 018a |
-| 018d | `ticket-04-consent-gate.md` | ready | 018c |
+| 018d | `ticket-04-consent-gate.md` | shipped · f55ee9d | 018c |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
 
@@ -63,3 +63,13 @@ Shipped 2026-10-22 in `456ffea`.
 - Panel card spec covers all five states, the fake backend's Connected result without network, Finish setup opening the welcome tab, and the absence of a pairing form.
 - Divergences: clipboard rejection now renders visible `copyFailed` copy, because the surface previously swallowed it; `@vitejs/plugin-vue` joins `@vue/test-utils` so Vitest can mount SFCs. The SHA lives in the follow-up docs commit.
 - 018d must-know: panel-card specs stop at the card, so consent gating still needs its own rendered proof. Mounted specs must unmount to release the connection listeners.
+
+## Closeout 018d
+
+Shipped 2026-10-22 in `f55ee9d`.
+
+- `App.vue` keeps only `useConsent`; the panel body moved to `entrypoints/sidepanel/PanelSurface.vue` and mounts only when consent is loaded and accepted. `usePanel` is never created behind the gate.
+- Rendered spec covers consent unset, declined, accepted, and later changes from another surface. Before acceptance it asserts no `tabs.query` and no tab listener, and pins the sole storage listener to the consent watcher. After acceptance it asserts one active-tab read and one tab subscription. Decline unmounts the panel, removes its tab listeners, and later tab or storage events cause no reads.
+- Gate still hides picker arming, capture, and queueing; the background consent checks are unchanged.
+- Divergences: the panel body lives beside the entrypoint rather than in `components/`, because it is entry-specific. `useConsent` keeps one `storage.local.onChanged` listener; following consent changes from another surface requires it.
+- 018 is complete. Next work: phase closeout review.
