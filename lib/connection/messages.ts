@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
-import { clearSetupBadge, setSetupBadge } from '@/lib/onboarding/badge';
+import { applySetupBadge, clearSetupBadge, setSetupBadge } from '@/lib/onboarding/badge';
 import type { ConnectionIdentity } from './identity';
 import {
   isBackendStatus,
@@ -39,8 +39,11 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
       }
       return result;
     }
-    case 'connection/status':
-      return pingConnection();
+    case 'connection/status': {
+      const status = await pingConnection();
+      await applySetupBadge(status);
+      return status;
+    }
     case 'connection/onboarding':
       return connectionOnboarding();
     case 'connection/reset': {

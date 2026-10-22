@@ -7,8 +7,9 @@ import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { registerAgentBackend } from '@/lib/agent-backend/registry';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
 import { getToken, setToken } from '@/lib/storage/auth';
-import { setSettings } from '@/lib/storage/settings';
+import { getSettings, setSettings } from '@/lib/storage/settings';
 import { registerConnectionHandler } from './messages';
+import { REMOTE_PAIRING_WARNING } from './status';
 import { useConnection } from './use-connection';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -217,6 +218,56 @@ describe('useConnection', () => {
     await expect(connection.confirmRemote()).resolves.toBe(true);
     expect(connection.remoteConfirmation.value).toBeNull();
     expect(await getToken(`opencode@${remote}`)).toBe('tok_remote');
+
+    scope.stop();
+  });
+
+  it('holds each remote link: cancel keeps the old endpoint, confirm pairs the new one', async () => {
+    const remoteA = 'http://100.64.0.5:4096';
+    const remoteB = 'http://100.64.0.6:4096';
+    const linkA = `${remoteA}/auth/connect/remoteA`;
+    const linkB = `${remoteB}/auth/connect/remoteB`;
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      const href = String(url);
+      if (href.endsWith('/auth/connect/remoteA')) return jsonResponse({ token: 'tok_a' });
+      if (href.endsWith('/auth/connect/remoteB')) return jsonResponse({ token: 'tok_b' });
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const scope = effectScope();
+    const connection = scope.run(() => useConnection())!;
+    await vi.waitFor(() => expect(connection.status.value).not.toBeNull());
+
+    await expect(connection.pair(linkA)).resolves.toBe(false);
+    await expect(connection.confirmRemote()).resolves.toBe(true);
+    await vi.waitFor(() => {
+      expect(connection.status.value).toMatchObject({ ok: true, state: 'connected' });
+    });
+    expect(await getToken(`opencode@${remoteA}`)).toBe('tok_a');
+
+    const callsAfterA = fetchFn.mock.calls.length;
+
+    await expect(connection.pair(linkB)).resolves.toBe(false);
+    expect(connection.remoteConfirmation.value).toEqual({
+      origin: remoteB,
+      warning: REMOTE_PAIRING_WARNING,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(callsAfterA);
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteA, allowRemote: true });
+    expect(await getToken(`opencode@${remoteB}`)).toBeNull();
+
+    connection.cancelRemote();
+    expect(connection.remoteConfirmation.value).toBeNull();
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteA, allowRemote: true });
+    expect(await getToken(`opencode@${remoteA}`)).toBe('tok_a');
+    expect(await getToken(`opencode@${remoteB}`)).toBeNull();
+
+    await expect(connection.pair(linkB)).resolves.toBe(false);
+    await expect(connection.confirmRemote()).resolves.toBe(true);
+    expect(await getToken(`opencode@${remoteB}`)).toBe('tok_b');
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteB, allowRemote: true });
+    expect(fetchFn.mock.calls.some(([url]) => String(url) === `${remoteB}/auth/connect/remoteB`)).toBe(true);
 
     scope.stop();
   });

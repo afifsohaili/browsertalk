@@ -86,7 +86,7 @@ function resolvePairingEndpoint(
     return { ok: true, endpoint: parsed.endpoint, allowRemote, changed: false, confirm: null };
   }
 
-  const needsConfirmation = credential.remote && !allowRemote;
+  const needsConfirmation = credential.remote;
   const nextAllowRemote = needsConfirmation ? true : allowRemote;
   const confirm = needsConfirmation
     ? {

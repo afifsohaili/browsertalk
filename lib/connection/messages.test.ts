@@ -11,6 +11,7 @@ import {
   setOpenCodeFetch,
   type FetchLike,
 } from '@/lib/agent-backend/opencode-api';
+import { SETUP_BADGE_TEXT } from '@/lib/onboarding/badge';
 import { getToken, setToken } from '@/lib/storage/auth';
 import { setSettings } from '@/lib/storage/settings';
 import {
@@ -228,6 +229,18 @@ describe('connection messaging', () => {
     expect(response).toMatchObject({ ok: false, remote: { origin: 'http://100.64.0.5:4096' } });
   });
 
+  it('asks for the origin even when "Allow a remote server" is already on', async () => {
+    await setSettings({ allowRemote: true });
+    const fetchFn = vi.fn<FetchLike>();
+    setOpenCodeFetch(fetchFn);
+
+    const response = await requestPair('http://100.64.0.6:4096/auth/connect/ABC123');
+
+    expect(response).toMatchObject({ ok: false, remote: { origin: 'http://100.64.0.6:4096' } });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await getToken('opencode@http://100.64.0.6:4096')).toBeNull();
+  });
+
   it('forgets the pairing through the background', async () => {
     await setToken(KEY, 'tok_live');
 
@@ -248,5 +261,36 @@ describe('connection messaging', () => {
     expect(response).toEqual({ ok: true });
     expect(await getToken('fake@http://100.64.0.5:4096')).toBeNull();
     expect(await getToken('opencode@http://100.64.0.5:4096')).toBe('tok_remote');
+  });
+});
+
+describe('connection status and the setup badge', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    registerConnectionHandler();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('clears and restores the badge as the server comes up and drops', async () => {
+    await setToken(KEY, 'tok_live');
+
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => {
+      throw new TypeError('fetch failed');
+    }));
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: false, state: 'unreachable' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => {
+      throw new TypeError('fetch failed');
+    }));
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: false, state: 'unreachable' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
   });
 });

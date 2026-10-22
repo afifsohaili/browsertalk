@@ -28,7 +28,12 @@ export function setupStep(
 
 /** The pairing form must stay visible when the saved server is unreachable: the link sets the endpoint. */
 export function showsPairForm(step: SetupStep): boolean {
-  return step === 'prerequisite' || step === 'pair' || step === 'remote';
+  return step === 'prerequisite' || step === 'upgrade' || step === 'pair' || step === 'remote';
+}
+
+/** A link can move the connection off an incompatible or unreachable server, so both states can recheck. */
+export function showsRecheck(step: SetupStep): boolean {
+  return step === 'prerequisite' || step === 'upgrade';
 }
 
 export interface Setup {

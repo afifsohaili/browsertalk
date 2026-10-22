@@ -1,9 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
-import { ref } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { effectScope, ref } from 'vue';
+import { fakeBrowser } from 'wxt/testing/fake-browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
+import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import { registerConnectionHandler } from '@/lib/connection/messages';
 import type { RemotePairingConfirmation } from '@/lib/connection/protocol';
-import type { Connection } from '@/lib/connection/use-connection';
-import { setupStep, showsPairForm, useSetup } from './use-setup';
+import { useConnection, type Connection } from '@/lib/connection/use-connection';
+import { getToken, setToken } from '@/lib/storage/auth';
+import { setupStep, showsPairForm, showsRecheck, useSetup } from './use-setup';
+
+registerBuiltinBackends();
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 function connectionStub(status: BackendStatus | null): Connection {
   const remoteConfirmation = ref<RemotePairingConfirmation | null>(null);
@@ -52,10 +66,26 @@ describe('pair form visibility', () => {
     expect(showsPairForm('remote')).toBe(true);
   });
 
-  it('hides the form while checking, upgrading, or connected', () => {
+  it('shows the form while upgrading so a supported link can recover', () => {
+    expect(showsPairForm('upgrade')).toBe(true);
+  });
+
+  it('hides the form while checking or connected', () => {
     expect(showsPairForm('checking')).toBe(false);
-    expect(showsPairForm('upgrade')).toBe(false);
     expect(showsPairForm('project')).toBe(false);
+  });
+});
+
+describe('recheck visibility', () => {
+  it('offers Check again when unreachable or upgrading', () => {
+    expect(showsRecheck('prerequisite')).toBe(true);
+    expect(showsRecheck('upgrade')).toBe(true);
+  });
+
+  it('hides Check again in the pairing and handoff steps', () => {
+    for (const step of ['checking', 'pair', 'remote', 'project'] as const) {
+      expect(showsRecheck(step)).toBe(false);
+    }
   });
 });
 
@@ -121,5 +151,46 @@ describe('useSetup', () => {
 
     expect(connection.cancelRemote).toHaveBeenCalled();
     expect(setup.step.value).toBe('pair');
+  });
+});
+
+describe('upgrade recovery', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    registerConnectionHandler();
+  });
+
+  afterEach(() => {
+    resetOpenCodeFetch();
+  });
+
+  it('pairs a supported link from the upgrade state', async () => {
+    const saved = 'http://127.0.0.1:15001';
+    const supported = 'http://127.0.0.1:29422';
+    await setToken(`opencode@${saved}`, 'tok_old');
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        const href = String(url);
+        if (href.endsWith('/auth/connect/recover')) return jsonResponse({ token: 'tok_2' });
+        if (href.startsWith(supported)) return jsonResponse({ version: '2.0.32' });
+        return jsonResponse({ version: '3.0.0' });
+      }),
+    );
+
+    const scope = effectScope();
+    const connection = scope.run(() => useConnection())!;
+    const setup = useSetup(connection);
+
+    await vi.waitFor(() => expect(setup.step.value).toBe('upgrade'));
+    expect(showsPairForm(setup.step.value)).toBe(true);
+    expect(showsRecheck(setup.step.value)).toBe(true);
+
+    setup.credential.value = `${supported}/auth/connect/recover`;
+    await expect(setup.submit()).resolves.toBe(true);
+
+    await vi.waitFor(() => expect(setup.step.value).toBe('project'));
+    expect(await getToken(`opencode@${supported}`)).toBe('tok_2');
+
+    scope.stop();
   });
 });

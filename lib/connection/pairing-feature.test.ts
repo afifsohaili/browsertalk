@@ -151,17 +151,47 @@ describe('pairing from a remote link', () => {
     expect(await getToken(REMOTE_KEY)).toBe('tok_remote');
   });
 
-  it('does not ask again when "Allow a remote server" is already on', async () => {
+  it('asks for each remote link even when "Allow a remote server" is already on', async () => {
+    const remoteA = 'http://100.64.0.5:4096';
+    const remoteB = 'http://100.64.0.6:4096';
+    const linkA = `${remoteA}/auth/connect/remoteA`;
+    const linkB = `${remoteB}/auth/connect/remoteB`;
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      const href = String(url);
+      if (href.endsWith('/auth/connect/remoteA')) return jsonResponse({ token: 'tok_a' });
+      if (href.endsWith('/auth/connect/remoteB')) return jsonResponse({ token: 'tok_b' });
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
     await setSettings({ allowRemote: true });
-    setOpenCodeFetch(
-      vi.fn<FetchLike>(async (url) => {
-        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_remote' });
-        return jsonResponse({ version: '2.0.32' });
-      }),
-    );
 
-    await expect(pairWithServer(REMOTE_LINK)).resolves.toEqual({ ok: true });
-    expect(await getToken(REMOTE_KEY)).toBe('tok_remote');
+    await expect(pairWithServer(linkA)).resolves.toEqual({
+      ok: false,
+      error: WARNING,
+      remote: { origin: remoteA, warning: WARNING },
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await getToken(`opencode@${remoteA}`)).toBeNull();
+
+    await expect(pairWithServer(linkA, { confirmRemote: true })).resolves.toEqual({ ok: true });
+    expect(await getToken(`opencode@${remoteA}`)).toBe('tok_a');
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteA, allowRemote: true });
+
+    const callsAfterA = fetchFn.mock.calls.length;
+
+    await expect(pairWithServer(linkB)).resolves.toEqual({
+      ok: false,
+      error: WARNING,
+      remote: { origin: remoteB, warning: WARNING },
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(callsAfterA);
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteA, allowRemote: true });
+    expect(await getToken(`opencode@${remoteB}`)).toBeNull();
+
+    await expect(pairWithServer(linkB, { confirmRemote: true })).resolves.toEqual({ ok: true });
+    expect(await getToken(`opencode@${remoteB}`)).toBe('tok_b');
+    expect(await getSettings()).toMatchObject({ serverUrl: remoteB, allowRemote: true });
+    expect(fetchFn.mock.calls.some(([url]) => String(url) === `${remoteB}/auth/connect/remoteB`)).toBe(true);
   });
 
   it('keeps an existing token and settings when a confirmed pairing fails', async () => {
