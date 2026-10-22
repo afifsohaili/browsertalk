@@ -35,14 +35,18 @@ Canonical terms for opencode Browsertalk. Use these words in UI copy, code, docs
 | Agent backend | The strategy interface `AgentBackend` (ping / listProjects / createSession / sendFeedback) |
 | Adapter | One backend implementation file: `opencode.ts`, `pi.ts`, `fake.ts` |
 | Registry | Where adapters register at boot. `getAgentBackend(id)` selects; unknown ids fail fast |
-| Fake backend | In-memory test double used by tests and dev without a live server |
-| Pairing | Exchanging a short-lived pairing code for a token |
+| Fake backend | In-memory test double used by tests without a live server. Not a user choice |
+| Setup | The first-run flow from opencode 2 to a picked project. `setupStep` drives it: `checking`, `prerequisite`, `upgrade`, `pair`, `remote`, `project`. The welcome tab and the panel setup card read the same state |
+| Pairing | Exchanging a short-lived pairing code from `opencode pair` for a token |
+| Pairing link | The `opencode pair` output: a URL ending `/auth/connect/<code>` that carries the server endpoint and a single-use code. Expires in 5 minutes. Copy it; do not open it |
 | Pairing code | Short-lived code from `POST /api/pair`; redeemed via `GET /auth/connect/{code}` |
-| Token | The credential stored after pairing; used as the auth header |
-| Server URL | Base URL of the opencode server. Default `http://127.0.0.1:15001` |
+| Token | The credential stored after pairing, keyed by backend and endpoint; used as the auth header |
+| Server URL | Base URL of the opencode server. Comes from the pairing link; a bare code uses the saved value. `http://127.0.0.1:15001` is the legacy saved fallback |
+| Server check | The unauthenticated `/api/info` probe behind Test connection, Check again, and the startup badge. It separates unreachable from unpaired without a token |
+| Connected | The state where the server answered the check, the token was accepted, and the version is 2.x. Clears the setup badge; the next action is "Pick a project" |
 | Remote server | An opencode server on another machine; opt-in via the "Allow a remote server" setting, off by default |
 | Delivery | How a feedback enters a busy session: `queue` (wait for idle) or `steer` (interrupt). Default `queue` |
-| Surfaces | The UI entry points: side panel, overlay, context menu, shortcut, options page |
+| Surfaces | The UI entry points: welcome tab, side panel including its setup card, overlay, context menu, shortcut, options page |
 
 ## Code names
 
@@ -79,3 +83,4 @@ File naming follows the seam convention: `interface.ts` (contract), `registry.ts
 | Thread (as our unit) | Session | One word per idea; thread is other agents' vocabulary |
 | Selection | Element set | Selection reads as text or marquee selection; the unit is a set of elements |
 | Batch | Element set | Batch suggests queued processing; one feedback carries the set |
+| Demo, demo mode | Fake backend (tests only) | The fake tests the extension; it is not a product path |

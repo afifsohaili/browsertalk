@@ -27,10 +27,10 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 > - Sessions per project: one per day, or sticky, configurable per backend.
 > - Queue delivery: feedback waits for the agent to be idle instead of interrupting it.
 > - Remote servers: off by default; settings can allow a server on another machine (encrypted links like Tailscale or an SSH tunnel recommended).
-> - Localhost only by default: feedback goes only to the opencode server you run (default http://127.0.0.1:15001). No external servers, no analytics.
+> - Loopback by default: feedback goes only to the opencode server you pair with. No external servers, no analytics.
 > - Open source (MIT).
 >
-> Requires the opencode CLI/server, running locally.
+> Requires the opencode 2.x CLI/server, running locally.
 >
 > Browsertalk is an independent project and is not affiliated with, endorsed by, or produced by the opencode project.
 
@@ -46,7 +46,7 @@ Status: prepared for review; not yet submitted. Human steps are listed at the bo
 - **sidePanel**: The side panel is the extension's primary interface: the current project and session, the session chooser (create a fresh session or continue an existing one), the comment box for page-level feedback, the outbox, and the sent list. Outbox and sent rows show the element count for feedback that carries an element set.
 - **contextMenus**: Adds a right-click menu item, "Browsertalk: point at element", that starts element selection on the current page.
 - **Host permission `<all_urls>`** (locked decision: keep; justify per feature):
-  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected elements' facts, (2) capture the visible tab for the optional element screenshot crops, (3) run a small MAIN-world script that reports in-page navigation (`pushState`/`replaceState`) so the picker closes when the page routes, and (4) call the user's own opencode server — loopback by default (http://127.0.0.1:15001), or another machine the user explicitly allows in settings (off by default). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's own server. The route script adds no permission and reads no page content; it wraps the page's own history calls and dispatches one event.
+  > The picker must work on any dev site the user is testing; the extension cannot know the user's sites in advance. Host access is used to (1) run the picker content script on the active page to highlight elements and capture the selected elements' facts, (2) capture the visible tab for the optional element screenshot crops, (3) run a small MAIN-world script that reports in-page navigation (`pushState`/`replaceState`) so the picker closes when the page routes, and (4) call the user's own opencode server — loopback by default, or another machine the user explicitly allows in settings (off by default). No page data is read until the user explicitly arms the picker or comments on the page, and feedback is sent only to the user's own server. The route script adds no permission and reads no page content; it wraps the page's own history calls and dispatches one event.
 
 Rationale: `activeTab` was removed from the manifest in this phase — it is unused with `<all_urls>` present (content script matches, `captureVisibleTab`, and `tabs.sendMessage` are all covered by host access), and the dashboard guidance says to delete permissions not required (research §2.1, checklist C.16).
 
@@ -81,26 +81,25 @@ Check all three (all true for this extension):
 
 ## 3. Test instructions (dashboard "Test instructions" tab, exact text)
 
-> Browsertalk requires an opencode server running on your machine; the extension talks only to 127.0.0.1 by default, or to another machine you explicitly allow in settings (off by default).
+> Browsertalk requires opencode 2.x running on the reviewer's machine; the extension talks only to the server it is paired with — 127.0.0.1 by default, or another machine the reviewer explicitly allows in settings (off by default).
 >
-> Full flow:
+> 1. Install opencode 2.x from https://opencode.ai. `opencode --version` must start with `2`; on 1.x run `opencode upgrade`. Start the server: `opencode serve` defaults to port 4096, while the background service uses a dynamic port and `opencode service status` prints its URL. Do not type a port anywhere — the pairing link in the next step carries it.
+> 2. In a terminal, run `opencode pair`. Copy the link it prints. Do not open it; links expire in 5 minutes.
+> 3. Click the Browsertalk toolbar icon. A fresh install opens the welcome tab; if it was closed, open the side panel, accept the first-run feedback disclosure, then click "Finish setup". Paste the pairing link or the bare code into "Pairing link or code" and click "Pair". The page shows "Connected: opencode <version> at <host>". The link supplies the server URL; the advanced server URL field is only needed for a bare code.
+> 4. Open the page under test on a local dev server, then open the side panel from the toolbar icon. Accept the disclosure if it is still showing. Click "Choose project" and pick a project from the list the server returns; this binds the current origin to that project.
+> 5. Arm the picker with "Point at element", Alt+Shift+F, or right-click → "Browsertalk: point at element". Hover highlights elements; click one, type a comment, press Queue (or Enter). For several elements on one page: hold Cmd (Ctrl on Windows/Linux), click up to five, release, then comment once and Queue.
+> 6. The feedback appears in the side panel's Outbox and is delivered to the opencode session for the picked project.
 >
-> 1. Install opencode from https://opencode.ai and start its server on the default URL: `opencode serve --port 15001`
-> 2. In another terminal, create a pairing code: `opencode api post /api/pair --server http://127.0.0.1:15001`
-> 3. Click the extension's toolbar icon to open the side panel. First run shows the feedback disclosure; click Accept. Paste the pairing code into the connection form and click Pair — the status shows "connected". (If pairing fails, set the server URL in the options page to the URL opencode printed.)
-> 4. Visit any page, then click "Point at element" (or press Alt+Shift+F, or right-click → "Browsertalk: point at element"). Hover highlights elements; click one, type a comment, press Queue (or Enter). For several elements on one page: hold Cmd (Ctrl on Windows/Linux), click up to five, release, then comment once and Queue.
-> 5. The feedback appears in the side panel's Outbox and is delivered to the opencode server. Right-click → "Browsertalk: point at element" exercises the context-menu entry point.
->
-> UI check without a server: options page → Agent backend → "Fake", then repeat steps 4-5 (feedback queues locally; delivery to a session requires a project binding).
->
-> Note for this submission: the project-binding UI is not shipped yet, so a fresh install can pair, pick, comment, and queue, but a send ends with "This site has no project binding" until a binding exists in `chrome.storage.local`. Do not remove this note until the binding UI ships (see Pending before submission).
+> The reviewer path exercises the full loop: pair → Connected → pick a project on a page → send → feedback in the session. A connection failure names its next action ("Cannot reach opencode", "Not paired", "Pairing token rejected", "Wrong opencode version"); "Test connection" and "Forget pairing" live in the options page.
+
+Why the path is safe: every network call goes to the opencode server the reviewer started. Nothing is captured before the reviewer accepts the disclosure, and no page is read until the picker is armed or a page comment is sent. The extension executes only bundled code.
 
 ## 4. Listing assets
 
 | Asset | Status |
 |---|---|
 | 128×128 store icon | Ready — `public/icon/128.png` |
-| Screenshots 1280×800+ (1-5) | **Pending.** Capture after the project-binding UI ships so the screenshots show the full loop: (1) side panel with target + outbox, (2) picker highlight on a page, (3) inline composer, (4) consent disclosure, (5) sent list. |
+| Screenshots 1280×800+ (1-5) | **Pending.** Capture the full loop now that the binding UI ships: (1) welcome tab with the pairing step, (2) side panel with target + outbox, (3) picker highlight on a page, (4) inline composer, (5) sent list. |
 | Small promo tile 440×280 | **Pending** (optional in the dashboard). |
 | YouTube video | Not planned. |
 
@@ -130,12 +129,14 @@ Declined state:
 
 Consent is stored as `consent.status` in `chrome.storage.local`; picker arming, capture, and both queue paths refuse with "Accept the feedback disclosure first" until the status is `accepted`.
 
+Note: the recorded text still names `http://127.0.0.1:15001` as the default. The shipped setting keeps that value only as a fallback for a bare code or a pre-017 install; a pairing link sets the endpoint. Align `ConsentGate.vue` and this record in a follow-up.
+
 ## 6. Human steps (pending)
 
 1. Register the Chrome Web Store developer account and pay the one-time registration fee (research §1: $5 per the support page; amount at Google's discretion).
 2. Enable 2-Step Verification on the account (required before publishing).
 3. Make the repository public and confirm the privacy policy URL resolves.
-4. Ship the project-binding UI (or accept the limitation and edit §3 first). A public listing cannot deliver feedback end to end without it.
+4. Run §3 on a clean Chrome profile with a fresh opencode 2.x install: pair from the welcome tab, pick a project on a dev page, send one feedback.
 5. Capture the screenshots (§4).
 6. Upload the built ZIP (`bun run zip` → `.output/browsertalk-0.1.0-chrome.zip`), fill the listing + privacy + distribution tabs with the texts in this file, and set visibility to **Public**.
 7. Submit for review. Broad host permissions plus minified code can extend review; if pending for more than three weeks, contact support.

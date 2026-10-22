@@ -22,7 +22,7 @@ Source: exploration 2026-10-22. The extension assumes a fixed server URL and a l
 |---|---|---|---|
 | 017a | `ticket-01-connection-core.md` | shipped · cd6caf8 | — |
 | 017b | `ticket-02-welcome-tab.md` | shipped · 6fb7802 | 017a |
-| 017c | `ticket-03-docs-store.md` | ready | 017a, 017b |
+| 017c | `ticket-03-docs-store.md` | shipped | 017a, 017b |
 
 Policy: one ticket = one conventional commit; tests ship with it. Feature specs verify the public seam; unit tests cover edge cases. `bun run compile` and `bun run test` must pass before each commit.
 
@@ -78,3 +78,14 @@ Shipped 2026-10-22 in `6fb7802`.
 - Welcome page: prerequisite, pair command with copy, link/code field, live state with Check again, version, link warning, remote origin confirmation, project handoff, Open side panel, pin instructions.
 - Divergences: badge text is `1`; the welcome page has a manual Check again because live state does not poll; the SHA lives in the follow-up docs commit.
 - 017c must-know: the setup surface is `welcome.html`; docs and store copy should link there. `SETUP_COPY` in `lib/onboarding/copy.ts` holds the shared setup lines.
+
+## Closeout 017c
+
+Shipped 2026-10-22. Docs and store copy only; no app or test changes.
+
+- README gains Setup and the dynamic-port note: `opencode pair` link → welcome tab → side panel on the dev site → pick a project. `opencode serve` defaults to 4096; `opencode service status` prints the background service URL. `15001` is no longer presented as the default.
+- `CHROMEWEBSTORE.md`: test instructions use `opencode pair` and opencode 2.x, explain the reviewer path, drop the fake-backend step, and drop the "binding UI is not shipped yet" caveat from §3, §4, and §6.
+- `product.md`: onboarding decisions, welcome tab and setup card, setup workflow, pairing-link server URL, per-connection storage keys.
+- `CONTEXT.md`: Setup, Pairing link, Server check, Connected; Surfaces now names the welcome tab and setup card.
+- Mismatches found, not fixed: `DEFAULT_SERVER_URL` is still `http://127.0.0.1:15001` as a bare-code and legacy fallback; `ConsentGate.vue` still prints that URL as the default, and the store packet records that text with a note. App code stays untouched.
+- Divergence: `PRIVACY.md` got a one-sentence correction because `CHROMEWEBSTORE.md` links to it and it repeated the fixed-port default.

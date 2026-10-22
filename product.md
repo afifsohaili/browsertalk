@@ -1,6 +1,6 @@
 # opencode Browsertalk — product definition
 
-Status: MVP shipped through phase 016 (015 element sets, 016 review fixes). Decisions locked 2026-10-10; element-set decisions locked 2026-10-21. Phase tracking lives in `plans/` — one folder and ticket per phase.
+Status: MVP shipped through phase 017 (015 element sets, 016 review fixes, 017 onboarding). Decisions locked 2026-10-10; element-set decisions locked 2026-10-21; onboarding decisions locked 2026-10-22. Phase tracking lives in `plans/` — one folder and ticket per phase.
 
 ## What it is
 
@@ -37,14 +37,35 @@ Afif — solo developer. Bilingual products (en + my). Tests features personally
 | Distribution | Chrome Web Store (public) + open source | Goal set 2026-10-10; first release is public |
 | License | MIT | Shortest permissive; matches agent-webbridge |
 
+## Decisions (locked 2026-10-22, onboarding)
+
+| Decision | Choice | Why (short) |
+|---|---|---|
+| Setup surface | Welcome tab on install + a setup card in the side panel | One flow, visible where the user works |
+| Server discovery | `opencode pair` link; no port scan | The link carries the real endpoint, including a dynamic background-service port |
+| Pairing input | Pairing link or bare code | The link sets the URL; the code covers the saved-URL case |
+| Version | Require opencode 2.x; nudge with `opencode upgrade` | The connection API differs on 1.x |
+| Fake backend | Removed from user choices; kept for tests | It is a test double, not a product path |
+| Remote link | Confirm the origin with the existing remote-server warning | Keeps the loopback default honest |
+
 ## Surfaces
 
 | Surface | Role |
 |---|---|
-| Side panel | Primary. The toolbar icon opens it. Target display with the session chooser and the comment box, outbox, sent list |
+| Welcome tab | Opens on a fresh install. Runs setup: opencode 2, `opencode pair`, paste the link or code, Connected, then hand off to the side panel on the dev site |
+| Side panel | Primary. The toolbar icon opens it. Target display with the session chooser and the comment box, outbox, sent list. A setup card shows the connection state and opens the welcome tab until setup is done |
 | In-page overlay | Picker highlight, numbered badges, count pill, inline composer with element chips |
 | Context menu, shortcut (`Alt+Shift+F`) | Arm the picker from the page without opening the panel |
-| Options page | Settings: backend, server URL, remote-server opt-in, session-strategy override |
+| Options page | Settings: backend, Test connection, Forget pairing, advanced server URL, remote-server opt-in, session-strategy override |
+
+## Setup workflow
+
+1. A fresh install opens the welcome tab. Updates do not. The toolbar badge reads `1` until the connection is ready.
+2. Install opencode 2. `opencode --version` must start with `2`; `opencode upgrade` moves 1.x up.
+3. Run `opencode pair` in a terminal. Copy the link. Do not open it; links expire in 5 minutes.
+4. Paste the link or the bare code into the welcome tab. The link supplies the server endpoint, so no port is typed. A link to another machine shows its origin and the remote-server warning; confirming it sets the remote policy.
+5. Connected. The page reads `Connected: opencode <version> at <host>`, and the badge clears.
+6. Open the dev site, open the side panel, accept the disclosure, then pick a project. The panel card's "Finish setup" reopens the welcome tab if it was closed.
 
 ## Workflow
 
@@ -165,8 +186,9 @@ Defaults: opencode → per-day. The seam must abstract the six axes found in res
 
 ```
 ┌ Chrome ──────────────────────────────────────────────────────────┐
-│ side panel (Vue 3)              UI, outbox, sent                │
-│ options page                    backend · server · strategy     │
+│ welcome tab (Vue 3)             setup: pair → connected         │
+│ side panel (Vue 3)              UI, outbox, sent, setup card     │
+│ options page                    backend · connection · strategy │
 │ picker.content.ts               element picking + facts         │
 │ picker-route.content.ts         MAIN-world route bridge         │
 │ background                      router · registries · auth      │
@@ -177,7 +199,7 @@ Defaults: opencode → per-day. The seam must abstract the six axes found in res
                              │ session ref
                              ▼
               AgentBackend (registry) ──────────── lib/agent-backend
-                             ├── opencode.ts ── HTTP ── 127.0.0.1:15001
+                             ├── opencode.ts ── HTTP ── your opencode server
                              ├── pi.ts ── (later) JSONL RPC via local bridge
                              └── fake.ts ── in-memory (tests)
 ```
@@ -198,7 +220,7 @@ The session-strategy seam lives in `lib/session-strategy/`: `interface.ts` (cont
 
 Why pi needs more than a URL: pi integrates as JSONL RPC over a subprocess (`pi --mode rpc`). A Chrome extension cannot spawn processes, so a pi adapter needs a small local bridge that wraps pi and exposes this contract. The seam keeps the UI and routing logic unaware.
 
-opencode endpoints the adapter will use (verified against a live 2.0.24 server):
+opencode endpoints the adapter uses (verified against a live 2.x server):
 
 | Op | Endpoint |
 |---|---|
@@ -210,20 +232,21 @@ opencode endpoints the adapter will use (verified against a live 2.0.24 server):
 | Prompt | `POST /api/session/{id}/prompt` with `{ text, delivery }` |
 | Events (later) | `GET /api/event` |
 
-Default server URL: `http://127.0.0.1:15001` — this machine's systemd `opencode-server`. Stock opencode defaults to port 4096. Configurable in settings.
+Server URL: the endpoint carried by the pairing link. A bare code redeems against the saved URL. `opencode serve` defaults to port 4096; the background service uses a dynamic port and `opencode service status` prints its URL. `http://127.0.0.1:15001` remains the stored fallback for installs that predate link pairing; it is not a stock opencode default.
 
-Pairing code creation requires an authenticated client, so the user runs one command on the TUI side: `opencode api post /api/pair`.
+Pairing: `opencode pair` prints a link to `/auth/connect/{code}` that carries the server endpoint. The code is single-use and expires in 5 minutes. The user copies the link — opening it spends the code — and pastes it, or the bare code, into the setup surface.
 
 ## Storage model (keys in `chrome.storage.local`)
 
 | Key | Value |
 |---|---|
-| `settings.backendId` | `opencode` \| `pi` \| `fake` |
-| `settings.serverUrl` | Base URL of the server |
+| `settings.backendId` | `opencode` \| `pi` \| `fake`; `fake` is not offered as a user choice |
+| `settings.serverUrl` | Base URL of the server; set by the pairing link |
+| `settings.allowRemote` | Remote-server opt-in, off by default |
 | `settings.sessionStrategy` | Per-backend strategy override (`{ [backendId]: strategyId }`) |
-| `auth.token` | Pairing token |
-| `projects.byOrigin` | `origin → project directory` |
-| `sessions` | Session refs per strategy: per-day `<directory>::<date>`, sticky `<directory>` → `{ sessionID, title }` |
+| `auth.tokens` | Pairing tokens keyed by `backendId@endpoint`; the legacy `auth.token` is migrated on boot |
+| `projects.byOrigin` | Per connection, then `origin → project directory` |
+| `sessions` | Per connection, then session refs per strategy: per-day `<directory>::<date>`, sticky `<directory>` → `{ sessionID, title }` |
 | `outbox` | Unsent feedback items. `facts.elements[]` holds the ordered element set; a legacy `facts.element` is normalized to a one-entry set on read |
 | `sent` | Recent sent summaries, capped. `elementCount` records the set size (0 for page-only, N for element sets); old records have no count |
 
@@ -242,6 +265,7 @@ The MAIN-world route bridge (`picker-route.content.ts`) runs under the existing 
 ## Security
 
 - The pairing token lives in extension storage only. Never in code, logs, or the page.
+- The pairing link is single-use and expires in 5 minutes. Setup copy says "Copy the link. Do not open it."
 - The server is loopback-only by default. A settings opt-in ("Allow a remote server", off by default, with a warning) accepts another machine; credentials never live in the URL either way.
 - The content script never talks to the server. The background service worker is the only client.
 
@@ -268,9 +292,9 @@ The MAIN-world route bridge (`picker-route.content.ts`) runs under the existing 
 - Component-name detection coverage (React 19 dev fibers, Vue production builds).
 - Day boundary: local midnight assumed; sessions created just before it split.
 - Expose `steer` as a per-send toggle, or keep queue-only.
-- Pairing code UX: exact flow for `opencode api post /api/pair` from the TUI.
 - Ship phase: in-product consent wording for User Data FAQ #10; enforcement scope unconfirmed.
 - Ship phase: host access strategy — keep `<all_urls>` vs `activeTab` + optional host grants; review-time tradeoff.
+- Ship phase: whether Chrome Web Store review accepts an opencode 2.x install as the test prerequisite, with no demo path. Unconfirmed until submission.
 
 ## Rejected options
 
@@ -284,3 +308,5 @@ The MAIN-world route bridge (`picker-route.content.ts`) runs under the existing 
 | Manual password paste auth | Secret handling worse than a revocable pairing token |
 | Ask-each-send delivery | No default; queue is the safe one |
 | Configurable-only session strategy | Defaults are needed anyway; each backend declares its natural default |
+| Port scan for the opencode server | The pairing link carries the real port; scanning is slow and intrusive |
+| Demo or fake backend as a user choice | A test double cannot deliver to a session; the fake stays test-only |

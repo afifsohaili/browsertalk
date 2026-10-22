@@ -1,6 +1,6 @@
 # Browsertalk privacy policy
 
-Last updated: 2026-10-10
+Last updated: 2026-10-22
 
 opencode Browsertalk ("Browsertalk") is a Chrome extension that sends browser feedback to the opencode coding-agent session you run (on your own computer by default). This policy describes what it handles and where that data goes.
 
@@ -17,7 +17,7 @@ Nothing is captured before you accept the first-run disclosure. After that, noth
 
 ## Where the data goes
 
-Feedback is sent only to the opencode server you configure (default `http://127.0.0.1:15001`). That server is yours.
+Feedback is sent only to the opencode server you pair with (loopback by default). That server is yours. The pairing link carries the server URL; `opencode serve` defaults to port 4096, and the background service uses a dynamic port that `opencode service status` prints.
 
 - By default all transfer stays on your machine (loopback, `127.0.0.1`).
 - With the settings option "Allow a remote server" turned on, that server may be on another machine: the pairing token and feedback then travel to the address you set. Use it only over an encrypted link (Tailscale, SSH tunnel) or a network you trust.

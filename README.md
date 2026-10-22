@@ -2,14 +2,30 @@
 
 Chrome extension that sends browser feedback straight into an opencode session bound to the right project. You browse, point at or describe what looks wrong, and the feedback lands in opencode with the facts the agent needs to find the code.
 
-Status: MVP complete through phase 016 (015 element sets, 016 review fixes; pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
+Status: MVP complete through phase 017 (015 element sets, 016 review fixes, 017 onboarding; pi adapter, phase 009, pending). Chrome Web Store submission pending — see `CHROMEWEBSTORE.md`. Phase tracking lives in `plans/`.
+
+## Setup
+
+Browsertalk needs opencode 2 on this machine.
+
+1. Install opencode 2 from https://opencode.ai. `opencode --version` must start with `2`; on 1.x run `opencode upgrade`.
+2. Start the server. `opencode serve` defaults to port 4096. The background service uses a dynamic port; `opencode service status` prints its URL. Do not guess the port — the pairing link carries it.
+3. In a terminal, run `opencode pair`.
+4. Copy the link it prints. Do not open it. Links expire in 5 minutes.
+5. Click the Browsertalk toolbar icon. A fresh install opens the welcome tab; if it was closed, open the side panel, accept the first-run feedback disclosure, then click **Finish setup**. Paste the link or the bare code into the welcome tab and click **Pair**.
+6. The link sets the server URL, so no port is typed. A link to another machine shows its origin and the remote-server warning; confirm it to continue.
+7. Switch to your dev site and open the side panel from the toolbar icon. Accept the first-run feedback disclosure if it is showing.
+8. Click **Choose project** and pick the project from the server's list. The origin is now bound.
+
+The toolbar badge `1` stays until the connection is ready. "Forget pairing" in settings clears the token for the current server.
 
 ## Surfaces
 
-- **Side panel** — primary; opens on toolbar icon click. Current target (project + session), session chooser, comment box, outbox, sent list.
+- **Welcome tab** — opens on a fresh install. Runs setup: opencode 2, `opencode pair`, paste the link or code, connected, then hand off to the side panel on the dev site.
+- **Side panel** — primary; opens on toolbar icon click. Current target (project + session), session chooser, comment box, outbox, sent list. A setup card shows the connection state and opens the welcome tab until setup is done.
 - **In-page overlay** — picker highlight, numbered badges, count pill, and inline composer with element chips.
 - **Context menu / `Alt+Shift+F`** — arm the picker without opening the panel.
-- **Options page** — backend, server URL, session-strategy override.
+- **Options page** — backend, Test connection, Forget pairing, advanced server URL, remote-server opt-in, session-strategy override.
 
 ## Picking elements
 
@@ -49,15 +65,15 @@ Limits and exit paths:
                              │ session ref
                              ▼
               AgentBackend (registry) ──────────── lib/agent-backend
-                             ├── opencode.ts ── HTTP ── 127.0.0.1:15001
-                             └── fake.ts ── in-memory (tests, offline use)
+                             ├── opencode.ts ── HTTP ── your opencode server
+                             └── fake.ts ── in-memory (tests)
 ```
 
-WXT + Vue 3 + TypeScript. The background service worker is the only client of the opencode server; the content script talks only to the background. A second content script, `picker-route.content.ts`, runs in the MAIN world at `document_start` and reports page-world `pushState`/`replaceState`; it adds no permission. Feedback routes through a session-strategy seam (`per-day` / `sticky`) and an agent-backend registry (`opencode`, `fake`). Adding a backend is one adapter file plus one registration line.
+WXT + Vue 3 + TypeScript. The background service worker is the only client of the opencode server; the content script talks only to the background. A second content script, `picker-route.content.ts`, runs in the MAIN world at `document_start` and reports page-world `pushState`/`replaceState`; it adds no permission. Feedback routes through a session-strategy seam (`per-day` / `sticky`) and an agent-backend registry (`opencode`; `fake` stays registered for tests). Adding a backend is one adapter file plus one registration line.
 
 ## Where it connects
 
-By default Browsertalk talks only to the opencode server on your own computer (default `http://127.0.0.1:15001`). There are no external servers, no analytics, and no third-party sharing; all network traffic stays on loopback. Settings can allow a server on another machine ("Allow a remote server", off by default) — the pairing token and feedback then cross your network, so keep that link encrypted (Tailscale, SSH tunnel) or trusted.
+Browsertalk talks only to the opencode server you pair with — loopback by default. The pairing link carries the server URL, so a non-default port needs no configuration. `opencode serve` defaults to 4096; the background service picks a dynamic port and `opencode service status` prints it. There are no external servers, no analytics, and no third-party sharing; all network traffic stays on loopback. Settings can allow a server on another machine ("Allow a remote server", off by default) — the pairing token and feedback then cross your network, so keep that link encrypted (Tailscale, SSH tunnel) or trusted.
 
 ## Privacy summary
 
