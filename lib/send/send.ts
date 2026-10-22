@@ -1,5 +1,5 @@
 import { BackendError, backendErrorCode, type AgentBackend, type SessionRef } from '@/lib/agent-backend/interface';
-import { getAgentBackend } from '@/lib/agent-backend/registry';
+import { getAgentBackend, isUserSelectableBackend } from '@/lib/agent-backend/registry';
 import { broadcastOutboxChanged } from '@/lib/composer/broadcast';
 import { CONSENT_REQUIRED_ERROR, hasConsent } from '@/lib/consent/consent';
 import { parseServerUrl } from '@/lib/connection/endpoint';
@@ -76,6 +76,9 @@ async function route(itemId: string, options: SendOptions): Promise<RoutedDelive
 
   const resolved = await resolveDestination(item, origin);
   if (!resolved.ok) return { delivery: recordError(itemId, resolved.error) };
+
+  const unavailable = await unavailableStoredBackend(item, resolved.destination);
+  if (unavailable !== null) return { delivery: recordError(itemId, unavailable) };
 
   return {
     delivery: enqueueConnection(connectionKeyOf(resolved.destination), () =>
@@ -201,6 +204,23 @@ async function commitAdmitted(item: OutboxItem, admission: OutboxAdmission): Pro
 }
 
 type DestinationResult = { ok: true; destination: OutboxDestination } | { ok: false; error: string };
+
+/**
+ * A frozen destination may point at a backend this build no longer offers users, e.g. a test
+ * double captured by a development profile. Deliver it only while that same backend is still
+ * configured, so a stale destination cannot report a false Sent outcome (019 F1). Admitted
+ * items skip the check: committing their receipt needs no backend.
+ */
+async function unavailableStoredBackend(
+  item: OutboxItem,
+  destination: OutboxDestination,
+): Promise<string | null> {
+  if (item.admission !== undefined) return null;
+  if (isUserSelectableBackend(destination.backendId)) return null;
+  const { backendId } = await getSettings();
+  if (backendId === destination.backendId) return null;
+  return `This feedback was queued for the "${destination.backendId}" backend, which this build no longer offers — discard it and queue it again`;
+}
 
 async function resolveDestination(item: OutboxItem, origin: string): Promise<DestinationResult> {
   if (item.destination !== undefined) {

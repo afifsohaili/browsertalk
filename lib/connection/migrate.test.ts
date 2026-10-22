@@ -3,20 +3,29 @@ import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import { acceptConsent } from '@/lib/consent/consent';
 import { captureQueuedDestination } from '@/lib/connection/destinations';
 import { bindOrigin, pairWithServer, pingConnection } from '@/lib/connection/service';
 import { resolveConfiguredConnection } from '@/lib/connection/resolve';
+import { sendQueuedItem } from '@/lib/send/send';
+import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { getToken } from '@/lib/storage/auth';
+import { readOutbox, type OutboxItem } from '@/lib/storage/outbox';
 import { getBoundProject, getOriginBindings } from '@/lib/storage/projects';
+import { readSent } from '@/lib/storage/sent';
 import { getStoredSession } from '@/lib/storage/sessions';
 import { getSettings } from '@/lib/storage/settings';
+import { appendToOutbox } from '@/lib/storage/writer';
 import { migrateLegacyConnectionStorage } from './migrate';
 
 const BASE = 'http://127.0.0.1:15001';
 const KEY = `opencode@${BASE}`;
 const LEGACY_REF = { sessionID: 'ses_old', title: 'Browsertalk · example · 2026-10-09' };
+const QUARANTINED_FAKE =
+  'This feedback was queued for the "fake" backend, which this build no longer offers — discard it and queue it again';
 
 registerBuiltinBackends();
+registerBuiltinSessionStrategies();
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -246,6 +255,38 @@ describe('migrateLegacyConnectionStorage', () => {
       endpoint: BASE,
       directory: '/home/afif/example',
     });
+  });
+
+  it('quarantines a queued fake destination instead of rerouting it to the normalized backend', async () => {
+    await acceptConsent();
+    await browser.storage.local.set({ 'settings.backendId': 'fake', 'settings.serverUrl': BASE });
+    const queued: OutboxItem = {
+      id: 'ob_fake',
+      comment: 'Queued before the upgrade',
+      capturedAt: '2026-10-10T09:05:00.000Z',
+      status: 'queued',
+      facts: {
+        page: { url: 'https://example.com/cart', path: '/cart', query: [], title: 'Cart' },
+      },
+      destination: { backendId: 'fake', endpoint: BASE, directory: '/tmp/fake' },
+    };
+    await appendToOutbox(queued);
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      throw new TypeError('no network in tests');
+    });
+    setOpenCodeFetch(fetchFn);
+
+    await migrateLegacyConnectionStorage();
+    expect((await getSettings()).backendId).toBe('opencode');
+
+    await expect(sendQueuedItem(queued.id, { now: new Date(2026, 9, 10, 12, 0) })).resolves.toEqual({
+      ok: false,
+      error: QUARANTINED_FAKE,
+    });
+
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await readOutbox()).toEqual([{ ...queued, error: QUARANTINED_FAKE }]);
+    expect(await readSent()).toEqual([]);
   });
 });
 

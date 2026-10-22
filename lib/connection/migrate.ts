@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { AgentBackendId } from '@/lib/agent-backend/interface';
-import { getAgentBackend, hasAgentBackend } from '@/lib/agent-backend/registry';
+import { isUserSelectableBackend } from '@/lib/agent-backend/registry';
 import { STORAGE_KEYS } from '@/lib/storage/keys';
 import type { OriginBindings } from '@/lib/storage/projects';
 import { DEFAULT_BACKEND_ID, getSettings, setSettings } from '@/lib/storage/settings';
@@ -34,12 +34,8 @@ export async function migrateLegacyConnectionStorage(): Promise<void> {
  */
 async function normalizeStoredBackend(): Promise<void> {
   const { backendId } = await getSettings();
-  if (isSelectableBackend(backendId)) return;
+  if (isUserSelectableBackend(backendId)) return;
   await setSettings({ backendId: DEFAULT_BACKEND_ID });
-}
-
-function isSelectableBackend(id: AgentBackendId): boolean {
-  return hasAgentBackend(id) && getAgentBackend(id).userSelectable !== false;
 }
 
 async function migrateForConnection(connection: ConnectionIdentity): Promise<void> {
@@ -63,7 +59,7 @@ async function readMigrationOwner(): Promise<MigrationOwner> {
 }
 
 function normalizeIdentity(identity: ConnectionIdentity): ConnectionIdentity {
-  return isSelectableBackend(identity.backendId)
+  return isUserSelectableBackend(identity.backendId)
     ? identity
     : { ...identity, backendId: DEFAULT_BACKEND_ID };
 }

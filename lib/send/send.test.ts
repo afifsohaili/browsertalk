@@ -537,31 +537,30 @@ describe('send pipeline', () => {
 
   it('routes a queued item to the destination captured at queue time after a settings change', async () => {
     const item = elementItem({
-      destination: { backendId: 'fake', endpoint: ENDPOINT_A, directory: DIRECTORY },
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
     });
     await appendToOutbox(item);
 
     await setSettings({ backendId: 'opencode', serverUrl: ENDPOINT_B });
+    await setToken(OPENCODE_KEY_A, 'tok_a');
     await setToken(OPENCODE_KEY_B, 'tok_b');
-    const fetchFn = vi.fn<FetchLike>();
-    setOpenCodeFetch(fetchFn);
+    const calls: string[] = [];
+    setOpenCodeFetch(async (url) => {
+      calls.push(String(url));
+      return String(url).includes('/prompt')
+        ? jsonResponse({ data: { id: 'msg_1' } })
+        : jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } });
+    });
 
     await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toMatchObject({ ok: true });
 
-    expect(fakeBackend.createInputs).toEqual([
-      {
-        directory: DIRECTORY,
-        title: DAY_TITLE,
-        intent: { strategyId: 'per-day', strategyKey: DAY_KEY, generation: 0 },
-      },
-    ]);
-    expect(await getStoredSession(FAKE_KEY, 'per-day', DAY_KEY)).toEqual({
-      sessionID: 'ses_fake_1',
+    expect(calls).toEqual([`${ENDPOINT_A}/api/session`, `${ENDPOINT_A}/api/session/ses_a/prompt`]);
+    expect(await getStoredSession(OPENCODE_KEY_A, 'per-day', DAY_KEY)).toEqual({
+      sessionID: 'ses_a',
       title: DAY_TITLE,
       generation: 0,
     });
     expect(await getStoredSession(OPENCODE_KEY_B, 'per-day', DAY_KEY)).toBeNull();
-    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('does not use another endpoint token for a captured destination', async () => {
@@ -1373,6 +1372,7 @@ describe('connection queues', () => {
   it('does not let a stalled connection block another connection', async () => {
     await setSettings({ backendId: 'opencode' });
     await setToken(OPENCODE_KEY_A, 'tok_a');
+    await setToken(OPENCODE_KEY_B, 'tok_b');
     openCodeTimeoutMs = 1000;
 
     const stalled = elementItem({
@@ -1381,18 +1381,22 @@ describe('connection queues', () => {
     });
     const other = elementItem({
       id: 'ob_other',
-      destination: { backendId: 'fake', endpoint: ENDPOINT_A, directory: DIRECTORY },
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_B, directory: DIRECTORY },
     });
     await appendToOutbox(stalled);
     await appendToOutbox(other);
 
     setOpenCodeFetch((url, init) => {
+      const endpoint = new URL(String(url)).origin;
       if (String(url).endsWith('/prompt')) {
+        if (endpoint === ENDPOINT_B) return Promise.resolve(jsonResponse({ data: { id: 'msg_b' } }));
         return new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
         });
       }
-      return Promise.resolve(jsonResponse({ data: { id: 'ses_a', title: DAY_TITLE } }));
+      return Promise.resolve(
+        jsonResponse({ data: { id: endpoint === ENDPOINT_A ? 'ses_a' : 'ses_b', title: DAY_TITLE } }),
+      );
     });
 
     let stalledSettled = false;
