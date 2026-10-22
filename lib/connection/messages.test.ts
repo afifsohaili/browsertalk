@@ -21,6 +21,7 @@ import {
   requestOnboarding,
   requestPair,
   requestProjects,
+  requestReset,
 } from './messages';
 
 const BASE = 'http://127.0.0.1:15001';
@@ -48,13 +49,25 @@ describe('connection messaging', () => {
   });
 
   it('answers a status request', async () => {
-    setOpenCodeFetch(vi.fn<FetchLike>());
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
 
-    await expect(requestConnectionStatus()).resolves.toEqual({ ok: false, detail: 'Not paired' });
+    await expect(requestConnectionStatus()).resolves.toEqual({
+      ok: false,
+      detail: 'Not paired',
+      state: 'unpaired',
+      action: 'Pair with opencode',
+      endpoint: BASE,
+      version: '2.0.32',
+    });
   });
 
   it('pairs through the background and stores the token', async () => {
-    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ token: 'tok_live' })));
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_live' });
+        return jsonResponse({ version: '2.0.32' });
+      }),
+    );
 
     const response = await requestPair('ABC123');
 
@@ -76,7 +89,12 @@ describe('connection messaging', () => {
   it('tells every open surface after a successful pairing', async () => {
     const listener = vi.fn();
     onConnectionChanged(listener);
-    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ token: 'tok_live' })));
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_live' });
+        return jsonResponse({ version: '2.0.32' });
+      }),
+    );
 
     await requestPair('ABC123');
 
@@ -121,11 +139,11 @@ describe('connection messaging', () => {
     expect(headers.get('authorization')).toBe(openCodeAuthHeader('tok_live'));
   });
 
-  it('delivers the backend onboarding copy with the endpoint baked in', async () => {
+  it('delivers the backend onboarding copy for pairing', async () => {
     await expect(requestOnboarding()).resolves.toEqual({
-      instructions: 'Run this on the server, then paste the code:',
-      command: `opencode api post /api/pair --server ${BASE}`,
-      credentialLabel: 'Pairing code',
+      instructions: 'Run opencode pair in a terminal. Copy the link. Do not open it. Links expire in 5 minutes. Then paste the link or code.',
+      command: 'opencode pair',
+      credentialLabel: 'Pairing link or code',
     });
   });
 
@@ -200,5 +218,35 @@ describe('connection messaging', () => {
     fakeBrowser.reset();
 
     await expect(requestConnectionStatus()).resolves.toEqual({ ok: false, detail: 'Background unavailable' });
+  });
+
+  it('passes the remote confirmation back to the surface', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>());
+
+    const response = await requestPair('http://100.64.0.5:4096/auth/connect/ABC123');
+
+    expect(response).toMatchObject({ ok: false, remote: { origin: 'http://100.64.0.5:4096' } });
+  });
+
+  it('forgets the pairing through the background', async () => {
+    await setToken(KEY, 'tok_live');
+
+    await expect(requestReset()).resolves.toEqual({ ok: true });
+    expect(await getToken(KEY)).toBeNull();
+  });
+
+  it('pairs a remote link when the surface confirms it', async () => {
+    setOpenCodeFetch(
+      vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_remote' });
+        return jsonResponse({ version: '2.0.32' });
+      }),
+    );
+
+    const response = await requestPair('http://100.64.0.5:4096/auth/connect/ABC123', { confirmRemote: true });
+
+    expect(response).toEqual({ ok: true });
+    expect(await getToken('fake@http://100.64.0.5:4096')).toBeNull();
+    expect(await getToken('opencode@http://100.64.0.5:4096')).toBe('tok_remote');
   });
 });

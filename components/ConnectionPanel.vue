@@ -1,46 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
+import { browser } from 'wxt/browser';
+import {
+  CONNECTION_ACTIONS,
+  CONNECTION_LABELS,
+  connectedSummary,
+  connectionState,
+} from '@/lib/connection/status';
 import { useConnection } from '@/lib/connection/use-connection';
 
-const { status, onboarding, pairing, pairError, pair } = useConnection();
-const code = ref('');
+const { status } = useConnection();
 
-const statusText = computed(() => {
-  if (status.value === null) return 'checking…';
-  return status.value.ok ? 'connected' : 'not connected';
+const state = computed(() => (status.value === null ? null : connectionState(status.value)));
+const label = computed(() => (state.value === null ? 'Checking…' : CONNECTION_LABELS[state.value]));
+const action = computed(() => {
+  if (state.value === null || status.value === null) return null;
+  return status.value.action ?? CONNECTION_ACTIONS[state.value];
 });
 
-async function submit(): Promise<void> {
-  if (await pair(code.value)) code.value = '';
+function openSetup(): void {
+  void browser.runtime.openOptionsPage();
 }
 </script>
 
 <template>
-  <section class="connection">
+  <section class="connection" :class="state ?? 'checking'" data-connection-state>
     <div class="status-row">
-      <span class="status" :class="{ online: status?.ok === true }">{{ statusText }}</span>
-      <span v-if="status" class="detail">{{ status.detail }}</span>
+      <span class="status" :class="{ online: state === 'connected' }">{{ label }}</span>
+      <span v-if="state === 'connected' && status" class="detail">{{ connectedSummary(status) }}</span>
+      <span v-else-if="status" class="detail">{{ status.detail }}</span>
     </div>
 
-    <form v-if="status && !status.ok && onboarding" class="pair" @submit.prevent="submit">
-      <p class="hint">{{ onboarding.instructions }}</p>
-      <p v-if="onboarding.command" class="hint">
-        <code>{{ onboarding.command }}</code>
-      </p>
-      <div class="pair-row">
-        <input
-          v-model="code"
-          type="text"
-          :placeholder="onboarding.credentialLabel"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button type="submit" :disabled="pairing || code.trim().length === 0">
-          {{ pairing ? 'pairing…' : 'pair' }}
-        </button>
-      </div>
-      <p v-if="pairError" class="error">{{ pairError }}</p>
-    </form>
+    <p v-if="action && state !== 'connected'" class="next">{{ action }}</p>
+
+    <button v-if="state !== null && state !== 'connected'" type="button" class="setup" @click="openSetup">
+      Finish setup
+    </button>
   </section>
 </template>
 
@@ -48,18 +43,26 @@ async function submit(): Promise<void> {
 .connection {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid light-dark(#d1d1d6, #3a3a3c);
+  border-radius: 8px;
+  background: light-dark(#ffffff, #2c2c2e);
+}
+
+.connection.connected {
+  border-color: light-dark(#a7d9b4, #2f6b3c);
 }
 
 .status-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .status {
-  font-size: 11px;
-  color: light-dark(#8e8e93, #98989d);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .status.online {
@@ -69,49 +72,18 @@ async function submit(): Promise<void> {
 .detail {
   font-size: 11px;
   color: light-dark(#636366, #aeaeb2);
+  overflow-wrap: anywhere;
 }
 
-.pair {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.hint {
+.next {
   margin: 0;
   font-size: 11px;
   color: light-dark(#636366, #aeaeb2);
 }
 
-.hint code {
-  font-size: 10px;
-  word-break: break-all;
-}
-
-.pair-row {
-  display: flex;
-  gap: 6px;
-}
-
-.pair-row input {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid light-dark(#d1d1d6, #3a3a3c);
-  border-radius: 8px;
-  background: light-dark(#ffffff, #2c2c2e);
-  color: inherit;
-  font: inherit;
-}
-
-.pair-row button {
-  padding: 6px 10px;
-  text-align: center;
-}
-
-.error {
-  margin: 0;
+.setup {
+  align-self: flex-start;
+  padding: 4px 8px;
   font-size: 11px;
-  color: #ff3b30;
 }
 </style>

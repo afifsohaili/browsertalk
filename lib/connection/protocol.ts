@@ -3,9 +3,10 @@ import { parseServerUrl } from './endpoint';
 import type { ConnectionIdentity } from './identity';
 
 export type ConnectionRequest =
-  | { type: 'connection/pair'; code: string }
+  | { type: 'connection/pair'; code: string; confirmRemote?: boolean }
   | { type: 'connection/status' }
   | { type: 'connection/onboarding' }
+  | { type: 'connection/reset' }
   | { type: 'connection/projects'; connection: ConnectionIdentity }
   | { type: 'connection/bind'; origin: string; projectDirectory: string; connection: ConnectionIdentity };
 
@@ -15,7 +16,15 @@ export interface ConnectionChangedEvent {
 
 export type ConnectionMessage = ConnectionRequest | ConnectionChangedEvent;
 
-export type ConnectionResult = { ok: true } | { ok: false; error: string };
+export interface RemotePairingConfirmation {
+  /** Scheme + host + port of the link's server. */
+  origin: string;
+  warning: string;
+}
+
+export type ConnectionResult =
+  | { ok: true }
+  | { ok: false; error: string; remote?: RemotePairingConfirmation };
 
 export interface OnboardingView {
   instructions: string;
@@ -36,13 +45,18 @@ export function isConnectionRequest(value: unknown): value is ConnectionRequest 
   const candidate = value as {
     type?: unknown;
     code?: unknown;
+    confirmRemote?: unknown;
     origin?: unknown;
     projectDirectory?: unknown;
     connection?: unknown;
   };
   switch (candidate.type) {
     case 'connection/pair':
-      return typeof candidate.code === 'string' && candidate.code.length > 0;
+      return (
+        typeof candidate.code === 'string' &&
+        candidate.code.length > 0 &&
+        (candidate.confirmRemote === undefined || typeof candidate.confirmRemote === 'boolean')
+      );
     case 'connection/bind':
       return (
         typeof candidate.origin === 'string' &&
@@ -53,8 +67,10 @@ export function isConnectionRequest(value: unknown): value is ConnectionRequest 
       );
     case 'connection/projects':
       return isConnectionIdentity(candidate.connection);
+    case 'connection/reset':
     case 'connection/status':
     case 'connection/onboarding':
+    case 'connection/reset':
       return true;
     default:
       return false;

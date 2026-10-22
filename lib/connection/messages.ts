@@ -21,6 +21,7 @@ import {
   listServerProjects,
   pairWithServer,
   pingConnection,
+  resetConnection,
 } from './service';
 
 const BACKGROUND_UNAVAILABLE = 'Background unavailable';
@@ -30,7 +31,7 @@ export type ConnectionResponse = BackendStatus | ConnectionResult | OnboardingRe
 export async function respondToConnectionRequest(request: ConnectionRequest): Promise<ConnectionResponse> {
   switch (request.type) {
     case 'connection/pair': {
-      const result = await pairWithServer(request.code);
+      const result = await pairWithServer(request.code, { confirmRemote: request.confirmRemote === true });
       if (result.ok) broadcastConnectionChanged();
       return result;
     }
@@ -38,6 +39,11 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
       return pingConnection();
     case 'connection/onboarding':
       return connectionOnboarding();
+    case 'connection/reset': {
+      const result = await resetConnection();
+      if (result.ok) broadcastConnectionChanged();
+      return result;
+    }
     case 'connection/projects':
       return listServerProjects(request.connection);
     case 'connection/bind':
@@ -74,8 +80,18 @@ export async function requestConnectionStatus(): Promise<BackendStatus> {
   return isBackendStatus(response) ? response : { ok: false, detail: BACKGROUND_UNAVAILABLE };
 }
 
-export async function requestPair(code: string): Promise<ConnectionResult> {
-  const response = await sendSafely({ type: 'connection/pair', code });
+export interface PairRequestOptions {
+  /** The user confirmed a remote link's origin and warning. */
+  confirmRemote?: boolean;
+}
+
+export async function requestPair(code: string, options: PairRequestOptions = {}): Promise<ConnectionResult> {
+  const response = await sendSafely({ type: 'connection/pair', code, confirmRemote: options.confirmRemote });
+  return isConnectionResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
+}
+
+export async function requestReset(): Promise<ConnectionResult> {
+  const response = await sendSafely({ type: 'connection/reset' });
   return isConnectionResult(response) ? response : { ok: false, error: BACKGROUND_UNAVAILABLE };
 }
 

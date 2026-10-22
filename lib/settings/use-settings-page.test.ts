@@ -1,10 +1,20 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
+import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
+import { registerConnectionHandler } from '@/lib/connection/messages';
 import { registerBuiltinSessionStrategies } from '@/lib/session-strategy/builtins';
 import { resolveActiveSessionStrategy } from '@/lib/session-strategy/selection';
-import { DEFAULT_SERVER_URL, getSettings } from '@/lib/storage/settings';
+import { getToken, setToken } from '@/lib/storage/auth';
+import { DEFAULT_SERVER_URL, getSettings, setSettings } from '@/lib/storage/settings';
 import { useSettingsPage, type SettingsPage } from './use-settings-page';
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
 
 describe('settings page logic', () => {
   beforeAll(() => {
@@ -14,9 +24,11 @@ describe('settings page logic', () => {
 
   beforeEach(() => {
     fakeBrowser.reset();
+    registerConnectionHandler();
   });
 
   afterEach(() => {
+    resetOpenCodeFetch();
     vi.restoreAllMocks();
   });
 
@@ -39,27 +51,34 @@ describe('settings page logic', () => {
   it('offers the registered backends and strategies with labels', async () => {
     const page = await loadedPage();
 
-    expect(page.backends).toEqual([
-      { id: 'opencode', label: 'opencode', defaultStrategyLabel: 'Per-day' },
-      { id: 'fake', label: 'Fake', defaultStrategyLabel: 'Per-day' },
-    ]);
+    expect(page.backends).toEqual([{ id: 'opencode', label: 'opencode', defaultStrategyLabel: 'Per-day' }]);
     expect(page.strategies).toEqual([
       { id: 'per-day', label: 'Per-day' },
       { id: 'sticky', label: 'Sticky' },
     ]);
   });
 
+  it('hides the fake backend and falls back to opencode when one is stored', async () => {
+    await setSettings({ backendId: 'fake' });
+
+    const page = await loadedPage();
+
+    expect(page.backends.map((backend) => backend.id)).toEqual(['opencode']);
+    expect(page.backendId.value).toBe('opencode');
+    expect((await getSettings()).backendId).toBe('opencode');
+  });
+
   it('persists the backend and the server URL', async () => {
     const page = await loadedPage();
 
-    await page.saveBackendId('fake');
+    await page.saveBackendId('opencode');
     page.serverUrl.value = 'http://127.0.0.1:4096';
     await page.saveServerUrl();
 
-    expect(page.backendId.value).toBe('fake');
+    expect(page.backendId.value).toBe('opencode');
     expect(page.serverUrl.value).toBe('http://127.0.0.1:4096');
     expect(await getSettings()).toEqual({
-      backendId: 'fake',
+      backendId: 'opencode',
       serverUrl: 'http://127.0.0.1:4096',
       allowRemote: false,
       sessionStrategy: {},
@@ -167,5 +186,27 @@ describe('settings page logic', () => {
       expect(page.error.value).toBe('storage unavailable');
     });
     expect(page.loaded.value).toBe(false);
+  });
+
+  it('tests the connection from the settings page', async () => {
+    await setToken('opencode@http://127.0.0.1:15001', 'tok_live');
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
+    const page = await loadedPage();
+    await page.testConnection();
+
+    expect(page.testing.value).toBe(false);
+    expect(page.status.value).toMatchObject({ ok: true, state: 'connected', detail: 'opencode 2.0.32' });
+  });
+
+  it('forgets the pairing from the settings page', async () => {
+    await setToken('opencode@http://127.0.0.1:15001', 'tok_live');
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
+    const page = await loadedPage();
+    await page.forgetPairing();
+
+    expect(await getToken('opencode@http://127.0.0.1:15001')).toBeNull();
+    expect(page.status.value).toMatchObject({ ok: false, state: 'unpaired' });
   });
 });

@@ -26,9 +26,19 @@ export interface BackendConnectionConfig {
   allowRemote?: boolean;
 }
 
+export type ConnectionState = 'unreachable' | 'unpaired' | 'unauthorized' | 'incompatible' | 'connected';
+
 export interface BackendStatus {
   ok: boolean;
   detail: string;
+  /** Why the connection is usable or not; absent on adapters that report no onboarding state. */
+  state?: ConnectionState;
+  /** One next action for the user. */
+  action?: string;
+  /** Server version read by the probe, when the probe got that far. */
+  version?: string | null;
+  /** Endpoint the probe used, when one was resolved. */
+  endpoint?: string;
 }
 
 export interface OnboardingInstructionsInput {
@@ -37,14 +47,22 @@ export interface OnboardingInstructionsInput {
 
 export interface BackendCredentialInput {
   credential: string;
+  /** Endpoint carried by the credential itself, e.g. a pairing link. */
+  endpoint?: string;
+  /** The "Allow a remote server" decision for this exchange; only used with `endpoint`. */
+  allowRemote?: boolean;
 }
 
 export interface BackendCredentialResult {
   /** Token to persist for the connection; null when nothing is stored. */
   token: string | null;
+  /** Canonical endpoint carried by the credential; absent when the saved server URL applies. */
+  endpoint?: string;
 }
 
 export interface BackendOnboarding {
+  /** True when the credential may be a pairing link that supplies its own endpoint. */
+  readonly acceptsPairingLink?: boolean;
   /** Input placeholder for the credential, e.g. "Pairing code". */
   readonly credentialLabel: string;
   /** Error shown when the credential field is submitted empty. */
@@ -147,6 +165,8 @@ export interface AgentBackend {
   readonly label: string;
   readonly capabilities: BackendCapabilities;
   readonly defaultSessionStrategy: SessionStrategyId;
+  /** False for test doubles: the backend stays registered but is not offered as a user choice. */
+  readonly userSelectable?: boolean;
   /** How the user connects this backend; null when it needs no credential. */
   readonly onboarding: BackendOnboarding | null;
   ping(): Promise<BackendStatus>;

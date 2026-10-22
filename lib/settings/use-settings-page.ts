@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue';
-import type { AgentBackendId } from '@/lib/agent-backend/interface';
+import type { AgentBackendId, BackendStatus } from '@/lib/agent-backend/interface';
 import { getAgentBackend, listAgentBackends } from '@/lib/agent-backend/registry';
+import { requestConnectionStatus, requestReset } from '@/lib/connection/messages';
 import type { SessionStrategyId } from '@/lib/session-strategy/interface';
 import { getSessionStrategy, listSessionStrategies } from '@/lib/session-strategy/registry';
 import {
@@ -32,10 +33,15 @@ export interface SettingsPage {
   backends: SettingsBackendChoice[];
   strategies: SettingsStrategyChoice[];
   error: Ref<string | null>;
+  status: Ref<BackendStatus | null>;
+  testing: Ref<boolean>;
+  forgetting: Ref<boolean>;
   saveBackendId: (id: AgentBackendId) => Promise<void>;
   saveServerUrl: () => Promise<void>;
   saveAllowRemote: (value: boolean) => Promise<void>;
   saveStrategyOverride: (backend: AgentBackendId, strategyId: SessionStrategyId | null) => Promise<void>;
+  testConnection: () => Promise<void>;
+  forgetPairing: () => Promise<boolean>;
 }
 
 export function useSettingsPage(): SettingsPage {
@@ -45,15 +51,21 @@ export function useSettingsPage(): SettingsPage {
   const allowRemote = ref(false);
   const overrides = ref<SessionStrategyOverrides>({});
   const error = ref<string | null>(null);
+  const status = ref<BackendStatus | null>(null);
+  const testing = ref(false);
+  const forgetting = ref(false);
 
-  const backends = listAgentBackends().map((id) => {
-    const backend = getAgentBackend(id);
-    return {
-      id,
-      label: backend.label,
-      defaultStrategyLabel: getSessionStrategy(backend.defaultSessionStrategy).label,
-    };
-  });
+  const backends = listAgentBackends()
+    .filter((id) => getAgentBackend(id).userSelectable !== false)
+    .map((id) => {
+      const backend = getAgentBackend(id);
+      return {
+        id,
+        label: backend.label,
+        defaultStrategyLabel: getSessionStrategy(backend.defaultSessionStrategy).label,
+      };
+    });
+  const visibleIds = new Set(backends.map((backend) => backend.id));
   const strategies = listSessionStrategies().map((id) => ({ id, label: getSessionStrategy(id).label }));
 
   async function persist(action: () => Promise<void>): Promise<void> {
@@ -68,7 +80,13 @@ export function useSettingsPage(): SettingsPage {
   function load(): Promise<void> {
     return persist(async () => {
       const settings = await getSettings();
-      backendId.value = settings.backendId;
+      if (visibleIds.has(settings.backendId)) {
+        backendId.value = settings.backendId;
+      } else {
+        // A stored test double (or a removed backend) resolves to the default user choice.
+        await setSettings({ backendId: DEFAULT_BACKEND_ID });
+        backendId.value = DEFAULT_BACKEND_ID;
+      }
       serverUrl.value = settings.serverUrl;
       allowRemote.value = settings.allowRemote;
       overrides.value = settings.sessionStrategy;
@@ -105,6 +123,34 @@ export function useSettingsPage(): SettingsPage {
     });
   }
 
+  async function testConnection(): Promise<void> {
+    testing.value = true;
+    try {
+      status.value = await requestConnectionStatus();
+    } finally {
+      testing.value = false;
+    }
+  }
+
+  async function forgetPairing(): Promise<boolean> {
+    error.value = null;
+    forgetting.value = true;
+    try {
+      const result = await requestReset();
+      if (!result.ok) {
+        error.value = result.error;
+        return false;
+      }
+      await testConnection();
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+      return false;
+    } finally {
+      forgetting.value = false;
+    }
+  }
+
   void load();
 
   return {
@@ -116,9 +162,14 @@ export function useSettingsPage(): SettingsPage {
     backends,
     strategies,
     error,
+    status,
+    testing,
+    forgetting,
     saveBackendId,
     saveServerUrl,
     saveAllowRemote,
     saveStrategyOverride,
+    testConnection,
+    forgetPairing,
   };
 }

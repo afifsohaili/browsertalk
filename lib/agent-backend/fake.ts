@@ -25,6 +25,7 @@ export interface FakeAgentBackendOptions {
 export class FakeAgentBackend implements AgentBackend {
   readonly id = 'fake';
   readonly label = 'Fake';
+  readonly userSelectable = false;
   readonly capabilities: BackendCapabilities;
   readonly onboarding: BackendOnboarding | null;
   readonly defaultSessionStrategy = 'per-day';

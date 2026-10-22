@@ -13,11 +13,16 @@ const {
   overrides,
   backends,
   strategies,
+  status,
+  testing,
+  forgetting,
   error,
   saveBackendId,
   saveServerUrl,
   saveAllowRemote,
   saveStrategyOverride,
+  testConnection,
+  forgetPairing,
 } = useSettingsPage();
 
 const urlSaved = ref(false);
@@ -62,22 +67,41 @@ async function submitServerUrl(): Promise<void> {
       </select>
     </section>
 
-    <form class="field" @submit.prevent="submitServerUrl">
-      <label for="server-url">Server URL</label>
-      <div class="url-row">
-        <input
-          v-if="loaded"
-          id="server-url"
-          v-model="serverUrl"
-          type="text"
-          autocomplete="off"
-          spellcheck="false"
-          @input="urlSaved = false"
-        />
-        <button type="submit" :disabled="!loaded">Save</button>
-        <span v-if="urlSaved" class="saved">Saved</span>
+    <section class="field">
+      <h2>Connection</h2>
+      <p v-if="status" class="connection-line">
+        <span>{{ status.detail }}</span>
+        <span v-if="status.action"> — {{ status.action }}</span>
+      </p>
+      <div class="actions">
+        <button type="button" :disabled="!loaded || testing" @click="testConnection">
+          {{ testing ? 'Testing…' : 'Test connection' }}
+        </button>
+        <button type="button" :disabled="!loaded || forgetting" @click="forgetPairing">
+          {{ forgetting ? 'Forgetting…' : 'Forget pairing' }}
+        </button>
       </div>
-    </form>
+    </section>
+
+    <details class="field advanced">
+      <summary>Advanced server URL</summary>
+      <form class="field" @submit.prevent="submitServerUrl">
+        <label for="server-url">Server URL</label>
+        <div class="url-row">
+          <input
+            v-if="loaded"
+            id="server-url"
+            v-model="serverUrl"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            @input="urlSaved = false"
+          />
+          <button type="submit" :disabled="!loaded">Save</button>
+          <span v-if="urlSaved" class="saved">Saved</span>
+        </div>
+      </form>
+    </details>
 
     <section class="field">
       <label class="remote-toggle">

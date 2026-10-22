@@ -53,7 +53,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function tokenFetch(token: string): ReturnType<typeof vi.fn<FetchLike>> {
-  return vi.fn<FetchLike>(async () => jsonResponse({ token }));
+  return vi.fn<FetchLike>(async (url) => {
+    if (String(url).includes('/auth/connect/')) return jsonResponse({ token });
+    return jsonResponse({ version: '2.0.32' });
+  });
 }
 
 function infoFetch(version = '2.0.24'): ReturnType<typeof vi.fn<FetchLike>> {
@@ -148,7 +151,7 @@ describe('pairWithServer', () => {
     const fetchFn = vi.fn<FetchLike>();
     setOpenCodeFetch(fetchFn);
 
-    await expect(pairWithServer('   ')).resolves.toEqual({ ok: false, error: 'Enter a pairing code' });
+    await expect(pairWithServer('   ')).resolves.toEqual({ ok: false, error: 'Paste the pairing link or code' });
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
@@ -183,15 +186,15 @@ describe('connectionOnboarding', () => {
     fakeBrowser.reset();
   });
 
-  it('renders the opencode pairing command for the configured endpoint', async () => {
+  it('renders the opencode pairing copy', async () => {
     await setSettings({ serverUrl: 'http://127.0.0.1:4096' });
 
     await expect(connectionOnboarding()).resolves.toEqual({
       ok: true,
       onboarding: {
-        instructions: 'Run this on the server, then paste the code:',
-        command: 'opencode api post /api/pair --server http://127.0.0.1:4096',
-        credentialLabel: 'Pairing code',
+        instructions: 'Run opencode pair in a terminal. Copy the link. Do not open it. Links expire in 5 minutes. Then paste the link or code.',
+        command: 'opencode pair',
+        credentialLabel: 'Pairing link or code',
       },
     });
   });
@@ -235,11 +238,16 @@ describe('pingConnection', () => {
   });
 
   it('reports not paired before pairing', async () => {
-    const fetchFn = vi.fn<FetchLike>();
-    setOpenCodeFetch(fetchFn);
+    setOpenCodeFetch(infoFetch('2.0.32'));
 
-    await expect(pingConnection()).resolves.toEqual({ ok: false, detail: 'Not paired' });
-    expect(fetchFn).not.toHaveBeenCalled();
+    await expect(pingConnection()).resolves.toEqual({
+      ok: false,
+      detail: 'Not paired',
+      state: 'unpaired',
+      action: 'Pair with opencode',
+      endpoint: BASE,
+      version: '2.0.32',
+    });
   });
 
   it('reports ok right after a successful pairing', async () => {
@@ -248,7 +256,14 @@ describe('pingConnection', () => {
 
     setOpenCodeFetch(infoFetch('2.0.24'));
 
-    await expect(pingConnection()).resolves.toEqual({ ok: true, detail: 'opencode 2.0.24' });
+    await expect(pingConnection()).resolves.toEqual({
+      ok: true,
+      detail: 'opencode 2.0.24',
+      state: 'connected',
+      action: 'Pick a project',
+      endpoint: BASE,
+      version: '2.0.24',
+    });
   });
 
   it('reports the failure detail when the server is unreachable', async () => {
@@ -260,6 +275,9 @@ describe('pingConnection', () => {
     await expect(pingConnection()).resolves.toEqual({
       ok: false,
       detail: `Cannot reach the opencode server at ${BASE}`,
+      state: 'unreachable',
+      action: 'Start opencode, then test again',
+      endpoint: BASE,
     });
   });
 
@@ -271,6 +289,8 @@ describe('pingConnection', () => {
     await expect(pingConnection()).resolves.toEqual({
       ok: false,
       detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
+      state: 'unreachable',
+      action: 'Fix the server URL in settings',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });

@@ -25,21 +25,60 @@ describe('OpenCodeBackend.ping', () => {
     resetOpenCodeFetch();
   });
 
-  it('reports not paired without touching the network when no token is stored', async () => {
-    const fetchFn = vi.fn<FetchLike>();
+  it('rejects an opencode 3 server with the upgrade action', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '3.0.0' })));
+
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Browsertalk needs opencode 2',
+      state: 'incompatible',
+      action: 'Run opencode upgrade',
+      endpoint: BASE,
+      version: '3.0.0',
+    });
+  });
+
+  it('reports not paired when an unauthenticated probe is rejected', async () => {
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)));
+
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Not paired',
+      state: 'unpaired',
+      action: 'Pair with opencode',
+      endpoint: BASE,
+    });
+  });
+
+  it('probes without a token to tell a down server from an unpaired one', async () => {
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' }));
     setOpenCodeFetch(fetchFn);
 
-    const status = await new OpenCodeBackend().ping();
-
-    expect(status).toEqual({ ok: false, detail: 'Not paired' });
-    expect(fetchFn).not.toHaveBeenCalled();
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Not paired',
+      state: 'unpaired',
+      action: 'Pair with opencode',
+      endpoint: BASE,
+      version: '2.0.32',
+    });
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/api/info`);
+    expect(fetchFn.mock.calls[0]?.[1]?.headers).toEqual({ Accept: 'application/json' });
   });
 
   it('reports the server version with a stored token', async () => {
     await setToken(TOKEN_KEY, 'tok_live');
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.24' })));
 
-    await expect(new OpenCodeBackend().ping()).resolves.toEqual({ ok: true, detail: 'opencode 2.0.24' });
+    await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+      ok: true,
+      detail: 'opencode 2.0.24',
+      state: 'connected',
+      action: 'Pick a project',
+      endpoint: BASE,
+      version: '2.0.24',
+    });
   });
 
   it('reports a rejected token', async () => {
@@ -49,6 +88,9 @@ describe('OpenCodeBackend.ping', () => {
     await expect(new OpenCodeBackend().ping()).resolves.toEqual({
       ok: false,
       detail: 'Pairing token rejected',
+      state: 'unauthorized',
+      action: 'Pair again with a fresh link',
+      endpoint: BASE,
     });
   });
 
@@ -61,6 +103,9 @@ describe('OpenCodeBackend.ping', () => {
     await expect(new OpenCodeBackend().ping()).resolves.toEqual({
       ok: false,
       detail: `Cannot reach the opencode server at ${BASE}`,
+      state: 'unreachable',
+      action: 'Start opencode, then test again',
+      endpoint: BASE,
     });
   });
 
@@ -72,29 +117,45 @@ describe('OpenCodeBackend.ping', () => {
     await expect(new OpenCodeBackend().ping()).resolves.toEqual({
       ok: false,
       detail: 'The server must be on this machine — use localhost, 127.0.0.1, or ::1, or turn on "Allow a remote server"',
+      state: 'unreachable',
+      action: 'Fix the server URL in settings',
     });
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it('prefers explicit config over storage', async () => {
     await setToken(TOKEN_KEY, 'stale');
-    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '9.9.9' }));
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.24' }));
     const backend = new OpenCodeBackend({ baseUrl: 'http://127.0.0.1:4096', token: 'tok_explicit', fetchFn });
 
-    await expect(backend.ping()).resolves.toEqual({ ok: true, detail: 'opencode 9.9.9' });
+    await expect(backend.ping()).resolves.toEqual({
+      ok: true,
+      detail: 'opencode 2.0.24',
+      state: 'connected',
+      action: 'Pick a project',
+      endpoint: 'http://127.0.0.1:4096',
+      version: '2.0.24',
+    });
 
     const call = fetchFn.mock.calls[0];
     expect(call?.[0]).toBe('http://127.0.0.1:4096/api/info');
     expect(call?.[1]?.headers).toEqual({ Authorization: 'Basic b3BlbmNvZGU6dG9rX2V4cGxpY2l0' });
   });
 
-  it('sends no token when the config explicitly has none', async () => {
+  it('probes without a token when the config explicitly has none', async () => {
     await setToken(TOKEN_KEY, 'tok_stored');
-    const fetchFn = vi.fn<FetchLike>();
+    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' }));
     const backend = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn });
 
-    await expect(backend.ping()).resolves.toEqual({ ok: false, detail: 'Not paired' });
-    expect(fetchFn).not.toHaveBeenCalled();
+    await expect(backend.ping()).resolves.toEqual({
+      ok: false,
+      detail: 'Not paired',
+      state: 'unpaired',
+      action: 'Pair with opencode',
+      endpoint: BASE,
+      version: '2.0.32',
+    });
+    expect(fetchFn.mock.calls[0]?.[1]?.headers).toEqual({ Accept: 'application/json' });
   });
 });
 
@@ -287,7 +348,10 @@ describe('OpenCodeBackend.onboarding', () => {
   });
 
   it('exchanges the credential through the configured endpoint', async () => {
-    const fetchFn = vi.fn<FetchLike>(async () => jsonResponse({ token: 'tok_new' }));
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_new' });
+      return jsonResponse({ version: '2.0.32' });
+    });
     const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
     if (onboarding === null) throw new Error('expected onboarding');
 
@@ -295,16 +359,60 @@ describe('OpenCodeBackend.onboarding', () => {
     expect(fetchFn.mock.calls[0]?.[0]).toBe(`${BASE}/auth/connect/ABC123`);
   });
 
+  it('gates a new pairing on an opencode 2 version', async () => {
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_new' });
+      return jsonResponse({ version: '3.0.0' });
+    });
+    const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    await expect(onboarding.authenticate({ credential: 'ABC123' })).rejects.toThrow(
+      'Browsertalk needs opencode 2 — run opencode upgrade',
+    );
+    expect(fetchFn.mock.calls[1]?.[0]).toBe(`${BASE}/api/info`);
+  });
+
+  it('accepts an opencode 2.x server and returns the token', async () => {
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_new' });
+      return jsonResponse({ version: '2.0.32' });
+    });
+    const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    await expect(onboarding.authenticate({ credential: 'ABC123' })).resolves.toEqual({ token: 'tok_new' });
+  });
+
+  it('redeems and checks the endpoint carried by a pairing link', async () => {
+    const calls: string[] = [];
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
+      return jsonResponse({ version: '2.0.32' });
+    });
+    const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+    if (onboarding === null) throw new Error('expected onboarding');
+
+    await expect(
+      onboarding.authenticate({ credential: 'ABC123', endpoint: 'http://127.0.0.1:29422' }),
+    ).resolves.toEqual({ token: 'tok_link', endpoint: 'http://127.0.0.1:29422' });
+    expect(calls).toEqual([
+      'http://127.0.0.1:29422/auth/connect/ABC123',
+      'http://127.0.0.1:29422/api/info',
+    ]);
+  });
+
   it('names the pairing command with the configured endpoint', () => {
     const onboarding = new OpenCodeBackend().onboarding;
     if (onboarding === null) throw new Error('expected onboarding');
 
-    expect(onboarding.credentialLabel).toBe('Pairing code');
-    expect(onboarding.emptyCredentialError).toBe('Enter a pairing code');
-    expect(onboarding.instructions({ endpoint: BASE })).toBe('Run this on the server, then paste the code:');
-    expect(onboarding.command({ endpoint: 'http://127.0.0.1:4096' })).toBe(
-      'opencode api post /api/pair --server http://127.0.0.1:4096',
+    expect(onboarding.credentialLabel).toBe('Pairing link or code');
+    expect(onboarding.emptyCredentialError).toBe('Paste the pairing link or code');
+    expect(onboarding.instructions({ endpoint: BASE })).toBe(
+      'Run opencode pair in a terminal. Copy the link. Do not open it. Links expire in 5 minutes. Then paste the link or code.',
     );
+    expect(onboarding.command({ endpoint: BASE })).toBe('opencode pair');
   });
 });
 

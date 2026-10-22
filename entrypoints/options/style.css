@@ -65,6 +65,26 @@ input {
   gap: 8px;
 }
 
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.connection-line {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.advanced summary {
+  color: light-dark(#636366, #aeaeb2);
+  cursor: pointer;
+}
+
+.advanced[open] summary {
+  margin-bottom: 6px;
+}
+
 .url-row input {
   flex: 1;
   min-width: 0;

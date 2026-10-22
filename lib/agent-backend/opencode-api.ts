@@ -65,6 +65,30 @@ export interface PairingRedeemInput {
   fetchFn?: FetchLike;
 }
 
+export interface ServerProbeInput {
+  baseUrl: string;
+  allowRemote?: boolean;
+  fetchFn?: FetchLike;
+  timeoutMs?: number;
+}
+
+/** Reads `/api/info` without a token so "server down" and "not paired" stay distinguishable. */
+export async function probeServer(input: ServerProbeInput): Promise<OpenCodeServerInfo> {
+  const body = await requestJson({
+    method: 'GET',
+    baseUrl: input.baseUrl,
+    path: '/api/info',
+    headers: { Accept: 'application/json' },
+    allowRemote: input.allowRemote,
+    fetchFn: input.fetchFn,
+    timeoutMs: input.timeoutMs,
+    unauthorizedMessage: 'Pairing token rejected',
+  });
+  const version = readString(body, 'version');
+  if (version === null) throw new OpenCodeError(UNEXPECTED_RESPONSE);
+  return { version };
+}
+
 export async function redeemPairingCode(input: PairingRedeemInput): Promise<string> {
   const body = await requestJson({
     method: 'GET',
