@@ -9,7 +9,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 019a | `ticket-01-security-correctness.md` | shipped · F3 · aae5154 | 018 |
-| 019b | `ticket-02-test-hardening.md` | in progress · F6 · eda7d80 | 019a |
+| 019b | `ticket-02-test-hardening.md` | in progress · F5 · 6eb2e62 | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
 
@@ -76,3 +76,14 @@ F6 shipped 2026-10-22 in `eda7d80`. 019b remains open for F4–F5.
 - A third case seeds no target token and asserts the same snapshots plus no target key, covering accidental token creation.
 - Sensitivity was checked by temporarily clearing the target token in the `pairWithServer` catch: both seeded cases failed, then the change was reverted. No production change shipped.
 - Divergence: none. Must-know: the raw-storage equality is exact; any new write on the lookup-failure path will fail it by design.
+
+## Closeout 019b (F5)
+
+F5 shipped 2026-10-22 in `6eb2e62`. 019b remains open for F4.
+
+- The welcome mount now attaches to `document.body`. A detached DOM swallowed the submit button's click, so the rendered specs submit through a real click.
+- Local success: paste `http://127.0.0.1:29422/auth/connect/local123`, click Pair, then assert `Connected: opencode 2.0.32 at 127.0.0.1:29422`, the project-handoff copy, the hidden form, the redemption call, the `opencode@http://127.0.0.1:29422` token, and the persisted `serverUrl`. No token is seeded.
+- Remote success: enter a non-loopback link, see the warning, click “Pair this server”, then assert the handoff, `serverUrl` + `allowRemote: true`, and the keyed token. Cancel now also asserts no fetch and `allowRemote: false`.
+- Upgrade recovery: seed an incompatible saved token/status, paste a supported `2.0.32` link, click Pair, and assert the handoff, token, and endpoint. No Check again.
+- Red check: replacing `@submit.prevent="submit"` and `@click="confirmRemote"` with no-ops failed the three new specs and the two existing remote specs; the file was restored. Full suite: 80 files, 1,106 tests.
+- Divergence: none. Must-know: `mountWelcome` needs `attachTo` for any future click-driven submit; detaching the form silently drops the submit.
