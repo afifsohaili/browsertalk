@@ -9,7 +9,7 @@ Scope: all findings, including the inherited R7 consent issue. R5 gets real comp
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 018a | `ticket-01-blocking.md` | shipped · 0ecd272 | 017 |
-| 018b | `ticket-02-migration-version-copy.md` | ready | 018a |
+| 018b | `ticket-02-migration-version-copy.md` | shipped · 5175153 | 018a |
 | 018c | `ticket-03-component-tests.md` | ready | 018a |
 | 018d | `ticket-04-consent-gate.md` | ready | 018c |
 
@@ -44,3 +44,13 @@ Shipped 2026-10-22 in `0ecd272`.
 - `connection/status` applies the probe to the badge in both directions.
 - Divergences: the SHA lives in the follow-up docs commit; rendered welcome specs stay in 018c.
 - 018b must-know: `resolvePairingEndpoint` confirms on `credential.remote` alone. Do not reintroduce the `allowRemote` shortcut. `showsRecheck` gates Check again; `showsPairForm` now includes `upgrade`.
+
+## Closeout 018b
+
+Shipped 2026-10-22 in `5175153`.
+
+- Boot migration normalizes a stored `fake` to `opencode`; connection, pairing, and delivery specs cover it without visiting settings.
+- Version gate is strict 2.x semver-ish; parser and cancel/version-failure negatives ship with the fix.
+- ConsentGate, README, and the store record use pairing-endpoint wording; `15001` stays documented as the legacy fallback.
+- Divergences: the SHA lives in the follow-up docs commit; the migration owner identity is normalized too. `2.0.32+build` metadata is accepted.
+- 018c must-know: the ConsentGate copy is now the exact store-recorded text; render specs should assert it verbatim.
