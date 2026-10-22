@@ -9,7 +9,7 @@ Scope: all seven residual findings, F1–F7. One subagent per ticket, foreground
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 019a | `ticket-01-security-correctness.md` | shipped · F3 · aae5154 | 018 |
-| 019b | `ticket-02-test-hardening.md` | in progress · F5 · 6eb2e62 | 019a |
+| 019b | `ticket-02-test-hardening.md` | shipped · F4 · a858c96 | 019a |
 
 Policy: one ticket = one conventional commit; tests ship with it. `bun run compile` and `bun run test` before each commit.
 
@@ -87,3 +87,16 @@ F5 shipped 2026-10-22 in `6eb2e62`. 019b remains open for F4.
 - Upgrade recovery: seed an incompatible saved token/status, paste a supported `2.0.32` link, click Pair, and assert the handoff, token, and endpoint. No Check again.
 - Red check: replacing `@submit.prevent="submit"` and `@click="confirmRemote"` with no-ops failed the three new specs and the two existing remote specs; the file was restored. Full suite: 80 files, 1,106 tests.
 - Divergence: none. Must-know: `mountWelcome` needs `attachTo` for any future click-driven submit; detaching the form silently drops the submit.
+
+## Closeout 019b (F4)
+
+F4 shipped 2026-10-22 in `a858c96`. 019b is complete.
+
+- `test/setup/deny-network.ts` is registered in `vitest.config.ts` as a setup file. It replaces `globalThis.fetch` (and `window.fetch` where defined) with a throw naming the URL and the next action: inject with `setOpenCodeFetch()` or pass `fetchFn`.
+- Injection still wins because `requestJson` prefers its `fetchFn` argument, then the `setOpenCodeFetch` override, then native fetch. Production `defaultFetch` is unchanged.
+- The two inherited cases now inject `{ version: '2.0.32' }` before `useConnection`: the onboarding-copy case and the backend-change case. Both assert the same unpaired state as before.
+- `test/deny-network.test.ts` proves the guard blocks native fetch and that an injected `probeServer` response resolves. Removing `setupFiles` fails the guard spec; the config was restored.
+- Red proof: the review preload ran the targeted file at 10 passed, 1 failed (`reads the connection again when the backend changes`) before the fix. After it: 11/11 pass under the same preload.
+- Verification: `bun run compile` exit 0. `bun run test` 81 files, 1,108 tests pass. Review preload full run 81 files, 1,108 tests pass, zero `REVIEW_BLOCKED_NETWORK` lines.
+- Divergence: one extra spec file over the 80-file baseline, the guard self-test. No other test needed native fetch.
+- Must-know: a test that genuinely needs native fetch must stub it locally and restore it; do not remove the setup file or add an exemption list. The guard throws synchronously, so assert with `expect(() => fetch(...)).toThrow(...)`.
