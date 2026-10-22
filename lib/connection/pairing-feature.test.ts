@@ -1,19 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { registerBuiltinBackends } from '@/lib/agent-backend/builtins';
 import { resetOpenCodeFetch, setOpenCodeFetch, type FetchLike } from '@/lib/agent-backend/opencode-api';
 import { getToken, setToken } from '@/lib/storage/auth';
+import { STORAGE_KEYS } from '@/lib/storage/keys';
 import { setSettings, getSettings } from '@/lib/storage/settings';
 import { listServerProjects, pairWithServer, pingConnection, resetConnection } from './service';
 
 const LINK_ENDPOINT = 'http://127.0.0.1:29422';
 const LINK_KEY = `opencode@${LINK_ENDPOINT}`;
+const SAVED_ENDPOINT = 'http://127.0.0.1:4096';
+const SAVED_KEY = `opencode@${SAVED_ENDPOINT}`;
+const UNRELATED_KEY = 'opencode@http://127.0.0.1:5000';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+async function seedSavedCredentials(targetToken?: string) {
+  await setSettings({
+    serverUrl: SAVED_ENDPOINT,
+    allowRemote: true,
+    sessionStrategy: { opencode: 'sticky' },
+  });
+  await setToken(SAVED_KEY, 'tok_saved');
+  await setToken(UNRELATED_KEY, 'tok_other');
+  if (targetToken !== undefined) await setToken(LINK_KEY, targetToken);
+  return { settings: await getSettings(), storage: await browser.storage.local.get() };
 }
 
 const PAIR_OUTPUT = [
@@ -123,12 +140,12 @@ describe('pairing from an opencode pair link', () => {
 
   it('keeps every setting and token when a malformed version suffix follows redemption', async () => {
     await setSettings({
-      serverUrl: 'http://127.0.0.1:4096',
+      serverUrl: SAVED_ENDPOINT,
       allowRemote: true,
       sessionStrategy: { opencode: 'sticky' },
     });
-    await setToken('opencode@http://127.0.0.1:4096', 'tok_saved');
-    await setToken('opencode@http://127.0.0.1:5000', 'tok_other');
+    await setToken(SAVED_KEY, 'tok_saved');
+    await setToken(UNRELATED_KEY, 'tok_other');
     const before = await getSettings();
 
     setOpenCodeFetch(
@@ -145,26 +162,74 @@ describe('pairing from an opencode pair link', () => {
 
     expect(await getSettings()).toEqual(before);
     expect(await getToken(LINK_KEY)).toBeNull();
-    expect(await getToken('opencode@http://127.0.0.1:4096')).toBe('tok_saved');
-    expect(await getToken('opencode@http://127.0.0.1:5000')).toBe('tok_other');
+    expect(await getToken(SAVED_KEY)).toBe('tok_saved');
+    expect(await getToken(UNRELATED_KEY)).toBe('tok_other');
   });
 
-  it('keeps the saved settings and token when the version lookup fails after redemption', async () => {
+  const VERSION_LOOKUP_FAILURES = [
+    {
+      name: 'rejects the redeemed token',
+      response: () => jsonResponse({ _tag: 'UnauthorizedError' }, 401),
+      error: 'Pairing token rejected',
+    },
+    {
+      name: 'is unreachable',
+      response: () => {
+        throw new TypeError('fetch failed');
+      },
+      error: `Cannot reach the opencode server at ${LINK_ENDPOINT}`,
+    },
+  ];
+
+  it.each(VERSION_LOOKUP_FAILURES)(
+    'keeps every saved credential when /api/info $name after a successful redemption',
+    async ({ response, error }) => {
+      const before = await seedSavedCredentials('tok_target');
+      const calls: string[] = [];
+
+      setOpenCodeFetch(
+        vi.fn<FetchLike>(async (url) => {
+          const href = String(url);
+          calls.push(href);
+          if (href.endsWith('/auth/connect/9f2c1a4b')) return jsonResponse({ token: 'tok_link' });
+          if (href.endsWith('/api/info')) return response();
+          return jsonResponse({}, 500);
+        }),
+      );
+
+      await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({ ok: false, error });
+
+      expect(calls).toEqual([`${LINK_ENDPOINT}/auth/connect/9f2c1a4b`, `${LINK_ENDPOINT}/api/info`]);
+      expect(await getSettings()).toEqual(before.settings);
+      expect(await browser.storage.local.get()).toEqual(before.storage);
+      expect(await getToken(SAVED_KEY)).toBe('tok_saved');
+      expect(await getToken(LINK_KEY)).toBe('tok_target');
+      expect(await getToken(UNRELATED_KEY)).toBe('tok_other');
+    },
+  );
+
+  it('adds no token for the target endpoint when the version lookup fails and none was saved', async () => {
+    const before = await seedSavedCredentials();
+    const tokensBefore = before.storage[STORAGE_KEYS.auth.tokens];
+    expect(tokensBefore).not.toHaveProperty(LINK_KEY);
+
     setOpenCodeFetch(
       vi.fn<FetchLike>(async (url) => {
-        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
-        throw new TypeError('fetch failed');
+        if (String(url).endsWith('/auth/connect/9f2c1a4b')) return jsonResponse({ token: 'tok_link' });
+        return jsonResponse({ _tag: 'UnauthorizedError' }, 401);
       }),
     );
 
     await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({
       ok: false,
-      error: `Cannot reach the opencode server at ${LINK_ENDPOINT}`,
+      error: 'Pairing token rejected',
     });
 
-    expect(await getSettings()).toMatchObject({ serverUrl: 'http://127.0.0.1:15001', allowRemote: false });
+    const after = await browser.storage.local.get();
+    expect(await getSettings()).toEqual(before.settings);
+    expect(after).toEqual(before.storage);
+    expect(after[STORAGE_KEYS.auth.tokens]).toEqual(tokensBefore);
     expect(await getToken(LINK_KEY)).toBeNull();
-    expect(await getToken(`opencode@http://127.0.0.1:15001`)).toBeNull();
   });
 });
 
