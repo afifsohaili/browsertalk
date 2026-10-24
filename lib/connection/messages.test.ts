@@ -12,6 +12,7 @@ import {
   type FetchLike,
 } from '@/lib/agent-backend/opencode-api';
 import { SETUP_BADGE_TEXT } from '@/lib/onboarding/badge';
+import { registerOnboardingHandler } from '@/lib/onboarding/install';
 import { getToken, setToken } from '@/lib/storage/auth';
 import { setSettings } from '@/lib/storage/settings';
 import {
@@ -273,6 +274,7 @@ describe('connection status and the setup badge', () => {
 
   afterEach(() => {
     resetOpenCodeFetch();
+    vi.restoreAllMocks();
   });
 
   it('clears and restores the badge as the server comes up and drops', async () => {
@@ -423,5 +425,150 @@ describe('connection status and the setup badge', () => {
     releaseStale();
     await expect(stale).resolves.toMatchObject({ ok: true, state: 'connected' });
     expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+  });
+
+  it('keeps the badge clear when a startup check fails after a newer connected one', async () => {
+    registerOnboardingHandler();
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+
+    let releaseStartup!: () => void;
+    const startupGate = new Promise<void>((resolve) => {
+      releaseStartup = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).startsWith(BASE_B)) return jsonResponse({ version: '2.0.32' });
+      await startupGate;
+      throw new TypeError('fetch failed');
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const startup = fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseStartup();
+    await startup;
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+  });
+
+  it('keeps the badge clear when a startup check finishes after the connection moved', async () => {
+    registerOnboardingHandler();
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+
+    let releaseStartup!: () => void;
+    const startupGate = new Promise<void>((resolve) => {
+      releaseStartup = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      await startupGate;
+      throw new TypeError('fetch failed');
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const startup = fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    await setSettings({ serverUrl: BASE_B });
+
+    releaseStartup();
+    await startup;
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+  });
+
+  it('ignores an older startup check after a successful pair', async () => {
+    registerOnboardingHandler();
+    await setToken(KEY, 'tok_live');
+
+    let releaseStartup!: () => void;
+    const startupGate = new Promise<void>((resolve) => {
+      releaseStartup = resolve;
+    });
+    let gateStatus = true;
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_live' });
+      if (gateStatus) {
+        await startupGate;
+        throw new TypeError('fetch failed');
+      }
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+
+    const startup = fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    gateStatus = false;
+    await expect(requestPair('ABC123')).resolves.toEqual({ ok: true });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseStartup();
+    await startup;
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+  });
+
+  it('ignores an older startup check after a reset', async () => {
+    registerOnboardingHandler();
+    await setToken(KEY, 'tok_live');
+
+    let releaseStartup!: () => void;
+    const startupGate = new Promise<void>((resolve) => {
+      releaseStartup = resolve;
+    });
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      await startupGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+    setOpenCodeFetch(fetchFn);
+    await fakeBrowser.action.setBadgeText({ text: '' });
+
+    const startup = fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    await expect(requestReset()).resolves.toEqual({ ok: true });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    releaseStartup();
+    await startup;
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+  });
+
+  it('keeps the badge clear when an obsolete reset finishes after another connection is connected', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+    await fakeBrowser.action.setBadgeText({ text: '' });
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
+    const originalSet = browser.storage.local.set.bind(browser.storage.local);
+    let releaseReset!: () => void;
+    const resetGate = new Promise<void>((resolve) => {
+      releaseReset = resolve;
+    });
+    let heldTokens = false;
+    const setSpy = vi.spyOn(browser.storage.local, 'set').mockImplementation(async (items) => {
+      if (!heldTokens && 'auth.tokens' in (items as Record<string, unknown>)) {
+        heldTokens = true;
+        await resetGate;
+      }
+      return originalSet(items);
+    });
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldTokens).toBe(true));
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseReset();
+    await expect(reset).resolves.toEqual({ ok: true });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+    expect(await getToken(KEY_B)).toBe('tok_b');
+
+    setSpy.mockRestore();
   });
 });

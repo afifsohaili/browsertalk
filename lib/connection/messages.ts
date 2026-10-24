@@ -1,8 +1,14 @@
 import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
-import { applySetupBadge, clearSetupBadge, setSetupBadge } from '@/lib/onboarding/badge';
-import { getSettings } from '@/lib/storage/settings';
-import { connectionKey, type ConnectionIdentity } from './identity';
+import {
+  applySetupBadge,
+  clearSetupBadge,
+  configuredConnectionKey,
+  nextStatusGeneration,
+  setSetupBadge,
+  writeBadgeIfCurrent,
+} from '@/lib/onboarding/badge';
+import type { ConnectionIdentity } from './identity';
 import {
   isBackendStatus,
   isConnectionChanged,
@@ -30,33 +36,13 @@ const BACKGROUND_UNAVAILABLE = 'Background unavailable';
 
 export type ConnectionResponse = BackendStatus | ConnectionResult | OnboardingResult | ProjectsResult;
 
-/**
- * Status probes finish out of order. Only the newest probe may paint the badge, and only while
- * its connection is still configured. The surface generation cannot undo a background write.
- */
-let statusGeneration = 0;
-
-function nextStatusGeneration(): number {
-  statusGeneration += 1;
-  return statusGeneration;
-}
-
-async function configuredConnectionKey(): Promise<string> {
-  const { backendId, serverUrl } = await getSettings();
-  return connectionKey({ backendId, endpoint: serverUrl });
-}
-
-async function writeBadgeIfCurrent(generation: number, write: () => Promise<void>): Promise<void> {
-  if (generation !== statusGeneration) return;
-  await write();
-}
-
 export async function respondToConnectionRequest(request: ConnectionRequest): Promise<ConnectionResponse> {
   switch (request.type) {
     case 'connection/pair': {
       const result = await pairWithServer(request.code, { confirmRemote: request.confirmRemote === true });
       if (result.ok) {
-        await writeBadgeIfCurrent(nextStatusGeneration(), clearSetupBadge);
+        nextStatusGeneration();
+        await clearSetupBadge();
         broadcastConnectionChanged();
       }
       return result;
@@ -65,20 +51,19 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
       const generation = nextStatusGeneration();
       const connection = await configuredConnectionKey();
       const status = await pingConnection();
-      if (generation !== statusGeneration) return status;
-      if (connection !== (await configuredConnectionKey())) return status;
-      if (generation !== statusGeneration) return status;
-      await applySetupBadge(status);
+      await writeBadgeIfCurrent(generation, connection, () => applySetupBadge(status));
       return status;
     }
     case 'connection/onboarding':
       return connectionOnboarding();
     case 'connection/reset': {
+      const connection = await configuredConnectionKey();
       const result = await resetConnection();
-      if (result.ok) {
-        await writeBadgeIfCurrent(nextStatusGeneration(), setSetupBadge);
-        broadcastConnectionChanged();
+      if (result.ok && connection === (await configuredConnectionKey())) {
+        nextStatusGeneration();
+        await setSetupBadge();
       }
+      if (result.ok) broadcastConnectionChanged();
       return result;
     }
     case 'connection/projects':
