@@ -10,7 +10,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
-| 020a | `ticket-01-badge-races.md` | ready | 019 |
+| 020a | `ticket-01-badge-races.md` | shipped · d93dca5 | 019 |
 | 020b | `ticket-02-fake-admission.md` | ready | 020a |
 | 020c | `ticket-03-semver-numeric.md` | ready | 020b |
 
@@ -22,3 +22,14 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | F3b obsolete reset repaints another badge | risk | 020a |
 | F1a stored fake admission bypasses quarantine | risk | 020b |
 | F7a numeric prerelease leading zeros pass | risk | 020c |
+
+## Closeout 020a (F3a, F3b)
+
+020a shipped 2026-10-25 in `d93dca5`.
+
+- The generation and connection guard moved into `lib/onboarding/badge.ts`. Startup `syncSetupBadge`, `connection/status`, pair, and reset share one counter; a check paints only while its generation is newest and its `backendId`/`serverUrl` is still configured.
+- Pair and reset claim a generation before their badge write, so an in-flight startup probe cannot repaint afterwards.
+- Reset captures the connection before clearing its token and writes the badge only when that connection is still configured. A reset for A that finishes after B is connected leaves the badge clear and B's token intact.
+- Five regressions: stale startup error after connected B, stale startup after a settings switch with no newer probe, stale startup after pair, stale startup after reset, and held reset A after connected B.
+- Divergences: the generation left `messages.ts` for `badge.ts`; reset only invalidates when its own connection is still configured, so newer checks stay authoritative. An already in-flight badge write cannot be retracted.
+- 020b must-know: `nextStatusGeneration`, `configuredConnectionKey`, and `writeBadgeIfCurrent` are exported from `lib/onboarding/badge.ts`. Full suite: 82 files, 1,114 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
