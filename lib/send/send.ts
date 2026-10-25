@@ -77,7 +77,7 @@ async function route(itemId: string, options: SendOptions): Promise<RoutedDelive
   const resolved = await resolveDestination(item, origin);
   if (!resolved.ok) return { delivery: recordError(itemId, resolved.error) };
 
-  const unavailable = await unavailableStoredBackend(item, resolved.destination);
+  const unavailable = await unavailableStoredBackend(resolved.destination);
   if (unavailable !== null) return { delivery: recordError(itemId, unavailable) };
 
   return {
@@ -208,14 +208,11 @@ type DestinationResult = { ok: true; destination: OutboxDestination } | { ok: fa
 /**
  * A frozen destination may point at a backend this build no longer offers users, e.g. a test
  * double captured by a development profile. Deliver it only while that same backend is still
- * configured, so a stale destination cannot report a false Sent outcome (019 F1). Admitted
- * items skip the check: committing their receipt needs no backend.
+ * configured, so a stale destination cannot report a false Sent outcome (019 F1). A stored
+ * admission does not skip the check: a receipt left by a test double's delivery would otherwise
+ * become a Sent entry after boot migration switched to a real backend (020 F1a).
  */
-async function unavailableStoredBackend(
-  item: OutboxItem,
-  destination: OutboxDestination,
-): Promise<string | null> {
-  if (item.admission !== undefined) return null;
+async function unavailableStoredBackend(destination: OutboxDestination): Promise<string | null> {
   if (isUserSelectableBackend(destination.backendId)) return null;
   const { backendId } = await getSettings();
   if (backendId === destination.backendId) return null;

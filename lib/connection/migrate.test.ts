@@ -288,6 +288,65 @@ describe('migrateLegacyConnectionStorage', () => {
     expect(await readOutbox()).toEqual([{ ...queued, error: QUARANTINED_FAKE }]);
     expect(await readSent()).toEqual([]);
   });
+
+  it('quarantines a stored fake admission after a rejected cleanup write and migration', async () => {
+    await acceptConsent();
+    await browser.storage.local.set({ 'settings.backendId': 'fake', 'settings.serverUrl': BASE });
+    const queued: OutboxItem = {
+      id: 'ob_fake_receipt',
+      comment: 'Admitted before the upgrade',
+      capturedAt: '2026-10-10T09:05:00.000Z',
+      status: 'queued',
+      facts: {
+        page: { url: 'https://example.com/cart', path: '/cart', query: [], title: 'Cart' },
+      },
+      destination: { backendId: 'fake', endpoint: BASE, directory: '/tmp/fake' },
+    };
+    await appendToOutbox(queued);
+
+    const originalSet = browser.storage.local.set.bind(browser.storage.local);
+    const setSpy = vi.spyOn(browser.storage.local, 'set').mockImplementation(async (keys) => {
+      const record = keys as Record<string, unknown>;
+      if ('outbox' in record && 'sent' in record) throw new Error('quota exceeded');
+      return originalSet(keys);
+    });
+
+    await expect(sendQueuedItem(queued.id, { now: new Date(2026, 9, 10, 12, 0) })).resolves.toEqual({
+      ok: false,
+      error: 'quota exceeded',
+    });
+    setSpy.mockRestore();
+
+    const admitted = (await readOutbox())[0];
+    if (admitted?.admission === undefined) throw new Error('expected the fake delivery to persist its admission');
+    expect(admitted.error).toBe('quota exceeded');
+    expect(admitted.admission).toMatchObject({ sessionID: 'ses_fake_1' });
+    expect(await readSent()).toEqual([]);
+
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      throw new TypeError('no network in tests');
+    });
+    setOpenCodeFetch(fetchFn);
+
+    await migrateLegacyConnectionStorage();
+    expect((await getSettings()).backendId).toBe('opencode');
+
+    await expect(sendQueuedItem(queued.id, { now: new Date(2026, 9, 10, 12, 1) })).resolves.toEqual({
+      ok: false,
+      error: QUARANTINED_FAKE,
+    });
+
+    const quarantined = (await readOutbox())[0];
+    expect(quarantined).toMatchObject({
+      id: queued.id,
+      status: 'queued',
+      admission: admitted.admission,
+      error: QUARANTINED_FAKE,
+    });
+    expect(quarantined?.reservedAt).toBeUndefined();
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await readSent()).toEqual([]);
+  });
 });
 
 async function migrationNoop(): Promise<void> {

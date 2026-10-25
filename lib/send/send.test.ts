@@ -1002,6 +1002,33 @@ describe('admission reliability', () => {
     ]);
   });
 
+  it('recovers an admitted opencode receipt without calling the backend', async () => {
+    await setSettings({ backendId: 'opencode' });
+    const fetchFn = vi.fn<FetchLike>(noNetworkFetch);
+    setOpenCodeFetch(fetchFn);
+    const item = elementItem({
+      destination: { backendId: 'opencode', endpoint: ENDPOINT_A, directory: DIRECTORY },
+      attempt: { requestID: 'req_seed', sentAt: '2026-10-10T08:00:00.000Z' },
+      admission: {
+        requestID: 'req_seed',
+        messageID: 'msg_seed',
+        sessionID: 'ses_seed',
+        sessionTitle: 'Browsertalk · example · 2026-10-10',
+        admittedAt: '2026-10-10T08:00:01.000Z',
+      },
+    });
+    await appendToOutbox(item);
+
+    await expect(sendQueuedItem(item.id, { now: NOW })).resolves.toEqual({
+      ok: true,
+      session: { id: 'ses_seed', title: 'Browsertalk · example · 2026-10-10' },
+    });
+
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(await readOutbox()).toEqual([]);
+    expect((await readSent())[0]?.session.id).toBe('ses_seed');
+  });
+
   it('commits an admission receipt without a message id', async () => {
     const item = elementItem({
       attempt: { requestID: 'req_seed', sentAt: '2026-10-10T08:00:00.000Z' },
