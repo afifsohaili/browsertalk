@@ -70,6 +70,23 @@ describe('OpenCodeBackend.ping', () => {
     }
   });
 
+  it('rejects numeric prerelease leading zeros from a paired server', async () => {
+    await setToken(TOKEN_KEY, 'tok_live');
+
+    for (const version of ['2.0.32-01', '2.0.32-beta.01']) {
+      setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version })));
+
+      await expect(new OpenCodeBackend().ping()).resolves.toEqual({
+        ok: false,
+        detail: 'Browsertalk needs opencode 2',
+        state: 'incompatible',
+        action: 'Run opencode upgrade',
+        endpoint: BASE,
+        version,
+      });
+    }
+  });
+
   it('reports not paired when an unauthenticated probe is rejected', async () => {
     setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ _tag: 'UnauthorizedError' }, 401)));
 
@@ -441,6 +458,21 @@ describe('OpenCodeBackend.onboarding', () => {
     await expect(onboarding.authenticate({ credential: 'ABC123' })).rejects.toThrow(
       'Browsertalk needs opencode 2 — run opencode upgrade',
     );
+  });
+
+  it('rejects numeric prerelease leading zeros after redeeming the code', async () => {
+    for (const version of ['2.0.32-01', '2.0.32-beta.01']) {
+      const fetchFn = vi.fn<FetchLike>(async (url) => {
+        if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_new' });
+        return jsonResponse({ version });
+      });
+      const onboarding = new OpenCodeBackend({ baseUrl: BASE, token: null, fetchFn }).onboarding;
+      if (onboarding === null) throw new Error('expected onboarding');
+
+      await expect(onboarding.authenticate({ credential: 'ABC123' })).rejects.toThrow(
+        'Browsertalk needs opencode 2 — run opencode upgrade',
+      );
+    }
   });
 
   it('gates a new pairing on an opencode 2 version', async () => {

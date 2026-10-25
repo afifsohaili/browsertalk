@@ -36,6 +36,15 @@ describe('isSupportedOpenCodeVersion', () => {
     expect(isSupportedOpenCodeVersion('2.0.32 extra')).toBe(false);
   });
 
+  it('rejects numeric prerelease identifiers with leading zeros', () => {
+    expect(isSupportedOpenCodeVersion('2.0.32-01')).toBe(false);
+    expect(isSupportedOpenCodeVersion('2.0.32-beta.01')).toBe(false);
+  });
+
+  it('accepts build identifiers with leading zeros', () => {
+    expect(isSupportedOpenCodeVersion('2.0.0+build.01')).toBe(true);
+  });
+
   it('rejects empty dot-separated prerelease and build identifiers', () => {
     expect(isSupportedOpenCodeVersion('2.0.32-.')).toBe(false);
     expect(isSupportedOpenCodeVersion('2.0.32-beta..1')).toBe(false);

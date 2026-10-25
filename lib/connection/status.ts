@@ -25,11 +25,16 @@ export const CONNECTION_LABELS: Record<ConnectionState, string> = {
 export const REMOTE_PAIRING_WARNING =
   'This link points to a server on another machine. The pairing token and feedback will cross your network. Keep the path encrypted (Tailscale, SSH tunnel) or trusted.';
 
-const SUPPORTED_OPENCODE_VERSION =
-  /^2\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+/** A semver prerelease identifier: numeric without leading zeros, or alphanumeric containing a letter or hyphen. */
+const PRERELEASE_IDENTIFIER = '(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)';
+
+const SUPPORTED_OPENCODE_VERSION = new RegExp(
+  `^2\\.\\d+\\.\\d+(?:-${PRERELEASE_IDENTIFIER}(?:\\.${PRERELEASE_IDENTIFIER})*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`,
+);
 
 /** The opencode 2 line, matching `2.0.32` and `2.1.0-beta` but not `3.0.0` or `20.1`.
- * Prerelease and build identifiers must be non-empty and dot-separated. */
+ * Prerelease and build identifiers must be non-empty and dot-separated; numeric
+ * prerelease identifiers must not have leading zeros. */
 export function isSupportedOpenCodeVersion(version: string): boolean {
   return SUPPORTED_OPENCODE_VERSION.test(version);
 }

@@ -166,6 +166,30 @@ describe('pairing from an opencode pair link', () => {
     expect(await getToken(UNRELATED_KEY)).toBe('tok_other');
   });
 
+  it('rejects numeric prerelease leading zeros without persisting a token or setting', async () => {
+    const before = await seedSavedCredentials();
+
+    for (const version of ['2.0.32-01', '2.0.32-beta.01']) {
+      setOpenCodeFetch(
+        vi.fn<FetchLike>(async (url) => {
+          if (String(url).includes('/auth/connect/')) return jsonResponse({ token: 'tok_link' });
+          return jsonResponse({ version });
+        }),
+      );
+
+      await expect(pairWithServer(PAIR_OUTPUT)).resolves.toEqual({
+        ok: false,
+        error: 'Browsertalk needs opencode 2 — run opencode upgrade',
+      });
+
+      expect(await getSettings()).toEqual(before.settings);
+      expect(await browser.storage.local.get()).toEqual(before.storage);
+      expect(await getToken(LINK_KEY)).toBeNull();
+      expect(await getToken(SAVED_KEY)).toBe('tok_saved');
+      expect(await getToken(UNRELATED_KEY)).toBe('tok_other');
+    }
+  });
+
   const VERSION_LOOKUP_FAILURES = [
     {
       name: 'rejects the redeemed token',
