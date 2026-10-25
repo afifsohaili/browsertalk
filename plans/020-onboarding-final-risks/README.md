@@ -11,7 +11,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | Subphase | Ticket | Status | Blocked by |
 |---|---|---|---|
 | 020a | `ticket-01-badge-races.md` | shipped · d93dca5 | 019 |
-| 020b | `ticket-02-fake-admission.md` | ready | 020a |
+| 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `ticket-03-semver-numeric.md` | ready | 020b |
 
 ## Findings map
@@ -33,3 +33,13 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 - Five regressions: stale startup error after connected B, stale startup after a settings switch with no newer probe, stale startup after pair, stale startup after reset, and held reset A after connected B.
 - Divergences: the generation left `messages.ts` for `badge.ts`; reset only invalidates when its own connection is still configured, so newer checks stay authoritative. An already in-flight badge write cannot be retracted.
 - 020b must-know: `nextStatusGeneration`, `configuredConnectionKey`, and `writeBadgeIfCurrent` are exported from `lib/onboarding/badge.ts`. Full suite: 82 files, 1,114 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
+
+## Closeout 020b (F1a)
+
+020b shipped 2026-10-25 in `cadc726`.
+
+- `unavailableStoredBackend` in `lib/send/send.ts` checks the stored destination before trusting `item.admission`. A non-user-selectable backend is quarantined unless settings still select it. User-selectable backends keep receipt recovery; explicitly injected fakes still deliver while selected.
+- The regression in `lib/connection/migrate.test.ts` rejects `commitDeliveredItem`'s cleanup write, persists the fake admission, migrates to `opencode`, and retries. The retry records the existing quarantine error, leaves the item queued with its admission, writes no Sent entry, and makes zero HTTP calls.
+- `lib/send/send.test.ts` adds the preserved path: an admitted `opencode` destination recovers its receipt with no backend call.
+- Divergences: the quarantine reuses the unadmitted-destination error and leaves the admission in place; recovery requires discard and re-queue. The now-unused `item` parameter was removed from `unavailableStoredBackend`.
+- 020c must-know: the "no longer offers" message and the settings-selects-it escape hatch are unchanged. Full suite: 82 files, 1,116 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
