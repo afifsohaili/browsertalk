@@ -14,7 +14,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
 | 020d | `ticket-04-reset-identity.md` | shipped · 5551675 | 020c |
-| 020e | `ticket-05-reset-credential.md` | ready | 020d |
+| 020e | `ticket-05-reset-credential.md` | shipped · 051f1bf | 020d |
 
 ## Findings map
 
@@ -65,3 +65,13 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 - `resetConnection` now takes a `ConnectionIdentity`; `lib/connection/pairing-feature.test.ts` passes `{ backendId: 'opencode', endpoint: LINK_ENDPOINT }`.
 - Divergences: the pre-read generation snapshot replaces an unconditional end claim, so a newer check keeps its authority; the post-clear settings read remains, but only as a badge guard. Already-started badge writes remain non-retractable.
 - 020 closeout: all findings shipped. Full suite: 82 files, 1,123 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
+
+## Closeout 020e (F3a-1)
+
+020e shipped 2026-10-25 in `051f1bf`.
+
+- `lib/onboarding/badge.ts` keeps a per-connection generation ceiling. `connection/reset` stamps the cleared connection immediately after `resetConnection` reports the token removal; `writeBadgeIfCurrent` rejects a check whose generation is at or before that stamp for the same key. Other connections and checks that begin later keep their authority.
+- Regressions in `lib/connection/messages.test.ts`: reset A held at its first config read, then an A status check held at `/api/info` after its token snapshot. Release both, answer `2.0.32`, and the badge stays `1`. The same ordering through `onStartup` also stays `1`. A held B check across the reset commit still clears the badge to `''`.
+- Both reset-first regressions failed against the pre-fix tree with `expected '' to be '1'`; the B-authority regression passes with and without the stamp.
+- Divergences: the stamp is a generation ceiling, not a token comparison, so a check that begins during the token removal is also rejected. An already-started badge write remains non-retractable.
+- 020 closeout: all five subphases shipped. Full suite: 82 files, 1,126 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
