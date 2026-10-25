@@ -13,6 +13,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | 020a | `ticket-01-badge-races.md` | shipped · d93dca5 | 019 |
 | 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
+| 020d | `ticket-04-reset-identity.md` | ready | 020c |
 
 ## Findings map
 
