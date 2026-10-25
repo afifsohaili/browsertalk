@@ -30,6 +30,18 @@ export function claimStatusGenerationIfCurrent(generation: number): number | nul
   return nextStatusGeneration();
 }
 
+/**
+ * Reset removes one connection's token while its check may still be holding a server response.
+ * Stamps that connection so a check that already began cannot paint; checks for other
+ * connections or checks that begin later keep their authority (020e, review F3a-1).
+ */
+const invalidatedThrough = new Map<string, number>();
+
+/** Reset committed the token removal; checks that began at or before it used the removed credential. */
+export function invalidateStatusChecks(connection: string): void {
+  invalidatedThrough.set(connection, statusGeneration);
+}
+
 export async function configuredConnection(): Promise<ConnectionIdentity> {
   const { backendId, serverUrl } = await getSettings();
   return { backendId, endpoint: serverUrl };
@@ -46,6 +58,7 @@ export async function writeBadgeIfCurrent(
   write: () => Promise<void>,
 ): Promise<void> {
   if (generation !== statusGeneration) return;
+  if (generation <= (invalidatedThrough.get(connection) ?? 0)) return;
   if (connection !== (await configuredConnectionKey())) return;
   if (generation !== statusGeneration) return;
   await write();

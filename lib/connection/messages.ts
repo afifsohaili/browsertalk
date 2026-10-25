@@ -7,6 +7,7 @@ import {
   configuredConnection,
   configuredConnectionKey,
   currentStatusGeneration,
+  invalidateStatusChecks,
   nextStatusGeneration,
   setSetupBadge,
   writeBadgeIfCurrent,
@@ -64,6 +65,7 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
       const connection = await configuredConnection();
       const result = await resetConnection(connection);
       if (result.ok) {
+        invalidateStatusChecks(connectionKey(connection));
         const stillConfigured = connectionKey(connection) === (await configuredConnectionKey());
         if (stillConfigured && claimStatusGenerationIfCurrent(generation) !== null) {
           await setSetupBadge();

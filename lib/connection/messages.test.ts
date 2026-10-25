@@ -656,4 +656,161 @@ describe('connection status and the setup badge', () => {
     getSpy.mockRestore();
     setSpy.mockRestore();
   });
+
+  it('keeps the badge set when a reset removes the credential of a held status check', async () => {
+    await setToken(KEY, 'tok_live');
+    await fakeBrowser.action.setBadgeText({ text: SETUP_BADGE_TEXT });
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let heldRead = false;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const snapshot = await originalGet(keys);
+      if (!heldRead && Array.isArray(keys) && keys.includes('settings.backendId')) {
+        heldRead = true;
+        await readGate;
+      }
+      return snapshot;
+    }) as unknown as typeof browser.storage.local.get);
+
+    let releaseHttp!: () => void;
+    const httpGate = new Promise<void>((resolve) => {
+      releaseHttp = resolve;
+    });
+    let enterHttp!: () => void;
+    const httpEntered = new Promise<void>((resolve) => {
+      enterHttp = resolve;
+    });
+    setOpenCodeFetch(async () => {
+      enterHttp();
+      await httpGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldRead).toBe(true));
+
+    const pending = requestConnectionStatus();
+    await httpEntered;
+
+    releaseRead();
+    await expect(reset).resolves.toEqual({ ok: true });
+    expect(await getToken(KEY)).toBeNull();
+
+    releaseHttp();
+    await expect(pending).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    getSpy.mockRestore();
+  });
+
+  it('keeps the badge set when a reset removes the credential of a held startup check', async () => {
+    registerOnboardingHandler();
+    await setToken(KEY, 'tok_live');
+    await fakeBrowser.action.setBadgeText({ text: SETUP_BADGE_TEXT });
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let heldRead = false;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const snapshot = await originalGet(keys);
+      if (!heldRead && Array.isArray(keys) && keys.includes('settings.backendId')) {
+        heldRead = true;
+        await readGate;
+      }
+      return snapshot;
+    }) as unknown as typeof browser.storage.local.get);
+
+    let releaseHttp!: () => void;
+    const httpGate = new Promise<void>((resolve) => {
+      releaseHttp = resolve;
+    });
+    let enterHttp!: () => void;
+    const httpEntered = new Promise<void>((resolve) => {
+      enterHttp = resolve;
+    });
+    setOpenCodeFetch(async () => {
+      enterHttp();
+      await httpGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldRead).toBe(true));
+
+    const startup = fakeBrowser.runtime.onStartup.trigger();
+    await httpEntered;
+
+    releaseRead();
+    await expect(reset).resolves.toEqual({ ok: true });
+    expect(await getToken(KEY)).toBeNull();
+
+    releaseHttp();
+    await startup;
+    expect(await fakeBrowser.action.getBadgeText({})).toBe(SETUP_BADGE_TEXT);
+
+    getSpy.mockRestore();
+  });
+
+  it('lets a newer connected check for another connection clear the badge after reset commits', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+    await fakeBrowser.action.setBadgeText({ text: SETUP_BADGE_TEXT });
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let heldRead = false;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const snapshot = await originalGet(keys);
+      if (!heldRead && Array.isArray(keys) && keys.includes('settings.backendId')) {
+        heldRead = true;
+        await readGate;
+      }
+      return snapshot;
+    }) as unknown as typeof browser.storage.local.get);
+
+    let releaseHttp!: () => void;
+    const httpGate = new Promise<void>((resolve) => {
+      releaseHttp = resolve;
+    });
+    let enterHttp!: () => void;
+    const httpEntered = new Promise<void>((resolve) => {
+      enterHttp = resolve;
+    });
+    setOpenCodeFetch(async () => {
+      enterHttp();
+      await httpGate;
+      return jsonResponse({ version: '2.0.32' });
+    });
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldRead).toBe(true));
+
+    await setSettings({ serverUrl: BASE_B });
+    const pending = requestConnectionStatus();
+    await httpEntered;
+
+    releaseRead();
+    await expect(reset).resolves.toEqual({ ok: true });
+    expect(await getToken(KEY)).toBeNull();
+    expect(await getToken(KEY_B)).toBe('tok_b');
+
+    releaseHttp();
+    await expect(pending).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    getSpy.mockRestore();
+  });
 });
