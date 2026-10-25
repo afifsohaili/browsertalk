@@ -571,4 +571,89 @@ describe('connection status and the setup badge', () => {
 
     setSpy.mockRestore();
   });
+
+  it('clears only the connection captured before a newer one connected', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+    await fakeBrowser.action.setBadgeText({ text: '' });
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let heldRead = false;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const snapshot = await originalGet(keys);
+      if (!heldRead && Array.isArray(keys) && keys.includes('settings.backendId')) {
+        heldRead = true;
+        await readGate;
+      }
+      return snapshot;
+    }) as unknown as typeof browser.storage.local.get);
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldRead).toBe(true));
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseRead();
+    await expect(reset).resolves.toEqual({ ok: true });
+
+    expect(await getToken(KEY)).toBeNull();
+    expect(await getToken(KEY_B)).toBe('tok_b');
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    getSpy.mockRestore();
+  });
+
+  it('keeps the badge clear when a delayed identity read returns after another connection is connected', async () => {
+    await setToken(KEY, 'tok_live');
+    await setToken(KEY_B, 'tok_b');
+    await fakeBrowser.action.setBadgeText({ text: '' });
+    setOpenCodeFetch(vi.fn<FetchLike>(async () => jsonResponse({ version: '2.0.32' })));
+
+    type ReadStored = (keys?: unknown) => Promise<Record<string, unknown>>;
+    const originalGet = browser.storage.local.get as unknown as ReadStored;
+    const originalSet = browser.storage.local.set.bind(browser.storage.local);
+    let tokenCleared = false;
+    const setSpy = vi.spyOn(browser.storage.local, 'set').mockImplementation(async (items) => {
+      await originalSet(items);
+      if (typeof items === 'object' && items !== null && 'auth.tokens' in items) tokenCleared = true;
+    });
+
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let heldRead = false;
+    const getSpy = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (keys?: unknown) => {
+      const snapshot = await originalGet(keys);
+      if (tokenCleared && !heldRead && Array.isArray(keys) && keys.includes('settings.backendId')) {
+        heldRead = true;
+        await readGate;
+      }
+      return snapshot;
+    }) as unknown as typeof browser.storage.local.get);
+
+    const reset = requestReset();
+    await vi.waitFor(() => expect(heldRead).toBe(true));
+
+    await setSettings({ serverUrl: BASE_B });
+    await expect(requestConnectionStatus()).resolves.toMatchObject({ ok: true, state: 'connected' });
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+
+    releaseRead();
+    await expect(reset).resolves.toEqual({ ok: true });
+
+    expect(await fakeBrowser.action.getBadgeText({})).toBe('');
+    expect(await getToken(KEY_B)).toBe('tok_b');
+
+    getSpy.mockRestore();
+    setSpy.mockRestore();
+  });
 });

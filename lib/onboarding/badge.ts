@@ -1,6 +1,6 @@
 import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
-import { connectionKey } from '@/lib/connection/identity';
+import { connectionKey, type ConnectionIdentity } from '@/lib/connection/identity';
 import { pingConnection } from '@/lib/connection/service';
 import { connectionState } from '@/lib/connection/status';
 import { getSettings } from '@/lib/storage/settings';
@@ -19,9 +19,24 @@ export function nextStatusGeneration(): number {
   return statusGeneration;
 }
 
-export async function configuredConnectionKey(): Promise<string> {
+/** Reset snapshots the counter so a check that starts during its identity read can win. */
+export function currentStatusGeneration(): number {
+  return statusGeneration;
+}
+
+/** Claims the counter only while the snapshot is still newest; a newer check keeps the claim. */
+export function claimStatusGenerationIfCurrent(generation: number): number | null {
+  if (generation !== statusGeneration) return null;
+  return nextStatusGeneration();
+}
+
+export async function configuredConnection(): Promise<ConnectionIdentity> {
   const { backendId, serverUrl } = await getSettings();
-  return connectionKey({ backendId, endpoint: serverUrl });
+  return { backendId, endpoint: serverUrl };
+}
+
+export async function configuredConnectionKey(): Promise<string> {
+  return connectionKey(await configuredConnection());
 }
 
 /** A stale check, or one for a connection that is no longer configured, cannot paint the badge. */

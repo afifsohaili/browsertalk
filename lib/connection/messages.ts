@@ -2,13 +2,16 @@ import { browser } from 'wxt/browser';
 import type { BackendStatus } from '@/lib/agent-backend/interface';
 import {
   applySetupBadge,
+  claimStatusGenerationIfCurrent,
   clearSetupBadge,
+  configuredConnection,
   configuredConnectionKey,
+  currentStatusGeneration,
   nextStatusGeneration,
   setSetupBadge,
   writeBadgeIfCurrent,
 } from '@/lib/onboarding/badge';
-import type { ConnectionIdentity } from './identity';
+import { connectionKey, type ConnectionIdentity } from './identity';
 import {
   isBackendStatus,
   isConnectionChanged,
@@ -57,13 +60,16 @@ export async function respondToConnectionRequest(request: ConnectionRequest): Pr
     case 'connection/onboarding':
       return connectionOnboarding();
     case 'connection/reset': {
-      const connection = await configuredConnectionKey();
-      const result = await resetConnection();
-      if (result.ok && connection === (await configuredConnectionKey())) {
-        nextStatusGeneration();
-        await setSetupBadge();
+      const generation = currentStatusGeneration();
+      const connection = await configuredConnection();
+      const result = await resetConnection(connection);
+      if (result.ok) {
+        const stillConfigured = connectionKey(connection) === (await configuredConnectionKey());
+        if (stillConfigured && claimStatusGenerationIfCurrent(generation) !== null) {
+          await setSetupBadge();
+        }
+        broadcastConnectionChanged();
       }
-      if (result.ok) broadcastConnectionChanged();
       return result;
     }
     case 'connection/projects':

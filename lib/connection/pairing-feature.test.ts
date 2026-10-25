@@ -373,7 +373,7 @@ describe('forgetting a pairing', () => {
 
     await expect(pingConnection()).resolves.toMatchObject({ ok: true, state: 'connected' });
 
-    await expect(resetConnection()).resolves.toEqual({ ok: true });
+    await expect(resetConnection({ backendId: 'opencode', endpoint: LINK_ENDPOINT })).resolves.toEqual({ ok: true });
 
     expect(await getToken(LINK_KEY)).toBeNull();
     await expect(pingConnection()).resolves.toMatchObject({ ok: false, state: 'unpaired' });
@@ -384,7 +384,7 @@ describe('forgetting a pairing', () => {
     await setToken('opencode@http://127.0.0.1:4096', 'tok_other');
     await setSettings({ serverUrl: LINK_ENDPOINT });
 
-    await resetConnection();
+    await resetConnection({ backendId: 'opencode', endpoint: LINK_ENDPOINT });
 
     expect(await getToken(LINK_KEY)).toBeNull();
     expect(await getToken('opencode@http://127.0.0.1:4096')).toBe('tok_other');

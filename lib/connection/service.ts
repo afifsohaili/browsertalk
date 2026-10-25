@@ -122,10 +122,10 @@ export async function pingConnection(): Promise<BackendStatus> {
   }
 }
 
-/** Clears the token for the configured endpoint; the connection returns to unpaired. */
-export async function resetConnection(): Promise<ConnectionResult> {
+/** Clears the token for the captured connection; the connection returns to unpaired. */
+export async function resetConnection(connection: ConnectionIdentity): Promise<ConnectionResult> {
   try {
-    const resolved = await resolveConfiguredConnection();
+    const resolved = await resolveConnection(connection);
     if (!resolved.ok) return { ok: false, error: resolved.error };
     await clearToken(connectionKey(resolved.connection));
     return { ok: true };
