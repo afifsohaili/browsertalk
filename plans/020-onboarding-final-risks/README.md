@@ -12,7 +12,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 |---|---|---|---|
 | 020a | `ticket-01-badge-races.md` | shipped · d93dca5 | 019 |
 | 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
-| 020c | `ticket-03-semver-numeric.md` | ready | 020b |
+| 020c | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
 
 ## Findings map
 
@@ -43,3 +43,12 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 - `lib/send/send.test.ts` adds the preserved path: an admitted `opencode` destination recovers its receipt with no backend call.
 - Divergences: the quarantine reuses the unadmitted-destination error and leaves the admission in place; recovery requires discard and re-queue. The now-unused `item` parameter was removed from `unavailableStoredBackend`.
 - 020c must-know: the "no longer offers" message and the settings-selects-it escape hatch are unchanged. Full suite: 82 files, 1,116 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
+
+## Closeout 020c (F7a)
+
+020c shipped 2026-10-25 in `1b5f58f`.
+
+- The gate now applies semver's numeric prerelease rule. `2.0.32-01` and `2.0.32-beta.01` reject; `2.0.32`, `2.1.0-beta`, `2.0.0-rc.1+build.5`, and `2.0.0+build.01` stay accepted.
+- Coverage runs at four seams: the status unit, paired `ping`, `authenticate` after redemption, and `pairWithServer` persistence. The persistence case seeds nondefault settings plus saved-endpoint and unrelated tokens, and compares the exact settings and raw-storage snapshots after each rejected version.
+- Divergence: the prerelease grammar is one shared string fragment, and main-version leading zeros (`2.00.1`) remain accepted outside F7a's scope. All four new tests fail against the old gate; sensitivity was checked by stashing the production change.
+- 020 closeout: all four findings shipped. Full suite: 82 files, 1,121 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
