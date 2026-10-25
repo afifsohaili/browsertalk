@@ -13,7 +13,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | 020a | `ticket-01-badge-races.md` | shipped · d93dca5 | 019 |
 | 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
-| 020d | `ticket-04-reset-identity.md` | ready | 020c |
+| 020d | `ticket-04-reset-identity.md` | shipped · 5551675 | 020c |
 
 ## Findings map
 
@@ -53,3 +53,14 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 - Coverage runs at four seams: the status unit, paired `ping`, `authenticate` after redemption, and `pairWithServer` persistence. The persistence case seeds nondefault settings plus saved-endpoint and unrelated tokens, and compares the exact settings and raw-storage snapshots after each rejected version.
 - Divergence: the prerelease grammar is one shared string fragment, and main-version leading zeros (`2.00.1`) remain accepted outside F7a's scope. All four new tests fail against the old gate; sensitivity was checked by stashing the production change.
 - 020 closeout: all four findings shipped. Full suite: 82 files, 1,121 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
+
+## Closeout 020d (F3b-1, F3b-2)
+
+020d shipped 2026-10-25 in `5551675`.
+
+- Reset resolves the configured identity once in `lib/connection/messages.ts` and hands it to `resetConnection(connection)`. The service clears that identity's token only; the identity read after the async clear is used for the badge comparison, never the token target.
+- The reset snapshots `currentStatusGeneration()` before its identity read and claims the counter only at the end, while it is still newest and the captured connection is still configured. A status check that starts during the reset therefore stays authoritative.
+- Regressions in `lib/connection/messages.test.ts`: holding the first identity read while A is configured and then switching to Connected B leaves A's token cleared, B's token intact, and the badge clear; holding the final identity read after A's token clear across the same switch leaves the badge clear and B's token intact. Both failed against the old reset.
+- `resetConnection` now takes a `ConnectionIdentity`; `lib/connection/pairing-feature.test.ts` passes `{ backendId: 'opencode', endpoint: LINK_ENDPOINT }`.
+- Divergences: the pre-read generation snapshot replaces an unconditional end claim, so a newer check keeps its authority; the post-clear settings read remains, but only as a badge guard. Already-started badge writes remain non-retractable.
+- 020 closeout: all findings shipped. Full suite: 82 files, 1,123 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
