@@ -2,7 +2,10 @@
 import { ref } from 'vue';
 import { requestArmPicker } from '@/lib/picker/messages';
 
-const props = withDefaults(defineProps<{ closeOnArm?: boolean }>(), { closeOnArm: false });
+const props = withDefaults(
+  defineProps<{ closeOnArm?: boolean; disabled?: boolean; disabledReason?: string }>(),
+  { closeOnArm: false, disabled: false, disabledReason: '' },
+);
 
 const busy = ref(false);
 const error = ref<string | null>(null);
@@ -28,9 +31,17 @@ async function arm(): Promise<void> {
 
 <template>
   <div class="arm-picker">
-    <button type="button" :disabled="busy" @click="arm">Point at element</button>
+    <button
+      type="button"
+      :disabled="busy || disabled"
+      :title="disabled ? disabledReason : undefined"
+      @click="arm"
+    >
+      Point at element
+    </button>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="note" class="note">{{ note }}</p>
+    <p v-else-if="disabled && disabledReason.length > 0" class="note">{{ disabledReason }}</p>
   </div>
 </template>
 

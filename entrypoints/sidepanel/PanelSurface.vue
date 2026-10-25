@@ -54,6 +54,21 @@ const state = computed(() => targetState(target.value));
 
 const bound = computed(() => state.value === 'no-session' || state.value === 'ready');
 
+const armDisabledReason = computed(() => {
+  switch (state.value) {
+    case 'ready':
+      return '';
+    case 'no-session':
+      return 'Choose or start a session first';
+    case 'unbound':
+      return 'Choose a project first';
+    case 'no-page':
+      return 'Open a page to point at elements';
+    case 'unavailable':
+      return 'Waiting for the target…';
+  }
+});
+
 const projectText = computed(() => {
   switch (state.value) {
     case 'unavailable':
@@ -191,7 +206,10 @@ const sessionText = computed(() => {
     <CommentBox />
 
     <div class="actions">
-      <ArmPickerButton />
+      <ArmPickerButton
+        :disabled="state !== 'ready'"
+        :disabled-reason="armDisabledReason"
+      />
     </div>
 
     <section class="outbox">
