@@ -1,0 +1,10 @@
+frames/
+node_modules/
+.venv/
+review/
+output/
+assets/audio/candidates/
+assets/audio/mix.wav
+variants/*/assets/audio/
+variants/*/assets/fonts/
+variants/*/assets/sfx/

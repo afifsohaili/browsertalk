@@ -1,0 +1,4 @@
+frames/
+node_modules/
+.venv/
+review/

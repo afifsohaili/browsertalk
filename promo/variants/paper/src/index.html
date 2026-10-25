@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Browsertalk promo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+  <div id="camera">
+    <section class="shot" id="s-bug">
+      <div class="scene">
+        <div class="window browser bug-browser">
+          <div class="chrome">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="tab">acme — Pricing</div>
+            <div class="urlbar"><span class="lock"></span>acme.supply/pricing?plan=pro&amp;ref=nav</div>
+            <div class="chrome-menu">···</div>
+          </div>
+          <div class="page">
+            <div class="site-nav">
+              <div class="brand">acme<span>.</span></div>
+              <div class="links"><span>Product</span><span>Pricing</span><span>Docs</span></div>
+              <div class="avatar">A</div>
+            </div>
+            <div class="hero">
+              <h1>Simple pricing<br>for teams.</h1>
+              <p>Start free. Upgrade when you ship.</p>
+            </div>
+            <div class="cards">
+              <div class="card"><h3>Hobby</h3><div class="price">$0</div><p>For side projects</p><button>Start free</button></div>
+              <div class="card"><h3>Team</h3><div class="price">$19</div><p>For small teams</p><button>Start free</button></div>
+              <div class="card pro">
+                <div class="badge">Most popular</div>
+                <h3>Pro</h3>
+                <div class="price">$49</div>
+                <p>For serious shipping</p>
+                <button class="upgrade" id="upgrade-btn">Upgrade</button>
+              </div>
+            </div>
+          </div>
+          <div class="anno" id="bug-anno">
+            <svg viewBox="0 0 260 180">
+              <ellipse cx="168" cy="96" rx="74" ry="44" fill="none" stroke="#ff3b30" stroke-width="5" stroke-linecap="round"/>
+              <path d="M40 20 C 90 22, 128 52, 142 76" fill="none" stroke="#ff3b30" stroke-width="5" stroke-linecap="round"/>
+              <path d="M128 66 L146 78 L126 86" fill="none" stroke="#ff3b30" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="pov">POV</div>
+        <div class="cap cap-bottom" data-start="-0.1" data-end="0.86" data-base="translate(-50%,-50%) rotate(-2deg)">you found a bug <b>in your app</b></div>
+        <div class="cap cap-bottom" data-start="0.86" data-end="99" data-base="translate(-50%,-50%) rotate(1.5deg)">the button is <b>broken</b></div>
+        <div class="sticker" data-start="1.2" data-end="99" style="left:1130px;top:520px" data-base="rotate(12deg)">💀</div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-blind">
+      <div class="scene">
+        <div class="window mini-term">
+          <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span>opencode — acme-web</span></div>
+          <div class="mini-body">
+            <div class="msg-user">the upgrade button looks weird</div>
+            <div class="msg-agent"><span class="agent-name">opencode</span><span id="blind-text">Which button?</span><span class="caret"></span></div>
+            <div class="mini-foot">127.0.0.1:15001 · connected</div>
+          </div>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="cap cap-top" data-start="-0.1" data-end="99" data-base="translate(-50%,-50%) rotate(-1.5deg)">your agent <b>can't see your screen</b></div>
+        <div class="sticker" data-start="0.35" data-end="99" style="left:170px;top:515px" data-base="rotate(-14deg)">🫠</div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-pain">
+      <div class="scene">
+        <div class="pain-panel" data-panel="0">
+          <div class="devtools">
+            <div class="dt-tabs"><span class="on">Elements</span><span>Console</span><span>Network</span></div>
+            <div class="dt-body">
+              <div class="dt-tree">
+                <div class="ln">&lt;body&gt;</div>
+                <div class="ln ind1">&lt;main class="pricing"&gt;</div>
+                <div class="ln ind2">&lt;section class="cards"&gt;</div>
+                <div class="ln ind3">&lt;div class="card pro"&gt;</div>
+                <div class="ln ind3" style="padding-left:96px">&lt;div class="badge"&gt;"Most popular"&lt;/div&gt;</div>
+                <div class="ln ind3 hot" style="padding-left:96px">&lt;button class="upgrade"&gt;"Upgrade"&lt;/button&gt;</div>
+                <div class="ln ind3">&lt;/div&gt;</div>
+                <div class="ln ind2">&lt;/section&gt;</div>
+                <div class="ln ind1">&lt;/main&gt;</div>
+                <div class="ln">&lt;/body&gt;</div>
+              </div>
+              <div class="dt-styles">
+                <div><span>selector</span><code>main &gt; .card.pro &gt; button.upgrade</code></div>
+                <div><span>box</span><code>184 × 44</code></div>
+                <div><span>position</span><code>relative</code></div>
+                <div><span>z-index</span><code>auto</code></div>
+                <div class="dt-copy">Copy selector</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pain-panel" data-panel="1">
+          <div class="fake-url"><span class="lock"></span><span class="url-text">acme.supply/pricing?<em>plan=pro&amp;ref=nav&amp;utm_source=…</em></span><span class="copy-chip">copy</span></div>
+        </div>
+        <div class="pain-panel" data-panel="2">
+          <div class="spotlight">which window is it?</div>
+          <div class="app-grid">
+            <div class="app"><div class="app-icon c1"></div><span>Terminal</span></div>
+            <div class="app"><div class="app-icon c2"></div><span>Chrome</span></div>
+            <div class="app"><div class="app-icon c3"></div><span>Editor</span></div>
+            <div class="app"><div class="app-icon c4"></div><span>Notes</span></div>
+            <div class="app"><div class="app-icon c5"></div><span>Slack</span></div>
+            <div class="app"><div class="app-icon c6"></div><span>Figma</span></div>
+            <div class="app"><div class="app-icon c7"></div><span>Finder</span></div>
+            <div class="app"><div class="app-icon c8"></div><span>Music</span></div>
+          </div>
+          <div class="app-cursor">↖</div>
+        </div>
+        <div class="pain-panel" data-panel="3">
+          <div class="paste-term">&gt; paste feedback into opencode<div class="paste-lines" id="paste-lines"></div></div>
+        </div>
+        <div class="pain-panel" data-panel="4">
+          <div class="wall" id="wall">
+            <p>hi, so on the pricing page the upgrade button looks a bit off, i think it's overlapping the badge? it might be a z-index thing or maybe the margin changed. the page is at localhost:3000/pricing?plan=pro. i think it's in the card component but i'm not sure which one. can you find it? thanks</p>
+            <p>also the badge says most popular and it looks like it's on top of the button on mobile but on desktop it's fine, or maybe it's the other way around. i tried changing the z-index in devtools but then the badge disappeared. the button is in the pro card, maybe pricing-card.tsx? or was it upgrade-button? i can send a screenshot if that helps.</p>
+            <p>wait, i think there are two card components. one is in components/pricing and the other is in app/(marketing)/pricing. the second one might be the old one. or maybe the first one. i'm not sure. also the page has a query param for the plan. sorry, i know this is a lot.</p>
+          </div>
+        </div>
+        <div class="pain-panel" data-panel="5">
+          <div class="err-toast">i need more context <span>which file?</span></div>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="pain-cap" data-start="-0.1" data-end="0.5" data-base="translate(-50%,-50%) rotate(-2deg)">copy the <b>selector</b></div>
+        <div class="pain-cap" data-start="0.5" data-end="1.0" data-base="translate(-50%,-50%) rotate(1.5deg)">copy the <b>URL</b></div>
+        <div class="pain-cap" data-start="1.0" data-end="1.5" data-base="translate(-50%,-50%) rotate(-1deg)">switch <b>apps</b></div>
+        <div class="pain-cap" data-start="1.5" data-end="2.0" data-base="translate(-50%,-50%) rotate(2deg)">find the <b>project</b></div>
+        <div class="pain-cap" data-start="2.0" data-end="2.5" data-base="translate(-50%,-50%) rotate(-2deg)">paste <b>everything</b></div>
+        <div class="pain-cap" data-start="2.5" data-end="3.0" data-base="translate(-50%,-50%) rotate(1deg)">and <b>pray</b></div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-breather">
+      <div class="scene">
+        <div class="breather">
+          <div class="breather-rule" id="breather-rule"></div>
+          <div class="breather-text" id="breather-text">It doesn't have to<br><em>be this way.</em></div>
+        </div>
+      </div>
+      <div class="hud"></div>
+    </section>
+
+    <section class="shot" id="s-logo">
+      <div class="scene">
+        <div class="logo-slam">
+          <div class="logo-icon" id="logo-icon">
+            <img src="../assets/icon.svg" alt="">
+          </div>
+          <div class="logo-word">BROWSERTALK</div>
+        </div>
+        <div class="rays"></div>
+      </div>
+      <div class="hud">
+      </div>
+    </section>
+
+    <section class="shot" id="s-tagline">
+      <div class="scene">
+        <div class="tag-word" id="tag-word-0">POINT<span>.</span></div>
+        <div class="tag-word" id="tag-word-1">CLICK<span>.</span></div>
+        <div class="tag-word" id="tag-word-2">SEND<span>.</span></div>
+        <div class="tag-sub" id="tag-sub">feedback, straight into opencode</div>
+      </div>
+      <div class="hud"></div>
+    </section>
+
+    <section class="shot" id="s-loop">
+      <div class="scene">
+        <div class="window browser loop-browser">
+          <div class="chrome">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="tab">acme — Pricing</div>
+            <div class="urlbar"><span class="lock"></span>acme.supply/pricing?plan=pro</div>
+            <div class="chrome-menu">···</div>
+          </div>
+          <div class="page">
+            <div class="site-nav">
+              <div class="brand">acme<span>.</span></div>
+              <div class="links"><span>Product</span><span>Pricing</span><span>Docs</span></div>
+              <div class="avatar">A</div>
+            </div>
+            <div class="hero small">
+              <h1>Simple pricing<br>for teams.</h1>
+              <p>Start free. Upgrade when you ship.</p>
+            </div>
+            <div class="cards">
+              <div class="card"><h3>Hobby</h3><div class="price">$0</div><p>For side projects</p><button>Start free</button></div>
+              <div class="card"><h3>Team</h3><div class="price">$19</div><p>For small teams</p><button>Start free</button></div>
+              <div class="card pro">
+                <div class="badge">Most popular</div>
+                <h3>Pro</h3>
+                <div class="price">$49</div>
+                <p>For serious shipping</p>
+                <button class="upgrade" id="upgrade-btn-2">Upgrade</button>
+              </div>
+            </div>
+          </div>
+          <div class="picker" id="picker">
+            <div class="picker-box" id="picker-box"></div>
+            <div class="picker-tag" id="picker-tag">button.upgrade</div>
+            <div class="picker-hint">Click to comment · Esc to cancel</div>
+          </div>
+          <div class="composer" id="composer">
+            <div class="composer-head"><span>button.upgrade</span><span class="x">×</span></div>
+            <div class="composer-text" id="composer-text"></div>
+            <div class="composer-foot"><span>Enter to send</span><button class="composer-send" id="composer-send">Send</button></div>
+          </div>
+        </div>
+
+        <div class="window panel" id="loop-panel">
+          <div class="p-head"><span>Browsertalk</span><span class="gear">⚙</span></div>
+          <div class="p-conn"><i></i>Connected to <b>opencode</b> · 127.0.0.1:15001</div>
+          <div class="p-row"><span class="p-label">Project</span><b>acme-web</b><button>change</button></div>
+          <div class="p-row"><span class="p-label">Session</span><b class="p-session">Browsertalk · acme-web · 2026-10-19</b><button>change</button></div>
+          <textarea class="p-comment" placeholder="What looks wrong?" readonly></textarea>
+          <div class="p-hint">Enter sends · Shift+Enter newline</div>
+          <button class="p-arm" id="arm-btn">Point at element</button>
+          <div class="p-section"><h4>Outbox</h4><div id="p-outbox" class="p-empty">Nothing waiting.</div></div>
+          <div class="p-section"><h4>Sent</h4><div id="p-sent" class="p-empty">Nothing sent yet.</div></div>
+          <div class="p-note" id="p-note"></div>
+        </div>
+
+        <div class="facts" id="facts">
+          <span class="fact" data-fact="0">URL</span>
+          <span class="fact" data-fact="1">selector</span>
+          <span class="fact" data-fact="2">box</span>
+          <span class="fact" data-fact="3">text</span>
+          <span class="fact" data-fact="4">attrs</span>
+          <span class="fact" data-fact="5">screenshot</span>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="cap cap-bottom" data-start="-0.1" data-end="1.286" data-base="translate(-50%,-50%) rotate(-1deg)">already in the browser</div>
+        <div class="cap cap-bottom" data-start="1.286" data-end="2.571" data-base="translate(-50%,-50%) rotate(-1.5deg)">arm the <b>picker</b></div>
+        <div class="cap cap-bottom" data-start="2.571" data-end="3.857" data-base="translate(-50%,-50%) rotate(1deg)">click the thing</div>
+        <div class="cap cap-bottom" data-start="3.857" data-end="5.143" data-base="translate(-50%,-50%) rotate(-1.5deg)">say what's wrong</div>
+        <div class="cap cap-bottom" data-start="5.143" data-end="6.429" data-base="translate(-50%,-50%) rotate(1deg)">send it</div>
+        <div class="cap cap-bottom" data-start="6.429" data-end="7.714" data-base="translate(-50%,-50%) rotate(-1deg)">right project. right session.</div>
+        <div class="cap cap-bottom" data-start="7.714" data-end="99" data-base="translate(-50%,-50%) rotate(1.5deg)">facts, <b>not guesswork</b></div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-agent">
+      <div class="scene">
+        <div class="window term">
+          <div class="term-bar"><div class="dots"><i></i><i></i><i></i></div><span>opencode — acme-web</span><span class="term-status">● idle</span></div>
+          <div class="term-body">
+            <aside class="term-side">
+              <div class="side-title">SESSIONS</div>
+              <div class="side-item active">Browsertalk · acme-web<br><span>2026-10-19</span></div>
+              <div class="side-item">Fix pricing page</div>
+              <div class="side-item">Refactor auth</div>
+              <div class="side-foot">127.0.0.1:15001</div>
+            </aside>
+            <main class="term-main">
+              <div class="t-msg t-user">
+                <div class="t-role">you</div>
+                <div class="t-body" id="agent-prompt">
+                  <div class="t-h">## Browser feedback — acme-web</div>
+                  <div>Comment: this overlaps the badge on mobile</div>
+                  <div class="t-gap"></div>
+                  <div>Element: button.upgrade — "Upgrade"</div>
+                  <div class="t-dim t-ind">selector  main &gt; .card.pro &gt; button.upgrade</div>
+                  <div class="t-dim t-ind">box       184×44 @ (652,498) · viewport 1440×900</div>
+                  <div class="t-dim t-ind">attrs     class="upgrade" data-testid="upgrade"</div>
+                  <div class="t-gap"></div>
+                  <div>Page: https://acme.supply/pricing?plan=pro</div>
+                  <div class="t-dim t-ind">title     Pricing — acme</div>
+                  <div class="t-gap"></div>
+                  <div class="t-dim">Sent by Browsertalk · 10:42</div>
+                </div>
+              </div>
+              <div class="t-msg t-agent" id="agent-reply">
+                <div class="t-role">opencode</div>
+                <div class="t-body">
+                  <div id="agent-line-1"></div>
+                  <div id="agent-line-2" class="t-file"></div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+        <div class="bg-pip" id="bg-pip">
+          <div class="pip-bar"><span class="dots"><i></i><i></i><i></i></span><span class="pip-url">acme.supply/pricing</span></div>
+          <div class="pip-body">
+            <div class="pip-hero">Simple pricing<br>for teams.</div>
+            <div class="pip-cards"><span></span><span></span><span class="pro"></span></div>
+            <div class="pip-toast">✓ Sent to opencode</div>
+          </div>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="cap cap-bottom" data-start="-0.1" data-end="1.0" data-base="translate(-50%,-50%) rotate(-1deg)">opencode gets <b>the facts</b></div>
+        <div class="cap cap-bottom" data-start="1.0" data-end="2.0" data-base="translate(-50%,-50%) rotate(1.5deg)">finds the file <b>first try</b></div>
+        <div class="cap cap-bottom" data-start="2.0" data-end="99" data-base="translate(-50%,-50%) rotate(-1.5deg)">you keep browsing</div>
+        <div class="sticker" data-start="1.7" data-end="99" style="left:1090px;top:540px" data-base="rotate(-9deg)">✅</div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-prompt">
+      <div class="scene">
+        <div class="prompt-card">
+          <div class="prompt-head"><span>sent by Browsertalk → <b>opencode</b></span><span class="prompt-time">10:42</span></div>
+          <div class="prompt-chip" id="prompt-chip">✓ delivered · queued</div>
+          <pre id="prompt-pre"></pre>
+        </div>
+      </div>
+      <div class="hud">
+        <div class="cap cap-top" data-start="-0.1" data-end="1.5" data-fade="1" data-base="translate(-50%,-50%) rotate(-1deg)">the prompt your agent <b>actually needs</b></div>
+      </div>
+    </section>
+
+    <section class="shot" id="s-end">
+      <div class="scene">
+        <div class="end-glow"></div>
+        <div class="end-icon"><img src="../assets/icon.svg" alt=""></div>
+        <div class="end-word">Browsertalk</div>
+        <div class="end-tag">Send browser feedback straight into opencode.</div>
+        <div class="end-backends">
+          <span class="be on"><b>opencode</b><i>today</i></span>
+          <span class="be"><b>pi</b><i>soon</i></span>
+          <span class="be"><b>+ more</b><i>soon</i></span>
+        </div>
+        <div class="end-meta"><span>Open source · MIT</span><span>github.com/afifsohaili/browsertalk</span></div>
+        <div class="end-stamp" id="end-stamp">STOP DESCRIBING.<br>START POINTING.</div>
+      </div>
+      <div class="hud"></div>
+    </section>
+
+    <div id="cursor">
+      <svg viewBox="0 0 32 40"><path d="M4 2 L4 30 L11 24 L16 37 L21 35 L16 22 L26 22 Z" fill="#fff" stroke="#000" stroke-width="2" stroke-linejoin="round"/></svg>
+      <div class="click-ripple"></div>
+    </div>
+  </div>
+
+  <div id="preview-hud">PREVIEW</div>
+  <div id="flash"></div>
+  <div id="scanlines"></div>
+  <div id="grain"></div>
+  <div id="vignette"></div>
+</div>
+<script src="timeline.js"></script>
+</body>
+</html>

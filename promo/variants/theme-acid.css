@@ -1,0 +1,77 @@
+#stage { background: #070707; }
+#vignette { opacity: .6; }
+#scanlines { opacity: .06; }
+
+.cap, .pain-cap {
+  background: #c7f464;
+  color: #090909;
+  text-shadow: none;
+  border: 2px solid #090909;
+  box-shadow: 5px 5px 0 #ff4d9d;
+  font-family: 'Archivo';
+  font-size: 34px;
+  padding: 6px 14px;
+  border-radius: 3px;
+}
+.cap b, .pain-cap b {
+  background: #090909;
+  color: #c7f464;
+  padding: 2px 10px 4px;
+}
+.pov {
+  background: #c7f464;
+  color: #090909;
+  box-shadow: 4px 4px 0 #ff4d9d;
+}
+
+.p-conn i { background: #c7f464; box-shadow: 0 0 8px #c7f464; }
+.p-conn b { color: #c7f464; }
+.p-note { color: #c7f464; }
+.p-arm.pulse {
+  background: #2b3a14;
+  box-shadow: 0 0 0 2px #c7f464, 0 0 26px rgba(199, 244, 100, .7);
+}
+.side-item.active {
+  background: #1c2a10;
+  border-color: #3f5a1e;
+  color: #e6ffb8;
+}
+.t-file {
+  background: #1c2a10;
+  border-color: #3f5a1e;
+  color: #c7f464;
+}
+.prompt-head b, .prompt-time { color: #c7f464; }
+.prompt-chip { background: #c7f464; color: #090909; }
+.picker-box { border-color: #c7f464; background: rgba(199, 244, 100, .14); }
+.picker-tag, .composer-send { background: #c7f464; color: #090909; }
+.composer-head { color: #c7f464; }
+
+.fact { background: #c7f464; color: #090909; }
+.fact:nth-child(2) { background: #ff4d9d; color: #fff; }
+.fact:nth-child(3) { background: #090909; color: #c7f464; }
+.fact:nth-child(4) { background: #fff; color: #090909; }
+.fact:nth-child(5) { background: #ff4d9d; color: #fff; }
+.fact:nth-child(6) { background: #090909; color: #c7f464; border: 1px solid #c7f464; }
+
+#s-logo .scene {
+  background: radial-gradient(circle at 50% 50%, #2b3d0e 0%, #070707 60%) !important;
+}
+.logo-word { color: #c7f464; text-shadow: 0 0 60px rgba(199, 244, 100, .6); }
+.rays { opacity: .25; }
+
+#s-tagline .scene { background: #070707 !important; }
+.tag-word { color: #c7f464; text-shadow: 0 6px 0 #000; }
+.tag-word span { color: #ff4d9d; }
+.tag-sub { color: #c7f464; }
+
+#s-end .scene { background: #c7f464; }
+.end-glow { background: radial-gradient(circle, rgba(255, 77, 157, .35), transparent 62%); }
+.end-word { color: #090909; }
+.end-tag { color: #1a1a1a; }
+.end-meta { color: #33440f; }
+.end-stamp { background: #090909; color: #c7f464; box-shadow: 6px 6px 0 #ff4d9d; }
+.be { border-color: rgba(0, 0, 0, .3); background: rgba(0, 0, 0, .07); color: #090909; }
+.be i { color: #3e4f14; }
+.be.on { border-color: #090909; background: rgba(0, 0, 0, .13); }
+.be.on i { color: #090909; }
