@@ -36,6 +36,7 @@ Phase tracking lives here, not in `product.md`. One folder per phase; one ticket
 | 020b | `020-onboarding-final-risks/` | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `020-onboarding-final-risks/` | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
 | 020d | `020-onboarding-final-risks/` | `ticket-04-reset-identity.md` | shipped · 5551675 | 020c |
+| 020e | `020-onboarding-final-risks/` | `ticket-05-reset-credential.md` | ready | 020d |
 
 Policy:
 

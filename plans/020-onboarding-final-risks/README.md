@@ -14,6 +14,7 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 | 020b | `ticket-02-fake-admission.md` | shipped · cadc726 | 020a |
 | 020c | `ticket-03-semver-numeric.md` | shipped · 1b5f58f | 020b |
 | 020d | `ticket-04-reset-identity.md` | shipped · 5551675 | 020c |
+| 020e | `ticket-05-reset-credential.md` | ready | 020d |
 
 ## Findings map
 
