@@ -75,3 +75,13 @@ Do not touch or stage the uncommitted `entrypoints/background.ts`, `lib/backgrou
 - Both reset-first regressions failed against the pre-fix tree with `expected '' to be '1'`; the B-authority regression passes with and without the stamp.
 - Divergences: the stamp is a generation ceiling, not a token comparison, so a check that begins during the token removal is also rejected. An already-started badge write remains non-retractable.
 - 020 closeout: all five subphases shipped. Full suite: 82 files, 1,126 tests. Leave the unrelated `background.ts`, `lib/background.test.ts`, `ArmPickerButton`, `PanelSurface`, `promo/`, and review reports unstaged.
+
+## Final review stop (2026-10-25)
+
+`review-credential.md` (uncommitted) reports 0 blocker, 0 high, 2 risk:
+
+- 020e-1: the invalidation stamp is checked before the badge guard's awaited identity read. A held post-HTTP identity read can still clear the badge after reset removes the credential.
+- 020e-2: the invalidation ceiling also suppresses the Unpaired write, so a blank badge stays blank after reset instead of restoring `1`.
+
+Both are badge-only races. Tokens, consent, delivery, and pairing are unaffected. Per the agreed stop rule (no blocker or high), the effort ships with these documented rather than opening another fix cycle.
+
